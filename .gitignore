@@ -1,0 +1,32 @@
+# Entornos virtuales / dependencias
+venv/
+**/venv/
+env/
+__pycache__/
+*.pyc
+node_modules/
+**/node_modules/
+
+# Variables de entorno y secretos
+.env
+**/.env
+*.env.local
+*.pem
+*.key
+*credentials*
+*secret*
+
+# Bases de datos locales
+db.sqlite3
+
+# Build/artefactos
+dist/
+dist-ssr/
+staticfiles/
+*.log
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store

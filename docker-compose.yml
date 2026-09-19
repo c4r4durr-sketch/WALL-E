@@ -1,0 +1,30 @@
+# Solo levanta PostgreSQL. El backend (Django) y el frontend (Vite) corren
+# fuera de Docker por ahora, con el venv y npm directamente, para que el
+# ciclo de desarrollo (recarga en caliente, debugger) sea el normal de cada
+# stack. Las credenciales acá deben coincidir con DATABASE_URL en
+# backend/.env.
+services:
+  postgres:
+    image: postgres:16
+    container_name: eoq_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: eoq_db
+      POSTGRES_USER: eoq_user
+      POSTGRES_PASSWORD: eoq_pass
+    ports:
+      # 5433 en el host (no 5432) porque esta máquina ya tiene un
+      # PostgreSQL nativo corriendo como servicio en el puerto 5432; así
+      # evitamos el choque de puertos. Dentro del contenedor sigue siendo
+      # el 5432 estándar.
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eoq_user -d eoq_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
