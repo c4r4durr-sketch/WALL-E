@@ -1,15 +1,28 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from ...infrastructure.models import Usuario
+from ...infrastructure.models import Sucursal, Usuario
+
+
+class SucursalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sucursal
+        fields = ["id", "nombre", "direccion", "activa"]
+        read_only_fields = ["id"]
 
 
 class UsuarioSerializer(serializers.ModelSerializer):
+    # write_only: nunca se devuelve en la respuesta. Se hashea en create()
+    # (nunca se guarda en texto plano); required solo al crear, no al
+    # editar (un PATCH sin password no debe borrarla).
+    password = serializers.CharField(write_only=True, required=False, allow_blank=False)
+
     class Meta:
         model = Usuario
         fields = [
             "id",
             "username",
+            "password",
             "first_name",
             "last_name",
             "rol",
@@ -17,6 +30,24 @@ class UsuarioSerializer(serializers.ModelSerializer):
             "is_active",
         ]
         read_only_fields = ["id"]
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+        usuario = Usuario(**validated_data)
+        if password:
+            usuario.set_password(password)
+        else:
+            usuario.set_unusable_password()
+        usuario.save()
+        return usuario
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        usuario = super().update(instance, validated_data)
+        if password:
+            usuario.set_password(password)
+            usuario.save()
+        return usuario
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -33,6 +64,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
+        token["username"] = user.username
+        token["first_name"] = user.first_name
+        token["last_name"] = user.last_name
         token["rol"] = user.rol
         token["sucursal_id"] = user.sucursal_id
+        token["sucursal_nombre"] = user.sucursal.nombre if user.sucursal_id else None
         return token

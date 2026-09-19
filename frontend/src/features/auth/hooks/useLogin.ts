@@ -1,10 +1,13 @@
 import { useMutation } from '@tanstack/react-query'
 import { login } from '../api/authApi'
+import { saveSession } from '../session'
 
-// Hook de mutación para el login, consumido por LoginPage.
-// Guardar el token (localStorage), redirigir según rol y manejar errores
-// de credenciales es lógica de negocio de la feature, pendiente de
-// implementar junto con el resto del módulo de auth.
+// Hook de mutación para el login, consumido por LoginPage. Guarda el
+// access/refresh token apenas el backend responde 200; LoginPage decide
+// hacia dónde navegar en su propio onSuccess.
 export function useLogin() {
-  return useMutation({ mutationFn: login })
+  return useMutation({
+    mutationFn: login,
+    onSuccess: saveSession,
+  })
 }

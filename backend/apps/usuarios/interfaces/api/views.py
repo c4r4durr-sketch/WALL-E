@@ -2,9 +2,9 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from ...infrastructure.models import Usuario
+from ...infrastructure.models import Sucursal, Usuario
 from .permissions import EsAdministrador
-from .serializers import CustomTokenObtainPairSerializer, UsuarioSerializer
+from .serializers import CustomTokenObtainPairSerializer, SucursalSerializer, UsuarioSerializer
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -12,6 +12,16 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     CustomTokenObtainPairSerializer (agrega rol/sucursal al token)."""
 
     serializer_class = CustomTokenObtainPairSerializer
+
+
+class SucursalViewSet(viewsets.ReadOnlyModelViewSet):
+    """Solo lectura: el frontend la usa para poblar el <select> de sucursal
+    al crear un usuario (HU5). Crear/editar sucursales no es parte del
+    alcance actual."""
+
+    queryset = Sucursal.objects.filter(activa=True)
+    serializer_class = SucursalSerializer
+    permission_classes = [IsAuthenticated]
 
 
 class UsuarioViewSet(viewsets.ModelViewSet):
