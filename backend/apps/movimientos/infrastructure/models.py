@@ -24,6 +24,9 @@ class Movimiento(models.Model):
         max_length=10, choices=[(t.value, t.value.title()) for t in TipoUnidad]
     )
     cantidad = models.PositiveIntegerField()
+    # Equivalente en unidades, fijado al registrar (ver domain/entities.py):
+    # el stock se calcula con este campo, no recalculando cajas.
+    cantidad_unidades = models.PositiveIntegerField()
 
     creado_en = models.DateTimeField(auto_now_add=True)
 

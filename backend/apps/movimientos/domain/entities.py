@@ -1,11 +1,12 @@
 """
 Entidad pura de dominio para un movimiento de inventario.
 
-A propósito NO incluye un método `cantidad_en_unidades()` todavía: esa
-conversión (cantidad * unidades_por_caja cuando tipo_unidad es CAJA) es una
-regla de negocio real, y la tarea actual es solo dejar el esqueleto sin
-implementar lógica de negocio. Ese método (o un use_case aparte) es el
-lugar correcto donde agregarla después.
+`cantidad` + `tipo_unidad` es lo que el usuario registró en el mostrador
+(ej. 2 CAJAS); `cantidad_unidades` es su equivalente en unidades sueltas,
+calculado UNA vez al registrar (con el unidades_por_caja de ese momento) y
+guardado. El stock se calcula siempre con `cantidad_unidades`: si mañana
+cambia el tamaño de caja de la herramienta en el catálogo, el stock
+histórico no se altera.
 """
 
 from dataclasses import dataclass
@@ -23,5 +24,8 @@ class Movimiento:
     tipo_movimiento: TipoMovimiento
     tipo_unidad: TipoUnidad
     cantidad: int
+    cantidad_unidades: int
     usuario_id: int
     creado_en: Optional[datetime] = None
+    # Solo para mostrar en el historial; lo completa el repositorio al leer.
+    usuario_username: Optional[str] = None

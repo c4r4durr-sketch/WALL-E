@@ -14,7 +14,7 @@ from typing import Optional
 
 from ..domain.entities import Sucursal, Usuario
 from ..domain.repositories import SucursalRepository, UsuarioRepository
-from .models import Sucursal as SucursalModel  # noqa: F401 (se usa al implementar los métodos)
+from .models import Sucursal as SucursalModel
 from .models import Usuario as UsuarioModel  # noqa: F401 (se usa al implementar los métodos)
 
 
@@ -32,9 +32,18 @@ class UsuarioRepositoryDjango(UsuarioRepository):
         raise NotImplementedError
 
 
+def _sucursal_a_entidad(modelo: SucursalModel) -> Sucursal:
+    return Sucursal(
+        id=modelo.id, nombre=modelo.nombre, direccion=modelo.direccion, activa=modelo.activa
+    )
+
+
 class SucursalRepositoryDjango(SucursalRepository):
+    # Implementado (solo lectura) en el paso 4.3: movimientos lo necesita
+    # para validar la sucursal y mostrar el stock por sucursal.
     def obtener_por_id(self, sucursal_id: int) -> Optional[Sucursal]:
-        raise NotImplementedError
+        modelo = SucursalModel.objects.filter(pk=sucursal_id).first()
+        return _sucursal_a_entidad(modelo) if modelo else None
 
     def listar(self) -> list[Sucursal]:
-        raise NotImplementedError
+        return [_sucursal_a_entidad(m) for m in SucursalModel.objects.order_by("id")]

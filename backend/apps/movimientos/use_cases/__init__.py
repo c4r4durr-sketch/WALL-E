@@ -1,9 +1,10 @@
 """
-Casos de uso de movimientos (ej: registrar_entrada, registrar_salida,
-calcular_stock_disponible). Este último es especialmente importante: lo
-van a reutilizar tanto transferencias (validar stock en origen) como
-indicadores (rotación para ABC), por eso debe quedar como una función pura
-reutilizable acá y no copiada en cada app.
+Casos de uso de movimientos (ver registrar_movimiento.py): registrar
+entrada/salida con conversión caja->unidad y validación de stock, y
+consultar stock e historial.
 
-Sin implementar todavía (solo el esqueleto).
+calcular el stock disponible vive en domain/stock.py y en
+registrar_movimiento._stock_actual para que transferencias (validar stock
+en origen) e indicadores (rotación para ABC) lo reutilicen en vez de
+copiarlo.
 """

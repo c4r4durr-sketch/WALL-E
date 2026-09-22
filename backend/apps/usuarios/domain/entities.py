@@ -35,3 +35,14 @@ class Usuario:
     # siempre tienen sucursal (ver domain/reglas.py::requiere_sucursal).
     sucursal_id: Optional[int]
     activo: bool = True
+
+
+@dataclass(frozen=True)
+class Actor:
+    """Quién ejecuta un caso de uso. Los use_cases de otros módulos lo
+    reciben (armado por la vista a partir del usuario autenticado) para
+    aplicar reglas que dependen del rol o la sucursal, sin importar Django."""
+
+    usuario_id: int
+    rol: Rol
+    sucursal_id: Optional[int]

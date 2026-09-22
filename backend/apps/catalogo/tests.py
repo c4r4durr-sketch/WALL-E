@@ -190,7 +190,7 @@ class HerramientaApiTests(APITestCase):
         herramienta_id = self._crear().json()["id"]
         Movimiento.objects.create(
             herramienta_id=herramienta_id, sucursal=self.sucursal, usuario=self.admin,
-            tipo_movimiento="ENTRADA", tipo_unidad="UNIDAD", cantidad=5,
+            tipo_movimiento="ENTRADA", tipo_unidad="UNIDAD", cantidad=5, cantidad_unidades=5,
         )
         respuesta = self.client.delete(f"{URL}{herramienta_id}/")
         self.assertEqual(respuesta.status_code, 409)
