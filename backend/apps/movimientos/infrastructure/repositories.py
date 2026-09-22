@@ -26,6 +26,7 @@ def _a_entidad(modelo: MovimientoModel) -> Movimiento:
         cantidad=modelo.cantidad,
         cantidad_unidades=modelo.cantidad_unidades,
         usuario_id=modelo.usuario_id,
+        motivo=modelo.motivo,
         creado_en=modelo.creado_en,
         usuario_username=modelo.usuario.username,
     )
@@ -71,6 +72,7 @@ class MovimientoRepositoryDjango(MovimientoRepository):
             tipo_unidad=movimiento.tipo_unidad.value,
             cantidad=movimiento.cantidad,
             cantidad_unidades=movimiento.cantidad_unidades,
+            motivo=movimiento.motivo,
         )
         modelo.save()
         return self.obtener_por_id(modelo.id)

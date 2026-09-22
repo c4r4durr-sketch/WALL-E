@@ -26,6 +26,9 @@ class Movimiento:
     cantidad: int
     cantidad_unidades: int
     usuario_id: int
+    # Obligatorio en los ajustes (por qué se corrige el stock); vacío en
+    # entradas y salidas.
+    motivo: str = ""
     creado_en: Optional[datetime] = None
     # Solo para mostrar en el historial; lo completa el repositorio al leer.
     usuario_username: Optional[str] = None

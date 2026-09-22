@@ -26,6 +26,14 @@ class SucursalInvalidaError(Exception):
     """El movimiento referencia una sucursal que no existe o está inactiva."""
 
 
+class AjusteNoPermitidoError(Exception):
+    """Solo Administrador y Supervisor pueden registrar ajustes de stock."""
+
+
+class MotivoObligatorioError(Exception):
+    """Todo ajuste de stock debe explicar por qué se hace (auditoría)."""
+
+
 class SucursalNoPermitidaError(Exception):
     """El usuario intenta registrar un movimiento en una sucursal que no es
     la suya (un Empleado solo opera en su propio mostrador)."""

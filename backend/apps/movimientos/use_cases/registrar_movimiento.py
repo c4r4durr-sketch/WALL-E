@@ -1,6 +1,6 @@
 """
-Casos de uso de movimientos (HU9): registrar entrada, registrar salida y
-consultar stock por herramienta y sucursal.
+Casos de uso de movimientos (HU9): registrar entrada, registrar salida,
+registrar ajuste (corrección) y consultar stock por herramienta y sucursal.
 
 Puros: reciben los repositorios como interfaces (movimientos, catálogo y
 sucursales) y un Actor con el usuario que opera; no importan Django.
@@ -9,7 +9,9 @@ Reglas:
   - la cantidad se registra en UNIDAD o CAJA; si es CAJA se convierte a
     unidades con el unidades_por_caja de la herramienta (reutiliza
     indicadores/domain/formulas.py, no reimplementa la conversión);
-  - una SALIDA nunca deja el stock de la sucursal en negativo;
+  - una SALIDA o un AJUSTE_NEGATIVO nunca deja el stock de la sucursal
+    en negativo;
+  - los ajustes son solo para Administrador/Supervisor y llevan motivo;
   - un Empleado solo registra movimientos en su propia sucursal;
   - la sucursal debe existir y estar activa.
 """
@@ -25,13 +27,15 @@ from apps.usuarios.domain.value_objects import Rol
 
 from ..domain.entities import Movimiento
 from ..domain.exceptions import (
+    AjusteNoPermitidoError,
     HerramientaInexistenteError,
+    MotivoObligatorioError,
     StockInsuficienteError,
     SucursalInvalidaError,
     SucursalNoPermitidaError,
 )
 from ..domain.repositories import MovimientoRepository
-from ..domain.stock import stock_desde_totales
+from ..domain.stock import resta_stock, stock_desde_totales
 from ..domain.value_objects import TipoMovimiento, TipoUnidad
 
 
@@ -59,6 +63,7 @@ def _registrar(
     sucursal_id: int,
     tipo_unidad: TipoUnidad,
     cantidad: int,
+    motivo: str = "",
 ) -> Movimiento:
     if cantidad < 1:
         raise ValueError("La cantidad debe ser al menos 1.")
@@ -80,9 +85,10 @@ def _registrar(
     else:
         unidades = cantidad
 
-    if tipo == TipoMovimiento.SALIDA:
-        # Bloquear ANTES de leer el stock: si otra salida de la misma
-        # herramienta está en curso, esta espera a que termine y ve el
+    if resta_stock(tipo):
+        # Salidas y ajustes negativos pasan por el MISMO bloqueo: se toma
+        # ANTES de leer el stock, así si otra operación que resta stock de
+        # esta herramienta está en curso, esta espera a que termine y ve el
         # stock ya descontado.
         movimientos.bloquear_stock(herramienta_id)
         disponible = _stock_actual(movimientos, herramienta_id, sucursal_id)
@@ -99,6 +105,7 @@ def _registrar(
             cantidad=cantidad,
             cantidad_unidades=unidades,
             usuario_id=actor.usuario_id,
+            motivo=motivo,
         )
     )
 
@@ -111,6 +118,35 @@ def registrar_entrada(movimientos, herramientas, sucursales, actor, herramienta_
 def registrar_salida(movimientos, herramientas, sucursales, actor, herramienta_id, sucursal_id, tipo_unidad, cantidad):
     return _registrar(TipoMovimiento.SALIDA, movimientos, herramientas, sucursales,
                       actor, herramienta_id, sucursal_id, tipo_unidad, cantidad)
+
+
+ROLES_QUE_AJUSTAN = frozenset({Rol.ADMINISTRADOR, Rol.SUPERVISOR})
+
+
+def registrar_ajuste(
+    movimientos: MovimientoRepository,
+    herramientas: HerramientaRepository,
+    sucursales: SucursalRepository,
+    actor: Actor,
+    herramienta_id: int,
+    sucursal_id: int,
+    positivo: bool,
+    tipo_unidad: TipoUnidad,
+    cantidad: int,
+    motivo: str,
+) -> Movimiento:
+    """Corrección de stock (los movimientos no se editan: un error se
+    arregla con un ajuste nuevo). Solo Administrador/Supervisor, motivo
+    obligatorio, y un ajuste negativo tampoco deja el stock en negativo
+    (usa el mismo bloqueo y validación que una salida)."""
+    if Rol(actor.rol) not in ROLES_QUE_AJUSTAN:
+        raise AjusteNoPermitidoError()
+    motivo = (motivo or "").strip()
+    if not motivo:
+        raise MotivoObligatorioError()
+    tipo = TipoMovimiento.AJUSTE_POSITIVO if positivo else TipoMovimiento.AJUSTE_NEGATIVO
+    return _registrar(tipo, movimientos, herramientas, sucursales, actor,
+                      herramienta_id, sucursal_id, tipo_unidad, cantidad, motivo)
 
 
 def consultar_stock(

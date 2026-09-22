@@ -18,7 +18,8 @@ class Movimiento(models.Model):
     )
 
     tipo_movimiento = models.CharField(
-        max_length=10, choices=[(t.value, t.value.title()) for t in TipoMovimiento]
+        max_length=20,
+        choices=[(t.value, t.value.replace("_", " ").capitalize()) for t in TipoMovimiento],
     )
     tipo_unidad = models.CharField(
         max_length=10, choices=[(t.value, t.value.title()) for t in TipoUnidad]
@@ -27,6 +28,9 @@ class Movimiento(models.Model):
     # Equivalente en unidades, fijado al registrar (ver domain/entities.py):
     # el stock se calcula con este campo, no recalculando cajas.
     cantidad_unidades = models.PositiveIntegerField()
+    # Por qué se corrigió el stock. Obligatorio en ajustes (lo valida el
+    # use_case, no la BD); vacío en entradas y salidas.
+    motivo = models.CharField(max_length=255, blank=True, default="")
 
     creado_en = models.DateTimeField(auto_now_add=True)
 

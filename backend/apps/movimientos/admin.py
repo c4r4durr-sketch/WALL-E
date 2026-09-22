@@ -9,7 +9,7 @@ from .infrastructure.models import Movimiento
 
 @admin.register(Movimiento)
 class MovimientoAdmin(admin.ModelAdmin):
-    list_display = ["creado_en", "herramienta", "sucursal", "tipo_movimiento", "cantidad", "tipo_unidad", "cantidad_unidades", "usuario"]
+    list_display = ["creado_en", "herramienta", "sucursal", "tipo_movimiento", "cantidad", "tipo_unidad", "cantidad_unidades", "usuario", "motivo"]
     list_filter = ["tipo_movimiento", "sucursal"]
 
     def has_add_permission(self, request):

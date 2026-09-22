@@ -11,7 +11,9 @@ from apps.usuarios.domain.entities import Actor
 from apps.usuarios.infrastructure.repositories import SucursalRepositoryDjango
 
 from ...domain.exceptions import (
+    AjusteNoPermitidoError,
     HerramientaInexistenteError,
+    MotivoObligatorioError,
     StockInsuficienteError,
     SucursalInvalidaError,
     SucursalNoPermitidaError,
@@ -23,6 +25,7 @@ from .serializers import (
     FiltroMovimientosSerializer,
     FiltroStockSerializer,
     MovimientoSerializer,
+    RegistrarAjusteSerializer,
     RegistrarMovimientoSerializer,
     StockEnSucursalSerializer,
 )
@@ -35,7 +38,8 @@ class MovimientoViewSet(viewsets.ViewSet):
     invoca el use_case y traduce las excepciones de dominio a HTTP.
 
     Permisos: todo usuario autenticado (incluido el Empleado, es su trabajo
-    diario en el mostrador) consulta y registra. NO hay editar ni borrar
+    diario en el mostrador) consulta y registra entradas/salidas; los
+    ajustes (POST ajustes/) solo Administrador/Supervisor. NO hay editar ni borrar
     para nadie (PUT/PATCH/DELETE -> 405): un movimiento es un registro
     auditable; un error se corrige con un movimiento nuevo.
     """
@@ -69,41 +73,67 @@ class MovimientoViewSet(viewsets.ViewSet):
             raise NotFound("No existe ese movimiento.")
         return Response(MovimientoSerializer(movimiento).data)
 
-    @extend_schema(request=RegistrarMovimientoSerializer, responses={201: MovimientoSerializer})
-    def create(self, request):
-        entrada = RegistrarMovimientoSerializer(data=request.data)
-        entrada.is_valid(raise_exception=True)
-        datos = entrada.validated_data
+    @staticmethod
+    def _actor(request) -> Actor:
         usuario = request.user
-        actor = Actor(usuario_id=usuario.id, rol=usuario.rol, sucursal_id=usuario.sucursal_id)
+        return Actor(usuario_id=usuario.id, rol=usuario.rol, sucursal_id=usuario.sucursal_id)
 
-        registrar = (
-            casos.registrar_salida
-            if datos["tipo_movimiento"] == TipoMovimiento.SALIDA.value
-            else casos.registrar_entrada
-        )
+    def _registrar(self, registrar, operacion: str, *args):
+        """Corre un use_case de registro dentro de una transacción y traduce
+        sus errores de negocio a HTTP. `operacion` ("la salida", "el
+        ajuste") solo personaliza el mensaje de stock insuficiente."""
         try:
-            # atomic: el bloqueo de stock de una salida dura hasta que el
-            # movimiento queda guardado (ver MovimientoRepository.bloquear_stock).
+            # atomic: el bloqueo de stock (salidas y ajustes negativos) dura
+            # hasta que el movimiento queda guardado
+            # (ver MovimientoRepository.bloquear_stock).
             with transaction.atomic():
-                movimiento = registrar(
-                    self.movimientos, self.herramientas, self.sucursales, actor,
-                    datos["herramienta"], datos["sucursal"], datos["tipo_unidad"], datos["cantidad"],
-                )
+                movimiento = registrar(self.movimientos, self.herramientas, self.sucursales, *args)
         except HerramientaInexistenteError:
             raise ValidationError({"herramienta": ["No existe esa herramienta."]})
         except SucursalInvalidaError:
             raise ValidationError({"sucursal": ["La sucursal no existe o está inactiva."]})
         except SucursalNoPermitidaError:
             raise PermissionDenied("Solo puedes registrar movimientos en tu sucursal.")
+        except AjusteNoPermitidoError:
+            raise PermissionDenied("Solo un Administrador o Supervisor puede registrar ajustes de stock.")
+        except MotivoObligatorioError:
+            raise ValidationError({"motivo": ["Indica el motivo del ajuste."]})
         except StockInsuficienteError as error:
             raise ValidationError({
                 "cantidad": [
                     f"Stock insuficiente: hay {error.disponible} unidades disponibles en esta "
-                    f"sucursal y la salida pide {error.solicitado}."
+                    f"sucursal y {operacion} pide {error.solicitado}."
                 ]
             })
         return Response(MovimientoSerializer(movimiento).data, status=status.HTTP_201_CREATED)
+
+    @extend_schema(request=RegistrarMovimientoSerializer, responses={201: MovimientoSerializer})
+    def create(self, request):
+        entrada = RegistrarMovimientoSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        datos = entrada.validated_data
+        es_salida = datos["tipo_movimiento"] == TipoMovimiento.SALIDA.value
+        return self._registrar(
+            casos.registrar_salida if es_salida else casos.registrar_entrada,
+            "la salida",
+            self._actor(request), datos["herramienta"], datos["sucursal"],
+            datos["tipo_unidad"], datos["cantidad"],
+        )
+
+    @extend_schema(request=RegistrarAjusteSerializer, responses={201: MovimientoSerializer})
+    @action(detail=False, methods=["post"])
+    def ajustes(self, request):
+        """POST /api/movimientos/ajustes/ — corrección de stock con motivo
+        obligatorio. Solo Administrador/Supervisor (Empleado -> 403)."""
+        entrada = RegistrarAjusteSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        datos = entrada.validated_data
+        return self._registrar(
+            casos.registrar_ajuste,
+            "el ajuste",
+            self._actor(request), datos["herramienta"], datos["sucursal"],
+            datos["sentido"] == "POSITIVO", datos["tipo_unidad"], datos["cantidad"], datos["motivo"],
+        )
 
     @extend_schema(parameters=[FiltroStockSerializer], responses=StockEnSucursalSerializer(many=True))
     @action(detail=False, methods=["get"])

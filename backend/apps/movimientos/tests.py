@@ -88,7 +88,9 @@ class StockDominioTests(SimpleTestCase):
         self.assertEqual(stock_desde_totales({}), 0)
 
 
-class RegistrarMovimientoUseCaseTests(SimpleTestCase):
+class _UseCaseBase(SimpleTestCase):
+    """setUp y helpers compartidos (sin pruebas propias)."""
+
     def setUp(self):
         self.movs = MovimientosEnMemoria()
         self.herrs = HerramientasEnMemoria(Herramienta(id=1, codigo="T", nombre="Taladro", modelo="", unidades_por_caja=12))
@@ -108,6 +110,8 @@ class RegistrarMovimientoUseCaseTests(SimpleTestCase):
         return casos.registrar_salida(self.movs, self.herrs, self.sucs, actor or self.admin,
                                       1, sucursal, unidad, cantidad)
 
+
+class RegistrarMovimientoUseCaseTests(_UseCaseBase):
     def test_entrada_en_cajas_se_convierte_a_unidades(self):
         movimiento = self._entrada(unidad="CAJA", cantidad=2)
         self.assertEqual((movimiento.cantidad, movimiento.cantidad_unidades), (2, 24))
@@ -156,7 +160,9 @@ class RegistrarMovimientoUseCaseTests(SimpleTestCase):
                          [(1, 29, 2, 5), (2, 0, 0, 0)])
 
 
-class MovimientoApiTests(APITestCase):
+class _ApiBase(APITestCase):
+    """setUp y helpers compartidos (sin pruebas propias)."""
+
     def setUp(self):
         self.central = SucursalModel.objects.create(nombre="Central")
         self.norte = SucursalModel.objects.create(nombre="Norte")
@@ -179,6 +185,8 @@ class MovimientoApiTests(APITestCase):
             params["sucursal"] = sucursal
         return self.client.get(f"{URL}stock/", params)
 
+
+class MovimientoApiTests(_ApiBase):
     def test_entrada_en_cajas_guarda_unidades_y_usuario(self):
         respuesta = self._registrar(unidad="CAJA", cantidad=2)
         self.assertEqual(respuesta.status_code, 201)
@@ -250,3 +258,111 @@ class MovimientoApiTests(APITestCase):
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get(URL).status_code, 401)
         self.assertEqual(self._registrar().status_code, 401)
+
+
+# --- 4.3c: ajustes de stock ---
+
+class AjusteDominioTests(SimpleTestCase):
+    def test_efecto_y_demanda_por_tipo(self):
+        from .domain.stock import cuenta_como_demanda, resta_stock
+        self.assertEqual(stock_desde_totales({
+            TipoMovimiento.ENTRADA: 10, TipoMovimiento.AJUSTE_POSITIVO: 5,
+            TipoMovimiento.SALIDA: 3, TipoMovimiento.AJUSTE_NEGATIVO: 2,
+        }), 10)
+        self.assertEqual([t for t in TipoMovimiento if resta_stock(t)],
+                         [TipoMovimiento.SALIDA, TipoMovimiento.AJUSTE_NEGATIVO])
+        # Solo las salidas reales son demanda para EOQ/ABC; los ajustes no.
+        self.assertEqual([t for t in TipoMovimiento if cuenta_como_demanda(t)], [TipoMovimiento.SALIDA])
+
+
+class RegistrarAjusteUseCaseTests(_UseCaseBase):
+
+    supervisor = Actor(usuario_id=3, rol="SUPERVISOR", sucursal_id=1)
+
+    def _ajuste(self, positivo, cantidad=1, motivo="Conteo físico", actor=None, unidad="UNIDAD", sucursal=1):
+        return casos.registrar_ajuste(self.movs, self.herrs, self.sucs, actor or self.supervisor,
+                                      1, sucursal, positivo, unidad, cantidad, motivo)
+
+    def _stock_central(self):
+        return casos.consultar_stock(self.movs, self.herrs, self.sucs, 1, 1)[0].unidades
+
+    def test_ajuste_positivo_y_negativo_mueven_el_stock(self):
+        self._entrada(cantidad=10)
+        self._ajuste(True, cantidad=1, unidad="CAJA")  # +12
+        self._ajuste(False, cantidad=4)
+        self.assertEqual(self._stock_central(), 18)
+        self.assertEqual(self.movs.datos[-1].motivo, "Conteo físico")
+
+    def test_ajuste_negativo_no_deja_stock_negativo_y_usa_el_bloqueo(self):
+        self._entrada(cantidad=3)
+        with self.assertRaises(StockInsuficienteError):
+            self._ajuste(False, cantidad=4)
+        self.assertEqual(self.movs.bloqueos, [1])
+        self.assertEqual(self._stock_central(), 3)
+
+    def test_ajuste_positivo_no_bloquea(self):
+        self._ajuste(True)
+        self.assertEqual(self.movs.bloqueos, [])
+
+    def test_motivo_obligatorio(self):
+        from .domain.exceptions import MotivoObligatorioError
+        for motivo in ["", "   ", None]:
+            with self.subTest(motivo=motivo), self.assertRaises(MotivoObligatorioError):
+                self._ajuste(True, motivo=motivo)
+        self.assertEqual(self._ajuste(True, motivo="  Rotura  ").motivo, "Rotura")
+
+    def test_solo_admin_y_supervisor(self):
+        from .domain.exceptions import AjusteNoPermitidoError
+        self._ajuste(True, actor=self.admin)
+        with self.assertRaises(AjusteNoPermitidoError):
+            self._ajuste(True, actor=self.empleado)
+
+
+class AjusteApiTests(_ApiBase):
+
+    URL_AJUSTES = f"{URL}ajustes/"
+
+    def _ajustar(self, sentido="POSITIVO", cantidad=5, motivo="Conteo físico", unidad="UNIDAD"):
+        return self.client.post(self.URL_AJUSTES, {
+            "herramienta": self.herramienta.id, "sucursal": self.central.id,
+            "sentido": sentido, "tipo_unidad": unidad, "cantidad": cantidad, "motivo": motivo,
+        }, format="json")
+
+    def test_supervisor_ajusta_y_queda_en_el_historial_con_motivo(self):
+        self.client.force_authenticate(self.supervisor)
+        respuesta = self._ajustar(unidad="CAJA", cantidad=1)
+        self.assertEqual(respuesta.status_code, 201)
+        datos = respuesta.json()
+        self.assertEqual((datos["tipo_movimiento"], datos["cantidad_unidades"], datos["motivo"]),
+                         ("AJUSTE_POSITIVO", 12, "Conteo físico"))
+        self.assertEqual(self._stock(self.central.id).json()[0]["unidades"], 12)
+        self.assertEqual(self.client.get(URL, {"herramienta": self.herramienta.id}).json()[0]["motivo"], "Conteo físico")
+
+    def test_empleado_no_puede_ajustar(self):
+        self.client.force_authenticate(self.empleado)
+        self.assertEqual(self._ajustar().status_code, 403)
+        self.assertEqual(MovimientoModel.objects.count(), 0)
+
+    def test_motivo_vacio_es_400(self):
+        for motivo in ["", "   "]:
+            with self.subTest(motivo=motivo):
+                respuesta = self._ajustar(motivo=motivo)
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("motivo", respuesta.json())
+
+    def test_ajuste_negativo_mayor_al_stock_es_400(self):
+        self._registrar(cantidad=3)
+        respuesta = self._ajustar(sentido="NEGATIVO", cantidad=5)
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("el ajuste pide 5", respuesta.json()["cantidad"][0])
+        self.assertEqual(self._ajustar(sentido="NEGATIVO", cantidad=3).status_code, 201)
+        self.assertEqual(self._stock(self.central.id).json()[0]["unidades"], 0)
+
+    def test_el_endpoint_normal_no_acepta_ajustes(self):
+        self.assertEqual(self._registrar(tipo="AJUSTE_POSITIVO").status_code, 400)
+        self.assertEqual(self._registrar(tipo="AJUSTE_NEGATIVO").status_code, 400)
+
+    def test_los_ajustes_tampoco_se_editan_ni_borran(self):
+        movimiento_id = self._ajustar().json()["id"]
+        self.assertEqual(self.client.delete(f"{URL}{movimiento_id}/").status_code, 405)
+        self.assertEqual(self.client.patch(f"{URL}{movimiento_id}/", {"motivo": "x"}, format="json").status_code, 405)

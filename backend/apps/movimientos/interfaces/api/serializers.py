@@ -8,11 +8,30 @@ from ...domain.value_objects import TipoMovimiento, TipoUnidad
 
 
 class RegistrarMovimientoSerializer(serializers.Serializer):
+    """Operación normal del mostrador: solo ENTRADA o SALIDA. Los ajustes
+    van por su propio endpoint (RegistrarAjusteSerializer)."""
+
     herramienta = serializers.IntegerField(min_value=1)
     sucursal = serializers.IntegerField(min_value=1)
-    tipo_movimiento = serializers.ChoiceField(choices=[t.value for t in TipoMovimiento])
+    tipo_movimiento = serializers.ChoiceField(
+        choices=[TipoMovimiento.ENTRADA.value, TipoMovimiento.SALIDA.value]
+    )
     tipo_unidad = serializers.ChoiceField(choices=[t.value for t in TipoUnidad])
     cantidad = serializers.IntegerField(min_value=1)
+
+
+class RegistrarAjusteSerializer(serializers.Serializer):
+    """Corrección de stock (solo Administrador/Supervisor). `sentido`
+    POSITIVO suma unidades, NEGATIVO las resta."""
+
+    herramienta = serializers.IntegerField(min_value=1)
+    sucursal = serializers.IntegerField(min_value=1)
+    sentido = serializers.ChoiceField(choices=["POSITIVO", "NEGATIVO"])
+    tipo_unidad = serializers.ChoiceField(choices=[t.value for t in TipoUnidad])
+    cantidad = serializers.IntegerField(min_value=1)
+    # allow_blank: el "obligatorio" lo decide el use_case (también rechaza
+    # un motivo de puros espacios), con un único mensaje de negocio.
+    motivo = serializers.CharField(max_length=255, allow_blank=True, required=False, default="")
 
 
 class MovimientoSerializer(serializers.Serializer):
@@ -25,6 +44,7 @@ class MovimientoSerializer(serializers.Serializer):
     tipo_unidad = serializers.CharField(source="tipo_unidad.value")
     cantidad = serializers.IntegerField()
     cantidad_unidades = serializers.IntegerField()
+    motivo = serializers.CharField()
     creado_en = serializers.DateTimeField()
 
 
