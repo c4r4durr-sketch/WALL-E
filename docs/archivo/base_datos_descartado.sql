@@ -1,3 +1,22 @@
+-- =====================================================================
+-- ARCHIVO DESCARTADO - NO EJECUTAR
+-- =====================================================================
+-- Primer diseño del esquema en SQL puro. Se descartó porque sus tablas
+-- (sucursales, herramientas, ...) no coinciden con las que genera Django
+-- (usuarios_sucursal, catalogo_herramienta, ...): ejecutarlo crearía un
+-- segundo esquema paralelo que la aplicación nunca usaría. Además empieza
+-- con DROP SCHEMA public CASCADE, que BORRA toda la base.
+--
+-- La única fuente de verdad del esquema son los modelos y migraciones de
+-- Django. Lo que este script resolvía en SQL ahora vive en Python:
+--   fn_calcular_eoq / fn_calcular_rop / fn_ajustar_a_cajas
+--       -> backend/apps/indicadores/domain/formulas.py
+--   fn_registrar_historial (HU13, trigger de auditoría)
+--       -> backend/apps/auditoria (signals de Django + tabla ORM)
+--
+-- Se conserva solo como referencia de las reglas de negocio originales.
+-- =====================================================================
+
 -- ====
 -- BASE DE DATOS: Walle-Importaciones
 -- Sistema de seguimiento de inventarios multisucursal

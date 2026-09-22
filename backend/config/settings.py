@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "apps.movimientos.apps.MovimientosConfig",
     "apps.transferencias.apps.TransferenciasConfig",
     "apps.indicadores.apps.IndicadoresConfig",
+    "apps.auditoria.apps.AuditoriaConfig",
 ]
 
 MIDDLEWARE = [
@@ -58,6 +59,9 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Publica el request actual para que los signals de auditoría (HU13)
+    # sepan qué usuario hizo cada cambio.
+    "apps.auditoria.interfaces.middleware.RequestActualMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -100,6 +104,7 @@ MIGRATION_MODULES = {
     "catalogo": "apps.catalogo.infrastructure.migrations",
     "movimientos": "apps.movimientos.infrastructure.migrations",
     "transferencias": "apps.transferencias.infrastructure.migrations",
+    "auditoria": "apps.auditoria.infrastructure.migrations",
 }
 
 AUTH_USER_MODEL = "usuarios.Usuario"
