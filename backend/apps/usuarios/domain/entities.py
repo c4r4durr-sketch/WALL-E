@@ -31,7 +31,7 @@ class Usuario:
     # UsuarioRepositoryDjango es quien hace esa conversión en ambos sentidos.
     nombre_completo: str
     rol: Rol
-    # None para Administrador/Supervisor; una regla de negocio pendiente de
-    # implementar en use_cases exigirá que todo Empleado tenga sucursal.
+    # Solo puede ser None para Administrador: Supervisor y Empleado
+    # siempre tienen sucursal (ver domain/reglas.py::requiere_sucursal).
     sucursal_id: Optional[int]
     activo: bool = True

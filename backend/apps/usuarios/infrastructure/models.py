@@ -47,9 +47,10 @@ class Usuario(AbstractUser):
     ROL_CHOICES = [(rol.value, rol.value.title()) for rol in Rol]
 
     rol = models.CharField(max_length=20, choices=ROL_CHOICES, default=Rol.EMPLEADO.value)
-    # Obligatorio solo para EMPLEADO. Se deja nullable a nivel de BD porque
-    # esa validación condicional es una regla de negocio: se aplicará en un
-    # use_case (ej. crear_empleado), no como constraint de base de datos.
+    # Obligatorio para SUPERVISOR y EMPLEADO. Se deja nullable a nivel de BD
+    # porque esa validación condicional es una regla de negocio: vive en
+    # domain/reglas.py y la aplica UsuarioSerializer.validate, no una
+    # constraint de base de datos.
     sucursal = models.ForeignKey(
         Sucursal,
         on_delete=models.PROTECT,

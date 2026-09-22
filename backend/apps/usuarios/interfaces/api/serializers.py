@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from ...domain.reglas import requiere_sucursal
 from ...infrastructure.models import Sucursal, Usuario
 
 
@@ -30,6 +31,22 @@ class UsuarioSerializer(serializers.ModelSerializer):
             "is_active",
         ]
         read_only_fields = ["id"]
+
+    def validate(self, attrs):
+        # En un PATCH parcial pueden venir solo el rol o solo la sucursal:
+        # se combina con lo que ya tiene el usuario para validar el estado
+        # final, no solo los campos enviados.
+        rol = attrs.get("rol", getattr(self.instance, "rol", None))
+        if "sucursal" in attrs:
+            sucursal = attrs["sucursal"]
+        else:
+            sucursal = getattr(self.instance, "sucursal", None)
+
+        if rol is not None and requiere_sucursal(rol) and sucursal is None:
+            raise serializers.ValidationError(
+                {"sucursal": "Supervisor y Empleado deben tener una sucursal asignada."}
+            )
+        return attrs
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)
