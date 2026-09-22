@@ -17,12 +17,27 @@ export interface Herramienta {
 
 export type HerramientaPayload = Omit<Herramienta, 'id'>
 
+const URL = '/catalogo/herramientas/'
+
 export async function listarHerramientas(): Promise<Herramienta[]> {
-  const { data } = await httpClient.get<Herramienta[]>('/catalogo/herramientas/')
+  const { data } = await httpClient.get<Herramienta[]>(URL)
   return data
 }
 
 export async function crearHerramienta(payload: HerramientaPayload): Promise<Herramienta> {
-  const { data } = await httpClient.post<Herramienta>('/catalogo/herramientas/', payload)
+  const { data } = await httpClient.post<Herramienta>(URL, payload)
   return data
+}
+
+// PUT (no PATCH): el formulario de edición siempre manda todos los campos,
+// así un dato de EOQ que se vacía en el formulario queda en null.
+export async function actualizarHerramienta(
+  { id, ...payload }: HerramientaPayload & { id: number },
+): Promise<Herramienta> {
+  const { data } = await httpClient.put<Herramienta>(`${URL}${id}/`, payload)
+  return data
+}
+
+export async function eliminarHerramienta(id: number): Promise<void> {
+  await httpClient.delete(`${URL}${id}/`)
 }
