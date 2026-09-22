@@ -1,13 +1,11 @@
 import type { TokenPair } from './api/authApi'
 import type { Rol } from '../../shared/types/roles'
+import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from '../../shared/api/tokenStorage'
 
-const ACCESS_KEY = 'access_token'
-const REFRESH_KEY = 'refresh_token'
-
-// Claims que el backend agrega al access token (ver
+// Claims que el backend agrega al token (ver
 // CustomTokenObtainPairSerializer.get_token en el backend). Decodificar el
 // JWT en el cliente evita un segundo request "/me" solo para mostrar la
-// pantalla de bienvenida.
+// pantalla de bienvenida. Los trae tanto el access como el refresh token.
 export interface SessionClaims {
   user_id: string
   username: string
@@ -26,34 +24,40 @@ function base64UrlDecode(value: string): string {
   return new TextDecoder().decode(bytes)
 }
 
-function decodeClaims(accessToken: string): SessionClaims {
-  return JSON.parse(base64UrlDecode(accessToken.split('.')[1]))
+function decodeClaims(token: string): SessionClaims {
+  return JSON.parse(base64UrlDecode(token.split('.')[1]))
 }
 
-export function saveSession(tokens: TokenPair): void {
-  localStorage.setItem(ACCESS_KEY, tokens.access)
-  localStorage.setItem(REFRESH_KEY, tokens.refresh)
-}
-
-export function clearSession(): void {
-  localStorage.removeItem(ACCESS_KEY)
-  localStorage.removeItem(REFRESH_KEY)
-}
-
-// Devuelve los claims de la sesión activa, o null si no hay token, está
-// corrupto o ya expiró (y en ese caso limpia el storage de una vez).
-export function getSession(): SessionClaims | null {
-  const token = localStorage.getItem(ACCESS_KEY)
+// Claims del token si es válido y no venció; null en cualquier otro caso.
+function claimsVigentes(token: string | null): SessionClaims | null {
   if (!token) return null
   try {
     const claims = decodeClaims(token)
-    if (claims.exp * 1000 < Date.now()) {
-      clearSession()
-      return null
-    }
-    return claims
+    return claims.exp * 1000 > Date.now() ? claims : null
   } catch {
-    clearSession()
     return null
   }
+}
+
+export function saveSession(tokens: TokenPair): void {
+  saveTokens(tokens.access, tokens.refresh)
+}
+
+export function clearSession(): void {
+  clearTokens()
+}
+
+// Devuelve los claims de la sesión activa, o null si ya no hay sesión (y en
+// ese caso limpia el storage de una vez).
+//
+// Que el access token haya vencido (30 min) NO cierra la sesión: mientras
+// el refresh token siga vigente (1 día), httpClient renueva el access en la
+// próxima petición a la API. Por eso se cae al refresh para leer los claims.
+export function getSession(): SessionClaims | null {
+  const claims = claimsVigentes(getAccessToken()) ?? claimsVigentes(getRefreshToken())
+  if (!claims) {
+    clearTokens()
+    return null
+  }
+  return claims
 }
