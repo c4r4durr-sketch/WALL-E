@@ -32,14 +32,16 @@ export function DashboardPage() {
             </>
           )}
         </p>
-        {session.rol === Rol.ADMINISTRADOR && (
-          <Link
-            to="/usuarios/nuevo"
-            className="mt-4 inline-block text-sm font-medium text-blue-600 hover:underline"
-          >
-            Crear nueva cuenta →
+        <div className="mt-4 flex flex-col gap-2">
+          <Link to="/catalogo" className="text-sm font-medium text-blue-600 hover:underline">
+            Catálogo de herramientas →
           </Link>
-        )}
+          {session.rol === Rol.ADMINISTRADOR && (
+            <Link to="/usuarios/nuevo" className="text-sm font-medium text-blue-600 hover:underline">
+              Crear nueva cuenta →
+            </Link>
+          )}
+        </div>
         <button
           onClick={logout}
           className="mt-6 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
