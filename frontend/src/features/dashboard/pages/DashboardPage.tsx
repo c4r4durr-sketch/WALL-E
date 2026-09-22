@@ -36,6 +36,9 @@ export function DashboardPage() {
           <Link to="/catalogo" className="text-sm font-medium text-blue-600 hover:underline">
             Catálogo de herramientas →
           </Link>
+          <Link to="/movimientos" className="text-sm font-medium text-blue-600 hover:underline">
+            Movimientos de inventario →
+          </Link>
           {session.rol === Rol.ADMINISTRADOR && (
             <Link to="/usuarios/nuevo" className="text-sm font-medium text-blue-600 hover:underline">
               Crear nueva cuenta →
