@@ -13,6 +13,11 @@
 --       -> backend/apps/indicadores/domain/formulas.py
 --   fn_registrar_historial (HU13, trigger de auditoría)
 --       -> backend/apps/auditoria (signals de Django + tabla ORM)
+--   herramientas.activo ("dar de baja" una herramienta sin borrarla)
+--       -> NO se implementó: no hay campo activo. Borrar una herramienta
+--          se bloquea (HTTP 409) si tiene movimientos o transferencias
+--          asociados; sin ellos se borra de verdad. Ver
+--          backend/apps/catalogo/use_cases/gestionar_herramientas.py
 --
 -- Se conserva solo como referencia de las reglas de negocio originales.
 -- =====================================================================
