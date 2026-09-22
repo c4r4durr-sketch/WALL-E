@@ -1,6 +1,6 @@
 import type { Herramienta } from '../../catalogo/api/catalogoApi'
 import type { Sucursal } from '../../usuarios/api/usuariosApi'
-import type { Movimiento } from '../api/movimientosApi'
+import type { Movimiento, TipoMovimiento } from '../api/movimientosApi'
 import { useHistorialMovimientos, useStock } from '../hooks/useMovimientos'
 import { cajas, desgloseCajas } from '../formato'
 
@@ -8,6 +8,18 @@ import { cajas, desgloseCajas } from '../formato'
 // más reciente al más antiguo) y su stock actual por sucursal (HU11).
 
 const fechaHora = new Intl.DateTimeFormat('es', { dateStyle: 'short', timeStyle: 'short' })
+
+// Los ajustes llevan etiqueta propia (ámbar, igual que su formulario) para
+// distinguir una corrección de una operación normal del mostrador.
+const ETIQUETA: Record<TipoMovimiento, { texto: string; clase: string }> = {
+  ENTRADA: { texto: 'Entrada', clase: 'bg-green-50 text-green-700' },
+  SALIDA: { texto: 'Salida', clase: 'bg-slate-100 text-slate-700' },
+  AJUSTE_POSITIVO: { texto: 'Ajuste +', clase: 'bg-amber-100 text-amber-800' },
+  AJUSTE_NEGATIVO: { texto: 'Ajuste −', clase: 'bg-amber-100 text-amber-800' },
+}
+
+// Tipos que suman al stock (espejo de EFECTO_EN_STOCK del backend).
+const SUMA = new Set<TipoMovimiento>(['ENTRADA', 'AJUSTE_POSITIVO'])
 
 function cantidadRegistrada(m: Movimiento): string {
   return m.tipo_unidad === 'CAJA' ? cajas(m.cantidad) : `${m.cantidad} u.`
@@ -70,15 +82,14 @@ export function HistorialMovimientos({ herramienta, sucursales }: Props) {
                 <td className="whitespace-nowrap px-3 py-2">{fechaHora.format(new Date(m.creado_en))}</td>
                 <td className="px-3 py-2">{nombreSucursal(m.sucursal)}</td>
                 <td className="px-3 py-2">
-                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${
-                    m.tipo_movimiento === 'ENTRADA' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
-                  }`}>
-                    {m.tipo_movimiento === 'ENTRADA' ? 'Entrada' : 'Salida'}
+                  <span className={`whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${ETIQUETA[m.tipo_movimiento].clase}`}>
+                    {ETIQUETA[m.tipo_movimiento].texto}
                   </span>
+                  {m.motivo && <p className="mt-1 max-w-xs text-xs italic text-slate-500">{m.motivo}</p>}
                 </td>
                 <td className="px-3 py-2 text-right">{cantidadRegistrada(m)}</td>
-                <td className={`px-3 py-2 text-right font-medium ${m.tipo_movimiento === 'ENTRADA' ? 'text-green-700' : 'text-amber-700'}`}>
-                  {m.tipo_movimiento === 'ENTRADA' ? '+' : '−'}{m.cantidad_unidades}
+                <td className={`px-3 py-2 text-right font-medium ${SUMA.has(m.tipo_movimiento) ? 'text-green-700' : 'text-red-700'}`}>
+                  {SUMA.has(m.tipo_movimiento) ? '+' : '−'}{m.cantidad_unidades}
                 </td>
                 <td className="px-3 py-2">{m.usuario_username}</td>
               </tr>

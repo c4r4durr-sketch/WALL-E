@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { consultarStock, listarMovimientos, registrarMovimiento } from '../api/movimientosApi'
+import { consultarStock, listarMovimientos, registrarAjuste, registrarMovimiento } from '../api/movimientosApi'
 
 // Historial de una herramienta (todas las sucursales). Sin herramienta
 // elegida no se consulta nada.
@@ -22,13 +22,19 @@ export function useStock(herramientaId: number | null) {
 
 // Al registrar un movimiento se refrescan historial y stock, para que la
 // pantalla muestre el nuevo saldo sin recargar.
-export function useRegistrarMovimiento() {
+function useRefrescarInventario() {
   const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: registrarMovimiento,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['movimientos'] })
-      queryClient.invalidateQueries({ queryKey: ['stock'] })
-    },
-  })
+  return () => {
+    queryClient.invalidateQueries({ queryKey: ['movimientos'] })
+    queryClient.invalidateQueries({ queryKey: ['stock'] })
+  }
+}
+
+export function useRegistrarMovimiento() {
+  return useMutation({ mutationFn: registrarMovimiento, onSuccess: useRefrescarInventario() })
+}
+
+// Ajuste de stock (corrección): mismo refresco que un movimiento normal.
+export function useRegistrarAjuste() {
+  return useMutation({ mutationFn: registrarAjuste, onSuccess: useRefrescarInventario() })
 }

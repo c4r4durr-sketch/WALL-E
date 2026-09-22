@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
-import { isAxiosError } from 'axios'
 import type { Herramienta } from '../../catalogo/api/catalogoApi'
 import type { Sucursal } from '../../usuarios/api/usuariosApi'
-import type { TipoMovimiento, TipoUnidad } from '../api/movimientosApi'
+import type { TipoOperacion, TipoUnidad } from '../api/movimientosApi'
 import { useRegistrarMovimiento, useStock } from '../hooks/useMovimientos'
 import { desgloseCajas } from '../formato'
+import { erroresDelBackend } from '../errores'
 
 // Formulario de entrada/salida (HU9) para la herramienta elegida en la
 // página. Muestra el stock actual de la sucursal y, si se registra en
@@ -18,17 +18,8 @@ interface Props {
   sucursalFija: number | null
 }
 
-function erroresDelBackend(error: unknown): Record<string, string> {
-  if (!isAxiosError(error)) return {}
-  const datos = error.response?.data as Record<string, string[] | string> | undefined
-  if (!datos || (error.response?.status !== 400 && error.response?.status !== 403)) return {}
-  return Object.fromEntries(
-    Object.entries(datos).map(([campo, m]) => [campo, Array.isArray(m) ? m.join(' ') : String(m)]),
-  )
-}
-
 export function MovimientoForm({ herramienta, sucursales, sucursalFija }: Props) {
-  const [tipo, setTipo] = useState<TipoMovimiento>('ENTRADA')
+  const [tipo, setTipo] = useState<TipoOperacion>('ENTRADA')
   const [unidad, setUnidad] = useState<TipoUnidad>('UNIDAD')
   const [cantidad, setCantidad] = useState('')
   const [sucursal, setSucursal] = useState<string>(sucursalFija ? String(sucursalFija) : '')

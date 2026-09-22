@@ -2,7 +2,10 @@ import { httpClient } from '../../../shared/api/httpClient'
 
 // Espeja los serializers de movimientos
 // (backend/apps/movimientos/interfaces/api/serializers.py).
-export type TipoMovimiento = 'ENTRADA' | 'SALIDA'
+// ENTRADA/SALIDA: operación normal del mostrador. AJUSTE_*: corrección de
+// stock (solo Administrador/Supervisor, con motivo).
+export type TipoOperacion = 'ENTRADA' | 'SALIDA'
+export type TipoMovimiento = TipoOperacion | 'AJUSTE_POSITIVO' | 'AJUSTE_NEGATIVO'
 export type TipoUnidad = 'UNIDAD' | 'CAJA'
 
 export interface Movimiento {
@@ -17,15 +20,26 @@ export interface Movimiento {
   // Equivalente en unidades sueltas fijado al registrar (lo que cuenta
   // para el stock).
   cantidad_unidades: number
+  // Por qué se corrigió el stock (solo en ajustes; vacío en el resto).
+  motivo: string
   creado_en: string
 }
 
 export interface RegistrarMovimientoPayload {
   herramienta: number
   sucursal: number
-  tipo_movimiento: TipoMovimiento
+  tipo_movimiento: TipoOperacion
   tipo_unidad: TipoUnidad
   cantidad: number
+}
+
+export interface RegistrarAjustePayload {
+  herramienta: number
+  sucursal: number
+  sentido: 'POSITIVO' | 'NEGATIVO'
+  tipo_unidad: TipoUnidad
+  cantidad: number
+  motivo: string
 }
 
 export interface StockEnSucursal {
@@ -48,6 +62,13 @@ export async function listarMovimientos(filtros: { herramienta?: number; sucursa
 // responde 405). Un error se corrige con un movimiento nuevo.
 export async function registrarMovimiento(payload: RegistrarMovimientoPayload): Promise<Movimiento> {
   const { data } = await httpClient.post<Movimiento>(URL, payload)
+  return data
+}
+
+// Endpoint aparte del de entradas/salidas: el backend responde 403 si
+// quien lo llama no es Administrador ni Supervisor.
+export async function registrarAjuste(payload: RegistrarAjustePayload): Promise<Movimiento> {
+  const { data } = await httpClient.post<Movimiento>(`${URL}ajustes/`, payload)
   return data
 }
 

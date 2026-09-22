@@ -6,10 +6,13 @@ import { useSucursales } from '../../usuarios/hooks/useSucursales'
 import { Rol } from '../../../shared/types/roles'
 import { MovimientoForm } from '../components/MovimientoForm'
 import { HistorialMovimientos } from '../components/HistorialMovimientos'
+import { AjusteForm } from '../components/AjusteForm'
+import { puedeAjustarStock } from '../permisos'
 
 // Entradas y salidas de inventario (HU9) + historial y stock por
-// herramienta (HU11). Todos los roles registran; nadie edita ni borra un
-// movimiento (se corrige con uno nuevo).
+// herramienta (HU11). Todos los roles registran entradas/salidas; nadie
+// edita ni borra un movimiento: un error se corrige con un ajuste, en una
+// sección aparte visible solo para Administrador/Supervisor.
 export function MovimientosPage() {
   const session = getSession()
   const { data: herramientas, isLoading } = useHerramientas()
@@ -18,6 +21,7 @@ export function MovimientosPage() {
 
   const herramienta = herramientas?.find((h) => h.id === herramientaId) ?? null
   const sucursalFija = session?.rol === Rol.EMPLEADO ? session.sucursal_id : null
+  const puedeAjustar = session ? puedeAjustarStock(session.rol) : false
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -51,6 +55,7 @@ export function MovimientosPage() {
           <>
             {/* key: al cambiar de herramienta el formulario arranca limpio */}
             <MovimientoForm key={herramienta.id} herramienta={herramienta} sucursales={sucursales} sucursalFija={sucursalFija} />
+            {puedeAjustar && <AjusteForm key={`ajuste-${herramienta.id}`} herramienta={herramienta} sucursales={sucursales} />}
             <HistorialMovimientos herramienta={herramienta} sucursales={sucursales} />
           </>
         )}
