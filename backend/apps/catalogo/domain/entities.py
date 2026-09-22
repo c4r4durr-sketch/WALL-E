@@ -1,6 +1,7 @@
 """Entidad pura de dominio para el catálogo. Sin dependencias de Django."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -21,3 +22,6 @@ class Herramienta:
     costo_pedido: Optional[Decimal] = None
     costo_almacenamiento_unitario: Optional[Decimal] = None
     tiempo_entrega_dias: Optional[int] = None
+    # Los asigna la base al guardar; None en una herramienta nueva.
+    creado_en: Optional[datetime] = None
+    actualizado_en: Optional[datetime] = None

@@ -22,4 +22,12 @@ class HerramientaRepository(ABC):
 
     @abstractmethod
     def guardar(self, herramienta: Herramienta) -> Herramienta:
+        """Crea la herramienta si id es None; si no, la actualiza.
+        Lanza CodigoDuplicadoError si la base rechaza el código."""
+        ...
+
+    @abstractmethod
+    def eliminar(self, herramienta_id: int) -> None:
+        """Lanza HerramientaEnUsoError si tiene movimientos o
+        transferencias que la referencian."""
         ...
