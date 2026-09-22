@@ -11,9 +11,11 @@ const ROL_LABEL: Record<Rol, string> = {
 }
 
 // HU4/HU5: el Administrador crea una cuenta asignando rol y, si no es
-// Administrador, sucursal obligatoria (regla espejo de la constraint
-// chk_sucursal_obligatoria en database/base_datos.sql). Flujo mínimo
-// demostrable: falta validación fina y feedback de carga más pulido.
+// Administrador, sucursal obligatoria. El formulario solo guía al usuario:
+// la regla real la valida el backend (usuarios/domain/reglas.py, aplicada
+// en UsuarioSerializer.validate), que responde 400 si falta la sucursal.
+// Flujo mínimo demostrable: falta validación fina y feedback de carga más
+// pulido.
 export function CrearUsuarioPage() {
   const navigate = useNavigate()
   const { data: sucursales } = useSucursales()
