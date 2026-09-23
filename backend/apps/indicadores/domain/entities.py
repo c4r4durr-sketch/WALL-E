@@ -8,27 +8,64 @@ from dataclasses import dataclass
 from typing import Optional
 
 
+# Período con el que se mide la demanda REAL (ventas registradas): los
+# últimos 12 meses. Lo usan la demanda observada de EOQ y la clasificación ABC.
+PERIODO_DEMANDA_DIAS = 365
+
+# Clasificación ABC por rotación: A hasta ~80 % acumulado, B hasta ~95 %,
+# C el resto.
+UMBRAL_A = 80.0
+UMBRAL_B = 95.0
+
+
 @dataclass(frozen=True)
 class ResultadoEOQ:
+    """HU17/HU20/HU21. eoq es None si falta algún dato de entrada
+    (datos_faltantes dice cuáles, para completarlos en el catálogo)."""
+
     herramienta_id: int
-    demanda_anual: int  # D
-    costo_pedido: float  # S
-    costo_almacenamiento_unitario: float  # H
-    eoq: float  # raiz(2*D*S/H)
+    codigo: str
+    nombre: str
+    demanda_anual: Optional[int]  # D (estimada, del catálogo)
+    costo_pedido: Optional[float]  # S
+    costo_almacenamiento_unitario: Optional[float]  # H
+    unidades_por_caja: int
+    eoq: Optional[float]  # raiz(2*D*S/H), en unidades
+    eoq_ajustado_cajas: Optional[float]  # HU20: redondeado a cajas cerradas
+    # HU21: ventas reales de los últimos PERIODO_DEMANDA_DIAS, para comparar
+    # con la demanda estimada y decidir si hay que actualizarla.
+    demanda_observada: int
+    datos_faltantes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class ResultadoROP:
+    """HU18: punto de reorden = (D / 365) * tiempo de entrega, comparado con
+    el stock total de la herramienta (todas las sucursales)."""
+
     herramienta_id: int
-    demanda_diaria_promedio: float
-    lead_time_dias: int
-    punto_reorden: float
+    codigo: str
+    nombre: str
+    demanda_anual: Optional[int]
+    demanda_diaria_promedio: Optional[float]
+    lead_time_dias: Optional[int]
+    punto_reorden: Optional[float]
+    stock_total: int
+    requiere_reorden: bool  # stock_total <= punto_reorden
+    datos_faltantes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class ClasificacionABC:
+    """Clasificación por rotación: unidades vendidas (salidas reales) en
+    los últimos PERIODO_DEMANDA_DIAS. No hay costo unitario en el catálogo,
+    así que se clasifica por cantidad movida y no por valor en dinero."""
+
     herramienta_id: int
-    valor_consumo: float
+    codigo: str
+    nombre: str
+    unidades_vendidas: int
+    porcentaje: float  # participación en el total vendido
     porcentaje_acumulado: float
     clase: str  # "A" | "B" | "C"
 

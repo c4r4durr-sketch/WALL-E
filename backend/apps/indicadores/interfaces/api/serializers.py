@@ -7,22 +7,37 @@ from rest_framework import serializers
 
 class ResultadoEOQSerializer(serializers.Serializer):
     herramienta_id = serializers.IntegerField()
-    demanda_anual = serializers.IntegerField()
-    costo_pedido = serializers.FloatField()
-    costo_almacenamiento_unitario = serializers.FloatField()
-    eoq = serializers.FloatField()
+    codigo = serializers.CharField()
+    nombre = serializers.CharField()
+    demanda_anual = serializers.IntegerField(allow_null=True)
+    costo_pedido = serializers.FloatField(allow_null=True)
+    costo_almacenamiento_unitario = serializers.FloatField(allow_null=True)
+    unidades_por_caja = serializers.IntegerField()
+    eoq = serializers.FloatField(allow_null=True)
+    eoq_ajustado_cajas = serializers.FloatField(allow_null=True)
+    demanda_observada = serializers.IntegerField()
+    datos_faltantes = serializers.ListField(child=serializers.CharField())
 
 
 class ResultadoROPSerializer(serializers.Serializer):
     herramienta_id = serializers.IntegerField()
-    demanda_diaria_promedio = serializers.FloatField()
-    lead_time_dias = serializers.IntegerField()
-    punto_reorden = serializers.FloatField()
+    codigo = serializers.CharField()
+    nombre = serializers.CharField()
+    demanda_anual = serializers.IntegerField(allow_null=True)
+    demanda_diaria_promedio = serializers.FloatField(allow_null=True)
+    lead_time_dias = serializers.IntegerField(allow_null=True)
+    punto_reorden = serializers.FloatField(allow_null=True)
+    stock_total = serializers.IntegerField()
+    requiere_reorden = serializers.BooleanField()
+    datos_faltantes = serializers.ListField(child=serializers.CharField())
 
 
 class ClasificacionABCSerializer(serializers.Serializer):
     herramienta_id = serializers.IntegerField()
-    valor_consumo = serializers.FloatField()
+    codigo = serializers.CharField()
+    nombre = serializers.CharField()
+    unidades_vendidas = serializers.IntegerField()
+    porcentaje = serializers.FloatField()
     porcentaje_acumulado = serializers.FloatField()
     clase = serializers.CharField()
 

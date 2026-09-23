@@ -29,11 +29,8 @@ from ..domain.entities import (
     HerramientaEstancada,
     PanelAuditoria,
 )
-from ..domain.formulas import ajustar_a_cajas, calcular_eoq, calcular_rop
-
-
-def _a_float(valor):
-    return None if valor is None else float(valor)
+from .calcular_eoq import resultado_eoq
+from .calcular_punto_reorden import resultado_rop
 
 
 def construir_panel(
@@ -70,28 +67,23 @@ def construir_panel(
                 nunca_vendida=fila.ultima_salida is None,
             ))
 
+    # Misma regla y mismos cálculos que los endpoints de ROP y EOQ
+    # (resultado_rop / resultado_eoq): el panel no tiene fórmulas propias.
     alertas: list[AlertaReorden] = []
     sin_datos_rop = 0
     for herramienta in catalogo.values():
-        demanda = _a_float(herramienta.demanda_anual)
-        rop = calcular_rop(demanda, herramienta.tiempo_entrega_dias)
-        if rop is None:
+        rop = resultado_rop(herramienta, stock_total[herramienta.id])
+        if rop.punto_reorden is None:
             sin_datos_rop += 1
             continue
-        stock = stock_total[herramienta.id]
-        if stock <= rop:
-            eoq = calcular_eoq(
-                demanda,
-                _a_float(herramienta.costo_pedido),
-                _a_float(herramienta.costo_almacenamiento_unitario),
-            )
+        if rop.requiere_reorden:
             alertas.append(AlertaReorden(
                 herramienta_id=herramienta.id,
                 codigo=herramienta.codigo,
                 nombre=herramienta.nombre,
-                stock_total=stock,
-                punto_reorden=round(rop, 2),
-                pedido_sugerido=None if eoq is None else ajustar_a_cajas(eoq, herramienta.unidades_por_caja),
+                stock_total=rop.stock_total,
+                punto_reorden=rop.punto_reorden,
+                pedido_sugerido=resultado_eoq(herramienta).eoq_ajustado_cajas,
                 unidades_por_caja=herramienta.unidades_por_caja,
             ))
 

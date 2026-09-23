@@ -207,3 +207,110 @@ class PanelAuditoriaApiTests(APITestCase):
 
     def test_sin_sesion_es_401(self):
         self.assertEqual(self.client.get("/api/indicadores/panel/").status_code, 401)
+
+
+# --- EOQ / ROP / ABC (paso 4.5) ---
+
+from .use_cases.calcular_eoq import resultado_eoq
+from .use_cases.calcular_punto_reorden import resultado_rop
+from .use_cases.clasificar_abc import clasificar
+
+
+class EOQUseCaseTests(SimpleTestCase):
+    def test_eoq_completo_y_ajustado_a_cajas(self):
+        # raiz(2*730*120/8) = 147.99 -> cajas de 6: 25 cajas = 150
+        r = resultado_eoq(herramienta(1, demanda=730, costo_pedido=120, costo_alm=8, caja=6), demanda_observada=500)
+        self.assertEqual((r.eoq, r.eoq_ajustado_cajas, r.demanda_observada, r.datos_faltantes), (147.99, 150, 500, ()))
+
+    def test_datos_faltantes(self):
+        r = resultado_eoq(herramienta(1, demanda=730))
+        self.assertIsNone(r.eoq)
+        self.assertEqual(r.datos_faltantes, ("costo_pedido", "costo_almacenamiento_unitario"))
+        r = resultado_eoq(herramienta(1, demanda=730, costo_pedido=10, costo_alm=0))
+        self.assertEqual(r.datos_faltantes, ("costo_almacenamiento_unitario",))
+
+
+class ROPUseCaseTests(SimpleTestCase):
+    def test_rop_y_requiere_reorden(self):
+        r = resultado_rop(herramienta(1, demanda=730, entrega=15), stock_total=30)
+        self.assertEqual((r.punto_reorden, r.demanda_diaria_promedio, r.requiere_reorden), (30.0, 2.0, True))
+        self.assertFalse(resultado_rop(herramienta(1, demanda=730, entrega=15), stock_total=31).requiere_reorden)
+
+    def test_sin_datos_no_hay_alerta(self):
+        r = resultado_rop(herramienta(1, demanda=730), stock_total=0)
+        self.assertEqual((r.punto_reorden, r.requiere_reorden, r.datos_faltantes), (None, False, ("tiempo_entrega_dias",)))
+
+
+class ClasificacionABCTests(SimpleTestCase):
+    def test_regla_80_95(self):
+        # 50 / 30 / 15 / 5 -> A A B C ; la sin ventas siempre C
+        hs = [herramienta(i) for i in range(1, 6)]
+        r = clasificar(hs, {1: 50, 2: 30, 3: 15, 4: 5})
+        self.assertEqual([(c.herramienta_id, c.clase) for c in r], [(1, "A"), (2, "A"), (3, "B"), (4, "C"), (5, "C")])
+        self.assertEqual([c.porcentaje_acumulado for c in r], [50.0, 80.0, 95.0, 100.0, 100.0])
+
+    def test_la_mas_vendida_siempre_es_a(self):
+        r = clasificar([herramienta(1), herramienta(2)], {1: 90, 2: 10})
+        self.assertEqual([c.clase for c in r], ["A", "B"])
+
+    def test_sin_ventas_todas_c(self):
+        r = clasificar([herramienta(1), herramienta(2)], {})
+        self.assertEqual([(c.clase, c.porcentaje) for c in r], [("C", 0.0), ("C", 0.0)])
+
+
+class IndicadoresApiTests(APITestCase):
+    def setUp(self):
+        from apps.catalogo.infrastructure.models import Herramienta as HerramientaModel
+        from apps.movimientos.infrastructure.models import Movimiento
+        from apps.usuarios.infrastructure.models import Sucursal as SucursalModel, Usuario
+
+        self.Movimiento = Movimiento
+        self.central = SucursalModel.objects.create(nombre="Central")
+        self.norte = SucursalModel.objects.create(nombre="Norte")
+        self.u = Usuario.objects.create_user("emp", password="x", rol="EMPLEADO", sucursal=self.central)
+        self.tal = HerramientaModel.objects.create(codigo="TAL", nombre="Taladro", unidades_por_caja=6,
+                                                   demanda_anual=730, tiempo_entrega_dias=15,
+                                                   costo_pedido=120, costo_almacenamiento_unitario=8)
+        self.amo = HerramientaModel.objects.create(codigo="AMO", nombre="Amoladora")
+        self.client.force_authenticate(self.u)
+
+    def _mov(self, h, tipo, n, sucursal=None, dias_atras=0):
+        from django.utils import timezone
+        m = self.Movimiento.objects.create(herramienta=h, sucursal=sucursal or self.central, usuario=self.u,
+                                           tipo_movimiento=tipo, tipo_unidad="UNIDAD", cantidad=n,
+                                           cantidad_unidades=n, motivo="x" if "AJUSTE" in tipo else "")
+        self.Movimiento.objects.filter(pk=m.pk).update(creado_en=timezone.now() - timedelta(days=dias_atras))
+
+    def test_eoq_con_demanda_observada_de_12_meses(self):
+        self._mov(self.tal, "ENTRADA", 100, dias_atras=400)
+        self._mov(self.tal, "SALIDA", 40, dias_atras=10)
+        self._mov(self.tal, "SALIDA", 7, dias_atras=400)            # fuera del período
+        self._mov(self.tal, "AJUSTE_NEGATIVO", 5, dias_atras=3)     # no es venta
+        self._mov(self.tal, "TRANSFERENCIA_SALIDA", 8, dias_atras=3)  # no es venta
+        datos = self.client.get(f"/api/indicadores/eoq/{self.tal.id}/").json()
+        self.assertEqual((datos["eoq"], datos["eoq_ajustado_cajas"], datos["demanda_observada"]), (147.99, 150, 40))
+
+    def test_eoq_con_datos_faltantes_es_200(self):
+        respuesta = self.client.get(f"/api/indicadores/eoq/{self.amo.id}/")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIsNone(respuesta.json()["eoq"])
+        self.assertIn("demanda_anual", respuesta.json()["datos_faltantes"])
+
+    def test_rop_con_stock_de_ambas_sucursales(self):
+        self._mov(self.tal, "ENTRADA", 20)
+        self._mov(self.tal, "ENTRADA", 10, sucursal=self.norte)
+        datos = self.client.get(f"/api/indicadores/rop/{self.tal.id}/").json()
+        self.assertEqual((datos["punto_reorden"], datos["stock_total"], datos["requiere_reorden"]), (30.0, 30, True))
+
+    def test_abc(self):
+        self._mov(self.tal, "ENTRADA", 100, dias_atras=30)
+        self._mov(self.tal, "SALIDA", 30, dias_atras=5)
+        datos = self.client.get("/api/indicadores/abc/").json()
+        self.assertEqual([(d["codigo"], d["clase"], d["unidades_vendidas"]) for d in datos],
+                         [("TAL", "A", 30), ("AMO", "C", 0)])
+
+    def test_404_y_401(self):
+        self.assertEqual(self.client.get("/api/indicadores/eoq/999/").status_code, 404)
+        self.assertEqual(self.client.get("/api/indicadores/rop/999/").status_code, 404)
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get("/api/indicadores/abc/").status_code, 401)

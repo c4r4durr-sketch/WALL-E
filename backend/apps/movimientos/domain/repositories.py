@@ -6,7 +6,8 @@ registrado es inmutable (HU13, auditable). Un error se corrige con un
 movimiento nuevo, nunca editando el original."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from datetime import datetime
+from typing import Iterable, Optional
 
 from .entities import Movimiento, ResumenInventario
 from .value_objects import TipoMovimiento
@@ -30,6 +31,16 @@ class MovimientoRepository(ABC):
     ) -> dict[TipoMovimiento, int]:
         """Total de unidades registradas por tipo de movimiento para una
         herramienta en una sucursal (insumo de domain/stock.py)."""
+        ...
+
+    @abstractmethod
+    def unidades_por_herramienta(
+        self, tipos: Iterable[TipoMovimiento], desde: datetime
+    ) -> dict[int, int]:
+        """Total de unidades de los tipos indicados registradas desde una
+        fecha, por herramienta (todas las sucursales). Ej.: ventas de los
+        últimos 12 meses para EOQ y ABC. Qué tipos cuentan lo decide el
+        dominio (stock.TIPOS_QUE_CUENTAN_COMO_DEMANDA), no el repositorio."""
         ...
 
     @abstractmethod
