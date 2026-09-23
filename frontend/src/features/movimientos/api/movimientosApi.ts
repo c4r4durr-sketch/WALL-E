@@ -5,7 +5,13 @@ import { httpClient } from '../../../shared/api/httpClient'
 // ENTRADA/SALIDA: operación normal del mostrador. AJUSTE_*: corrección de
 // stock (solo Administrador/Supervisor, con motivo).
 export type TipoOperacion = 'ENTRADA' | 'SALIDA'
-export type TipoMovimiento = TipoOperacion | 'AJUSTE_POSITIVO' | 'AJUSTE_NEGATIVO'
+// TRANSFERENCIA_*: los genera el backend al completar una transferencia.
+export type TipoMovimiento =
+  | TipoOperacion
+  | 'AJUSTE_POSITIVO'
+  | 'AJUSTE_NEGATIVO'
+  | 'TRANSFERENCIA_SALIDA'
+  | 'TRANSFERENCIA_ENTRADA'
 export type TipoUnidad = 'UNIDAD' | 'CAJA'
 
 export interface Movimiento {

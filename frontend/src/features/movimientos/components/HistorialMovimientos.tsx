@@ -16,10 +16,12 @@ const ETIQUETA: Record<TipoMovimiento, { texto: string; clase: string }> = {
   SALIDA: { texto: 'Salida', clase: 'bg-slate-100 text-slate-700' },
   AJUSTE_POSITIVO: { texto: 'Ajuste +', clase: 'bg-amber-100 text-amber-800' },
   AJUSTE_NEGATIVO: { texto: 'Ajuste −', clase: 'bg-amber-100 text-amber-800' },
+  TRANSFERENCIA_SALIDA: { texto: 'Transferencia enviada', clase: 'bg-blue-50 text-blue-700' },
+  TRANSFERENCIA_ENTRADA: { texto: 'Transferencia recibida', clase: 'bg-blue-50 text-blue-700' },
 }
 
 // Tipos que suman al stock (espejo de EFECTO_EN_STOCK del backend).
-const SUMA = new Set<TipoMovimiento>(['ENTRADA', 'AJUSTE_POSITIVO'])
+const SUMA = new Set<TipoMovimiento>(['ENTRADA', 'AJUSTE_POSITIVO', 'TRANSFERENCIA_ENTRADA'])
 
 function cantidadRegistrada(m: Movimiento): string {
   return m.tipo_unidad === 'CAJA' ? cajas(m.cantidad) : `${m.cantidad} u.`

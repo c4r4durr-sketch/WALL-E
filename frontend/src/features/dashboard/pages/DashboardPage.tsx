@@ -25,6 +25,7 @@ export function DashboardPage() {
   const accesos = [
     { to: '/catalogo', texto: 'Catálogo de herramientas' },
     { to: '/movimientos', texto: 'Movimientos de inventario' },
+    { to: '/transferencias', texto: 'Transferencias' },
     ...(session.rol === Rol.ADMINISTRADOR ? [{ to: '/usuarios/nuevo', texto: 'Crear nueva cuenta' }] : []),
   ]
 
