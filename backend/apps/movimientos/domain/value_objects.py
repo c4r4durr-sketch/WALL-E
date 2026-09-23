@@ -13,6 +13,11 @@ class TipoMovimiento(str, Enum):
     # domain/stock.py::cuenta_como_demanda).
     AJUSTE_POSITIVO = "AJUSTE_POSITIVO"
     AJUSTE_NEGATIVO = "AJUSTE_NEGATIVO"
+    # Movimientos de una transferencia completada entre sucursales (HU12):
+    # los genera solo el use case de transferencias, nunca a mano. Tampoco
+    # son demanda: mover stock entre sucursales no es vender.
+    TRANSFERENCIA_SALIDA = "TRANSFERENCIA_SALIDA"
+    TRANSFERENCIA_ENTRADA = "TRANSFERENCIA_ENTRADA"
 
     @property
     def es_ajuste(self) -> bool:

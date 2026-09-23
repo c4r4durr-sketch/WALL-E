@@ -18,7 +18,7 @@ class Movimiento(models.Model):
     )
 
     tipo_movimiento = models.CharField(
-        max_length=20,
+        max_length=25,
         choices=[(t.value, t.value.replace("_", " ").capitalize()) for t in TipoMovimiento],
     )
     tipo_unidad = models.CharField(

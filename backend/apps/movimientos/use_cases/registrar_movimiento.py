@@ -53,6 +53,13 @@ def _stock_actual(repo: MovimientoRepository, herramienta_id: int, sucursal_id: 
     return stock_desde_totales(repo.unidades_por_tipo(herramienta_id, sucursal_id))
 
 
+def stock_disponible(repo: MovimientoRepository, herramienta_id: int, sucursal_id: int) -> int:
+    """Stock actual en unidades de una herramienta en una sucursal. Público
+    para que otros módulos (transferencias) lo consulten sin duplicar el
+    cálculo."""
+    return _stock_actual(repo, herramienta_id, sucursal_id)
+
+
 def _registrar(
     tipo: TipoMovimiento,
     movimientos: MovimientoRepository,
@@ -64,7 +71,11 @@ def _registrar(
     tipo_unidad: TipoUnidad,
     cantidad: int,
     motivo: str = "",
+    unidades_fijas: Optional[int] = None,
 ) -> Movimiento:
+    """unidades_fijas: equivalente en unidades ya calculado antes (ej. al
+    solicitar una transferencia); si viene, no se recalcula con el tamaño
+    de caja actual de la herramienta."""
     if cantidad < 1:
         raise ValueError("La cantidad debe ser al menos 1.")
 
@@ -80,7 +91,9 @@ def _registrar(
         raise SucursalNoPermitidaError(sucursal_id)
 
     tipo_unidad = TipoUnidad(tipo_unidad)
-    if tipo_unidad == TipoUnidad.CAJA:
+    if unidades_fijas is not None:
+        unidades = unidades_fijas
+    elif tipo_unidad == TipoUnidad.CAJA:
         unidades = cajas_a_unidades(cantidad, herramienta.unidades_por_caja)
     else:
         unidades = cantidad
@@ -118,6 +131,32 @@ def registrar_entrada(movimientos, herramientas, sucursales, actor, herramienta_
 def registrar_salida(movimientos, herramientas, sucursales, actor, herramienta_id, sucursal_id, tipo_unidad, cantidad):
     return _registrar(TipoMovimiento.SALIDA, movimientos, herramientas, sucursales,
                       actor, herramienta_id, sucursal_id, tipo_unidad, cantidad)
+
+
+def registrar_movimientos_de_transferencia(
+    movimientos: MovimientoRepository,
+    herramientas: HerramientaRepository,
+    sucursales: SucursalRepository,
+    actor: Actor,
+    herramienta_id: int,
+    sucursal_origen_id: int,
+    sucursal_destino_id: int,
+    tipo_unidad: TipoUnidad,
+    cantidad: int,
+    cantidad_unidades: int,
+    referencia: str,
+) -> tuple[Movimiento, Movimiento]:
+    """Mueve stock entre sucursales (HU12): una TRANSFERENCIA_SALIDA en
+    origen (misma validación de stock y mismo bloqueo que una salida) y una
+    TRANSFERENCIA_ENTRADA en destino. Quien llama debe envolverlo en UNA
+    transacción: o se registran los dos, o ninguno."""
+    salida = _registrar(TipoMovimiento.TRANSFERENCIA_SALIDA, movimientos, herramientas, sucursales,
+                        actor, herramienta_id, sucursal_origen_id, tipo_unidad, cantidad,
+                        referencia, unidades_fijas=cantidad_unidades)
+    entrada = _registrar(TipoMovimiento.TRANSFERENCIA_ENTRADA, movimientos, herramientas, sucursales,
+                         actor, herramienta_id, sucursal_destino_id, tipo_unidad, cantidad,
+                         referencia, unidades_fijas=cantidad_unidades)
+    return salida, entrada
 
 
 ROLES_QUE_AJUSTAN = frozenset({Rol.ADMINISTRADOR, Rol.SUPERVISOR})

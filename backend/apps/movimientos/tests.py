@@ -270,7 +270,8 @@ class AjusteDominioTests(SimpleTestCase):
             TipoMovimiento.SALIDA: 3, TipoMovimiento.AJUSTE_NEGATIVO: 2,
         }), 10)
         self.assertEqual([t for t in TipoMovimiento if resta_stock(t)],
-                         [TipoMovimiento.SALIDA, TipoMovimiento.AJUSTE_NEGATIVO])
+                         [TipoMovimiento.SALIDA, TipoMovimiento.AJUSTE_NEGATIVO,
+                          TipoMovimiento.TRANSFERENCIA_SALIDA])
         # Solo las salidas reales son demanda para EOQ/ABC; los ajustes no.
         self.assertEqual([t for t in TipoMovimiento if cuenta_como_demanda(t)], [TipoMovimiento.SALIDA])
 

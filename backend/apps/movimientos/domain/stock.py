@@ -2,7 +2,8 @@
 Reglas puras de stock y demanda (sin Django).
 
 El stock no se guarda en ninguna tabla: se DERIVA de los movimientos
-(entradas y ajustes positivos suman; salidas y ajustes negativos restan).
+(entradas, ajustes positivos y transferencias recibidas suman; salidas,
+ajustes negativos y transferencias enviadas restan).
 Así no puede desincronizarse del historial, que es la fuente de verdad
 auditable.
 """
@@ -15,6 +16,8 @@ EFECTO_EN_STOCK = {
     TipoMovimiento.SALIDA: -1,
     TipoMovimiento.AJUSTE_POSITIVO: +1,
     TipoMovimiento.AJUSTE_NEGATIVO: -1,
+    TipoMovimiento.TRANSFERENCIA_SALIDA: -1,
+    TipoMovimiento.TRANSFERENCIA_ENTRADA: +1,
 }
 
 # Solo las ventas/salidas reales del mostrador reflejan demanda. Un ajuste
