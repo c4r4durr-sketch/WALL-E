@@ -8,7 +8,7 @@ movimiento nuevo, nunca editando el original."""
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from .entities import Movimiento
+from .entities import Movimiento, ResumenInventario
 from .value_objects import TipoMovimiento
 
 
@@ -30,6 +30,12 @@ class MovimientoRepository(ABC):
     ) -> dict[TipoMovimiento, int]:
         """Total de unidades registradas por tipo de movimiento para una
         herramienta en una sucursal (insumo de domain/stock.py)."""
+        ...
+
+    @abstractmethod
+    def resumen_inventario(self) -> list[ResumenInventario]:
+        """Un resumen por cada par herramienta/sucursal que tenga al menos
+        un movimiento (insumo del panel y de los reportes)."""
         ...
 
     @abstractmethod

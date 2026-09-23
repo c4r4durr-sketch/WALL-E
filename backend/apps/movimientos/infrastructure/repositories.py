@@ -4,13 +4,14 @@
 dominio. Guarda con .save() para que se disparen los signals de auditoría
 (HU13)."""
 
+from collections import defaultdict
 from typing import Optional
 
-from django.db.models import Sum
+from django.db.models import Max, Min, Q, Sum
 
 from apps.catalogo.infrastructure.models import Herramienta as HerramientaModel
 
-from ..domain.entities import Movimiento
+from ..domain.entities import Movimiento, ResumenInventario
 from ..domain.repositories import MovimientoRepository
 from ..domain.value_objects import TipoMovimiento, TipoUnidad
 from .models import Movimiento as MovimientoModel
@@ -54,6 +55,35 @@ class MovimientoRepositoryDjango(MovimientoRepository):
             .annotate(total=Sum("cantidad_unidades"))
         )
         return {TipoMovimiento(f["tipo_movimiento"]): f["total"] for f in filas}
+
+    def resumen_inventario(self) -> list[ResumenInventario]:
+        # Dos consultas agregadas en total, sin importar cuántos movimientos
+        # haya: totales por tipo, y fechas (primer movimiento y última venta).
+        totales: dict[tuple[int, int], dict[TipoMovimiento, int]] = defaultdict(dict)
+        for fila in (
+            MovimientoModel.objects.values("herramienta_id", "sucursal_id", "tipo_movimiento")
+            .annotate(total=Sum("cantidad_unidades"))
+        ):
+            clave = (fila["herramienta_id"], fila["sucursal_id"])
+            totales[clave][TipoMovimiento(fila["tipo_movimiento"])] = fila["total"]
+
+        fechas = (
+            MovimientoModel.objects.values("herramienta_id", "sucursal_id")
+            .annotate(
+                primero=Min("creado_en"),
+                ultima_salida=Max("creado_en", filter=Q(tipo_movimiento=TipoMovimiento.SALIDA.value)),
+            )
+        )
+        return [
+            ResumenInventario(
+                herramienta_id=f["herramienta_id"],
+                sucursal_id=f["sucursal_id"],
+                unidades_por_tipo=totales[(f["herramienta_id"], f["sucursal_id"])],
+                primer_movimiento=f["primero"],
+                ultima_salida=f["ultima_salida"],
+            )
+            for f in fechas
+        ]
 
     def bloquear_stock(self, herramienta_id: int) -> None:
         # SELECT ... FOR UPDATE sobre la fila de la herramienta: toda salida

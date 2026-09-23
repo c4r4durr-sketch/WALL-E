@@ -1,10 +1,21 @@
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .serializers import ClasificacionABCSerializer, ResultadoEOQSerializer, ResultadoROPSerializer
+from apps.catalogo.infrastructure.repositories import HerramientaRepositoryDjango
+from apps.movimientos.infrastructure.repositories import MovimientoRepositoryDjango
+from apps.usuarios.infrastructure.repositories import SucursalRepositoryDjango
+
+from ...use_cases.panel_auditoria import construir_panel
+from .serializers import (
+    ClasificacionABCSerializer,
+    PanelAuditoriaSerializer,
+    ResultadoEOQSerializer,
+    ResultadoROPSerializer,
+)
 
 # Estas vistas usan APIView (no GenericAPIView) porque no hay un modelo/
 # queryset detrás: son puro cálculo. @extend_schema documenta manualmente
@@ -54,3 +65,21 @@ class ClasificacionABCView(APIView):
             {"detail": "Pendiente de implementar."},
             status=status.HTTP_501_NOT_IMPLEMENTED,
         )
+
+
+class PanelAuditoriaView(APIView):
+    """GET /api/indicadores/panel/
+    Panel principal (HU24): alertas de reorden, herramientas estancadas y
+    totales. Lo ven todos los roles (es la pantalla de inicio)."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses=PanelAuditoriaSerializer)
+    def get(self, request):
+        panel = construir_panel(
+            MovimientoRepositoryDjango(),
+            HerramientaRepositoryDjango(),
+            SucursalRepositoryDjango(),
+            hoy=timezone.localdate(),
+        )
+        return Response(PanelAuditoriaSerializer(panel).data)

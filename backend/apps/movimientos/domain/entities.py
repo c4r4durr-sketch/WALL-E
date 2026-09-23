@@ -32,3 +32,17 @@ class Movimiento:
     creado_en: Optional[datetime] = None
     # Solo para mostrar en el historial; lo completa el repositorio al leer.
     usuario_username: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ResumenInventario:
+    """Resumen de los movimientos de UNA herramienta en UNA sucursal, para
+    reportes (panel HU24, estancamiento HU22) sin traer cada movimiento."""
+
+    herramienta_id: int
+    sucursal_id: int
+    unidades_por_tipo: dict[TipoMovimiento, int]
+    primer_movimiento: datetime
+    # Última salida REAL (venta); None si nunca se vendió. Los ajustes no
+    # cuentan: una corrección no es una venta.
+    ultima_salida: Optional[datetime]
