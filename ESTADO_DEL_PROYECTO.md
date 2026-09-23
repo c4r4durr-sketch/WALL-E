@@ -4,7 +4,7 @@
 > nuevo, leer esto primero. Se actualiza en el mismo commit que cambia algo
 > importante. Versiones exactas del stack: ver `STACK_VERSIONES.md`.
 >
-> **Última actualización: 22/09/2026** (semana 4 del cronograma).
+> **Última actualización: 23/09/2026** (semana 4 del cronograma).
 
 ## Equipo y materia
 Proyecto académico (Programación III y Análisis y Diseño II) para una
@@ -21,7 +21,8 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | 7–10 | Sprint 3: movimientos | ✅ adelantado (entradas, salidas, ajustes, stock) |
 | — | Dashboard (HU24) | ✅ adelantado para el 27/09 |
 | — | Transferencias (HU12) | ✅ adelantado |
-| — | EOQ/ROP/ABC | pendiente (ver abajo) |
+| — | EOQ / ROP / ABC (HU17–HU21) | ✅ adelantado |
+| — | Reportes (HU14, HU23, HU25) | pendiente (ver abajo) |
 
 ## Entorno real de esta máquina (verificado 22/09/2026)
 - **PostgreSQL 18.6 nativo** (servicio de Windows `postgresql-x64-18`) en
@@ -57,18 +58,15 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | **Movimientos** (HU9/HU11) | Entrada, salida, **ajuste** (+/−, motivo obligatorio, solo Admin/Supervisor). Conversión caja→unidad. **Nunca stock negativo** (bloqueo `select_for_update`). Stock derivado de los movimientos. Inmutables para todos (405, `/admin/` solo lectura). Empleado solo opera en su sucursal | `/movimientos`: registro, sección de ajuste aparte, stock por sucursal e historial con motivo |
 | **Fórmulas** | `indicadores/domain/formulas.py`: EOQ, ROP, ajuste a cajas, cajas↔unidades (probadas) | — |
 | **Transferencias** (HU12) | Solicitar (cualquier rol; Empleado solo desde su sucursal) → PENDIENTE sin mover stock. Admin/Supervisor COMPLETAN (salida en origen + entrada en destino, misma validación y bloqueo de stock; si ya no alcanza → 409) o RECHAZAN con motivo. No se completa dos veces (bloqueo). Sin editar ni borrar | `/transferencias`: solicitud, pendientes/todas, completar y rechazar en la fila |
+| **Indicadores** (HU17–HU21) | `GET /api/indicadores/eoq/<id>/` (EOQ con D/S/H del catálogo, ajustado a cajas, + demanda observada de 12 meses), `rop/<id>/` (ROP vs stock total, `requiere_reorden`), `abc/` (por unidades vendidas en 12 meses: A < 80 % acumulado previo, B < 95 %, C resto y sin ventas). Si faltan datos: 200 con `null` + `datos_faltantes` | `/indicadores`: tabla ABC; al elegir una herramienta, "cuánto pedir" (EOQ) y "cuándo pedir" (ROP) |
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
 
-Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **89 pruebas OK**.
+Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **101 pruebas OK**.
 
 ## Pendiente (en orden)
-1. **EOQ / ROP / ABC (HU17–HU21, paso 4.5)** — conectar los endpoints
-   `/api/indicadores/eoq|rop|abc/` (hoy 501) a `formulas.py`. Para la
-   demanda usar solo lo que `movimientos/domain/stock.py::cuenta_como_demanda`
-   acepta (salidas; los ajustes no cuentan).
-2. Reportes (cierre diario HU14, promoción HU23, Excel HU25). El
+1. Reportes (cierre diario HU14, promoción HU23, Excel HU25). El
    estancamiento (HU22) ya se ve en el panel.
-3. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
+2. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
    el entorno real).
 
 ## Decisiones tomadas (para no volver a discutirlas)
@@ -77,6 +75,11 @@ Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **89 pruebas 
 - Cada movimiento guarda `cantidad_unidades` al registrarse (cambiar el
   tamaño de caja no altera el stock histórico).
 - Los ajustes y las transferencias no cuentan como demanda para EOQ/ABC.
+- EOQ/ROP usan la demanda anual **estimada** del catálogo (la misma del panel);
+  la demanda observada (ventas de 12 meses) se muestra al lado para comparar.
+- ABC por **unidades vendidas** (no hay costo unitario en el catálogo). Una
+  herramienta es A si el acumulado *anterior* a ella es < 80 % (la más
+  vendida siempre es A).
 - Empleado: solo su sucursal en movimientos; solo lectura en catálogo.
 - Estancamiento: más de 40 días sin una SALIDA real (los ajustes no son
   ventas); si nunca se vendió, se cuenta desde su primer movimiento en esa
