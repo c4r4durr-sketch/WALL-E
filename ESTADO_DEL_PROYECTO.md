@@ -20,7 +20,8 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | 4–6 | Sprint 2: catálogo | ✅ (entregable del sábado 27/09: CRUD de catálogo probado — superado) |
 | 7–10 | Sprint 3: movimientos | ✅ adelantado (entradas, salidas, ajustes, stock) |
 | — | Dashboard (HU24) | ✅ adelantado para el 27/09 |
-| — | Transferencias, EOQ/ROP/ABC | pendiente (ver abajo) |
+| — | Transferencias (HU12) | ✅ adelantado |
+| — | EOQ/ROP/ABC | pendiente (ver abajo) |
 
 ## Entorno real de esta máquina (verificado 22/09/2026)
 - **PostgreSQL 18.6 nativo** (servicio de Windows `postgresql-x64-18`) en
@@ -55,32 +56,27 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | **Catálogo** (HU6) | CRUD real con use cases; código único, caja ≥ 1 unidad, datos EOQ/ROP opcionales. Admin/Supervisor escriben, Empleado solo lee (403). Borrar una herramienta con movimientos → **409** | `/catalogo`: alta, edición, borrado con confirmación; Empleado solo ve la tabla |
 | **Movimientos** (HU9/HU11) | Entrada, salida, **ajuste** (+/−, motivo obligatorio, solo Admin/Supervisor). Conversión caja→unidad. **Nunca stock negativo** (bloqueo `select_for_update`). Stock derivado de los movimientos. Inmutables para todos (405, `/admin/` solo lectura). Empleado solo opera en su sucursal | `/movimientos`: registro, sección de ajuste aparte, stock por sucursal e historial con motivo |
 | **Fórmulas** | `indicadores/domain/formulas.py`: EOQ, ROP, ajuste a cajas, cajas↔unidades (probadas) | — |
+| **Transferencias** (HU12) | Solicitar (cualquier rol; Empleado solo desde su sucursal) → PENDIENTE sin mover stock. Admin/Supervisor COMPLETAN (salida en origen + entrada en destino, misma validación y bloqueo de stock; si ya no alcanza → 409) o RECHAZAN con motivo. No se completa dos veces (bloqueo). Sin editar ni borrar | `/transferencias`: solicitud, pendientes/todas, completar y rechazar en la fila |
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
 
-Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **77 pruebas OK**.
+Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **89 pruebas OK**.
 
 ## Pendiente (en orden)
-1. **Transferencias (HU12, paso 4.4)** — semana siguiente. Una transferencia
-   completada debe descontar en origen y sumar en destino reutilizando la
-   validación/bloqueo de stock de movimientos.
-2. **EOQ / ROP / ABC (HU17–HU21, paso 4.5)** — conectar los endpoints
+1. **EOQ / ROP / ABC (HU17–HU21, paso 4.5)** — conectar los endpoints
    `/api/indicadores/eoq|rop|abc/` (hoy 501) a `formulas.py`. Para la
    demanda usar solo lo que `movimientos/domain/stock.py::cuenta_como_demanda`
    acepta (salidas; los ajustes no cuentan).
-3. Reportes (cierre diario HU14, promoción HU23, Excel HU25). El
+2. Reportes (cierre diario HU14, promoción HU23, Excel HU25). El
    estancamiento (HU22) ya se ve en el panel.
-4. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
+3. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
    el entorno real).
-5. Swagger avisa un choque de nombres del enum `tipo_unidad` (movimientos
-   vs. transferencias); es cosmético, arreglarlo con `ENUM_NAME_OVERRIDES`
-   al hacer transferencias.
 
 ## Decisiones tomadas (para no volver a discutirlas)
 - Borrar herramienta con movimientos → 409; **no** hay campo "activo".
 - Movimientos inmutables; los errores se corrigen con ajustes.
 - Cada movimiento guarda `cantidad_unidades` al registrarse (cambiar el
   tamaño de caja no altera el stock histórico).
-- Los ajustes no cuentan como demanda para EOQ/ABC.
+- Los ajustes y las transferencias no cuentan como demanda para EOQ/ABC.
 - Empleado: solo su sucursal en movimientos; solo lectura en catálogo.
 - Estancamiento: más de 40 días sin una SALIDA real (los ajustes no son
   ventas); si nunca se vendió, se cuenta desde su primer movimiento en esa
