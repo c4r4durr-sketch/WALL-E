@@ -1,100 +1,98 @@
-# Estado del proyecto — Inventario Multisucursal (Importadora de Herramientas)
+# Estado del proyecto — Inventario Multisucursal (WALL-E)
 
-> Este archivo es la "memoria" del proyecto entre sesiones: si se cierra la
-> terminal/chat y se abre uno nuevo, leer esto primero para saber qué ya
-> existe, qué decisiones se tomaron y qué falta. Se actualiza cada vez que
-> se avanza algo importante.
+> "Memoria" del proyecto entre sesiones: si se abre una terminal o chat
+> nuevo, leer esto primero. Se actualiza en el mismo commit que cambia algo
+> importante. Versiones exactas del stack: ver `STACK_VERSIONES.md`.
+>
+> **Última actualización: 22/09/2026** (semana 4 del cronograma).
 
 ## Equipo y materia
-Proyecto académico (Programación III y Análisis y Diseño II). Jostin =
-backend, Beymar = frontend.
+Proyecto académico (Programación III y Análisis y Diseño II) para una
+importadora de herramientas con 2 sucursales. Jostin = backend,
+Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 
-## Stack obligatorio (ya confirmado con el usuario, no volver a preguntar)
-- Backend: Python 3.12, Django 5, DRF, PostgreSQL 16, JWT
-  (djangorestframework-simplejwt), drf-spectacular (Swagger).
-- Frontend: React 18 (no 19) + TypeScript + Vite, Tailwind CSS v4, Axios,
-  TanStack Query.
-- Arquitectura backend: Clean Architecture por app — `domain/` (puro, sin
-  Django) → `use_cases/` (puro, sin Django) → `infrastructure/` (modelos
-  ORM + repos concretos) → `interfaces/api/` (serializers/views DRF).
-  `use_cases` y `domain` NUNCA importan Django.
-- Apps Django (bounded contexts): `usuarios`, `catalogo`, `movimientos`,
-  `transferencias`, `indicadores`.
+## Cronograma
+16 semanas desde el **01/09/2026**.
 
-## Dependencias extra ya aprobadas por el usuario (no volver a preguntar)
-- `psycopg[binary]` (v3, no psycopg2) — driver Postgres.
-- `django-environ` — carga de `.env`.
-- `django-cors-headers` — CORS entre frontend (5173) y backend (8000).
-- `react-router-dom` — rutas por feature.
+| Semanas | Sprint | Estado |
+|---|---|---|
+| 1–3 | Sprint 1: login, usuarios, base | ✅ |
+| 4–6 | Sprint 2: catálogo | ✅ (entregable del sábado 27/09: CRUD de catálogo probado — superado) |
+| 7–10 | Sprint 3: movimientos | ✅ adelantado (entradas, salidas, ajustes, stock) |
+| — | Transferencias, EOQ/ROP/ABC, dashboard | pendiente (ver abajo) |
 
-## Decisiones/hallazgos importantes de esta máquina
-- Python 3.12 NO venía instalado; se instaló vía
-  `winget install --id Python.Python.3.12`. El venv del backend
-  (`backend/venv`) ya usa ese 3.12.
-- Esta máquina tiene un **PostgreSQL nativo** corriendo como servicio de
-  Windows en el puerto **5432** (proceso `postgres`, detectado con
-  `Get-NetTCPConnection`). Por eso el `postgres` de docker-compose está
-  mapeado a **5433:5432** (host:contenedor) para no chocar. Si en algún
-  momento se prefiere usar ese Postgres nativo en vez de Docker, cambiar
-  `DATABASE_URL` en `backend/.env` a puerto 5432 y crear ahí la base/usuario
-  `eoq_db`/`eoq_user`/`eoq_pass` a mano.
-- Docker Desktop **no está instalado** en esta máquina (se verificó con
-  `docker --version` y buscando la carpeta de instalación). No se ha
-  levantado el contenedor de Postgres todavía.
-- `npm create vite@latest` instaló React 19 por defecto; se bajó a
-  `react@18.3.1` / `react-dom@18.3.1` a mano (ver `frontend/package.json`).
-- Tailwind instalado es v4 → se usa el plugin oficial `@tailwindcss/vite`
-  en `vite.config.ts` (NO `tailwind.config.js` ni PostCSS clásico). El CSS
-  solo tiene `@import "tailwindcss";` en `src/index.css`.
-- Los modelos ORM de cada app viven en `infrastructure/models.py`, y
-  `<app>/models.py` es un shim (`from .infrastructure.models import *`)
-  porque Django exige `<app>/models.py`. `MIGRATION_MODULES` en
-  `config/settings.py` reubica las migraciones dentro de
-  `infrastructure/migrations/` de cada app (excepto `indicadores`, que no
-  tiene modelos propios).
+## Entorno real de esta máquina (verificado 22/09/2026)
+- **PostgreSQL 18.6 nativo** (servicio de Windows `postgresql-x64-18`) en
+  el puerto **5433**. **No se usa Docker** (no está instalado).
+  `docker-compose.yml` (postgres:16) quedó de un plan inicial y **no se usa**.
+- Base `eoq_db`, usuario `eoq_user` / `eoq_pass` (ver `backend/.env`), con
+  permiso `CREATEDB` para que `manage.py test` pueda crear la base de pruebas.
+- Python 3.12.10 en `backend/venv`. Node 24 + npm 11.
 
-## Qué YA existe (skeleton completo, sin lógica de negocio)
-- Backend Django completo en `backend/` con las 5 apps en Clean
-  Architecture, `AUTH_USER_MODEL = usuarios.Usuario` con rol
-  (Administrador/Supervisor/Empleado), JWT vía SimpleJWT con claims
-  custom de rol/sucursal, drf-spectacular en `/api/docs/`, CORS
-  configurado. Migraciones iniciales ya generadas (`makemigrations`
-  corrido y validado, falta `migrate` real contra una BD viva).
-- Frontend React+TS+Vite completo en `frontend/` con carpetas por feature
-  (auth, catalogo, movimientos, transferencias, dashboard), Axios
-  centralizado con interceptor JWT, TanStack Query, router, Tailwind v4.
-  Compila y buildea sin errores (`tsc --noEmit`, `npm run build`
-  verificados).
-- `docker-compose.yml` en la raíz (solo servicio `postgres:16`, puerto
-  5433 en el host).
-- `.env` / `.env.example` en `backend/` y `frontend/` (con datos reales de
-  desarrollo, no placeholders — ya listos para usar).
-- Todo el código tiene comentarios explicando el POR QUÉ de cada carpeta
-  (para la sustentación).
-- **No es un repositorio git todavía** (el usuario no lo ha pedido).
+## Arquitectura (no cambiar sin acordarlo)
+- **Backend**: Django 5.1 + DRF + SimpleJWT + drf-spectacular. Clean
+  Architecture por app: `domain/` (puro, sin Django) → `use_cases/` (puro,
+  reciben repositorios como interfaces) → `infrastructure/` (modelos ORM,
+  repositorios concretos, migraciones) → `interfaces/api/` (serializers y
+  vistas DRF que solo orquestan).
+- Apps: `usuarios`, `catalogo`, `movimientos`, `transferencias`,
+  `indicadores`, `auditoria`.
+- **El esquema de la base lo definen SOLO los modelos y migraciones de
+  Django.** `base_datos.sql` se descartó (sus tablas no coincidían con las
+  de Django y empezaba con `DROP SCHEMA public CASCADE`); está archivado en
+  `docs/archivo/base_datos_descartado.sql` como referencia. **No ejecutarlo.**
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind v4 + Axios +
+  TanStack Query, carpetas por feature (`features/<feature>/{api,hooks,components,pages}`).
 
-## Qué falta (próximos pasos, en orden)
-1. Instalar Docker Desktop (o decidir usar el Postgres nativo existente,
-   ver arriba) — el usuario dijo explícitamente "por ahora no" a levantar
-   esto, así que no hacerlo hasta que lo pida.
-2. `docker compose up -d` (desde `C:\EOQ`).
-3. `cd backend && ./venv/Scripts/python.exe manage.py migrate`.
-4. `./venv/Scripts/python.exe manage.py createsuperuser` (para probar
-   login JWT con un usuario real).
-5. Correr en paralelo: `manage.py runserver` (backend, :8000) y
-   `npm run dev` (frontend, :5173, ya tiene proxy `/api` → :8000).
-6. Recién ahí empezar a implementar lógica de negocio real (los
-   `use_cases/` están documentados pero con `raise NotImplementedError`):
-   registrar entradas/salidas con conversión caja↔unidad, transferencias
-   con validación de stock, EOQ/ROP/ABC, reportes.
-7. Cuando se quiera, inicializar git (`git init`) — no se ha hecho.
+## Qué funciona hoy (en `main`)
 
-## Convenciones a mantener al seguir implementando
-- Nunca meter lógica de negocio en `interfaces/api/views.py` ni en
-  `infrastructure/models.py`: siempre pasar por un use_case en
-  `use_cases/`.
-- `use_cases/` y `domain/` no importan `django`, `rest_framework` ni nada
-  de infraestructura — solo tipos puros de Python y las interfaces
-  (`ABC`) de `domain/repositories.py`.
-- Los repositorios concretos (`infrastructure/repositories.py`) son el
-  único lugar que traduce entre modelo ORM y entidad de dominio.
+| Módulo | Backend | Frontend |
+|---|---|---|
+| **Login JWT** | `POST /api/token/`, `/api/token/refresh/`; el token lleva rol y sucursal | Login, rutas protegidas por sesión y por rol, **refresh automático** del access (30 min) mientras el refresh (1 día) siga vigente |
+| **Usuarios** (HU4/HU5) | CRUD solo Admin; **Supervisor y Empleado deben tener sucursal** (400 si falta) | Crear cuenta (`/usuarios/nuevo`, solo Admin) |
+| **Auditoría** (HU13) | App `auditoria`: signals guardan INSERT/UPDATE/DELETE de Usuario, Sucursal, Herramienta, Movimiento, Transferencia con autor y datos antes/después (sin contraseñas) | Solo lectura en `/admin/` → "Historial de modificaciones" |
+| **Catálogo** (HU6) | CRUD real con use cases; código único, caja ≥ 1 unidad, datos EOQ/ROP opcionales. Admin/Supervisor escriben, Empleado solo lee (403). Borrar una herramienta con movimientos → **409** | `/catalogo`: alta, edición, borrado con confirmación; Empleado solo ve la tabla |
+| **Movimientos** (HU9/HU11) | Entrada, salida, **ajuste** (+/−, motivo obligatorio, solo Admin/Supervisor). Conversión caja→unidad. **Nunca stock negativo** (bloqueo `select_for_update`). Stock derivado de los movimientos. Inmutables para todos (405, `/admin/` solo lectura). Empleado solo opera en su sucursal | `/movimientos`: registro, sección de ajuste aparte, stock por sucursal e historial con motivo |
+| **Fórmulas** | `indicadores/domain/formulas.py`: EOQ, ROP, ajuste a cajas, cajas↔unidades (probadas) | — |
+
+Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **69 pruebas OK**.
+
+## Pendiente (en orden)
+1. **Dashboard real (HU24)** — reemplazar la pantalla de bienvenida por el
+   panel de alertas (equivalente de `vw_panel_auditoria`). *Para el 27/09.*
+2. **Transferencias (HU12, paso 4.4)** — semana siguiente. Una transferencia
+   completada debe descontar en origen y sumar en destino reutilizando la
+   validación/bloqueo de stock de movimientos.
+3. **EOQ / ROP / ABC (HU17–HU21, paso 4.5)** — conectar los endpoints
+   `/api/indicadores/eoq|rop|abc/` (hoy 501) a `formulas.py`. Para la
+   demanda usar solo lo que `movimientos/domain/stock.py::cuenta_como_demanda`
+   acepta (salidas; los ajustes no cuentan).
+4. Reportes (cierre diario HU14, estancamiento HU22, promoción HU23,
+   Excel HU25).
+5. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
+   el entorno real).
+
+## Decisiones tomadas (para no volver a discutirlas)
+- Borrar herramienta con movimientos → 409; **no** hay campo "activo".
+- Movimientos inmutables; los errores se corrigen con ajustes.
+- Cada movimiento guarda `cantidad_unidades` al registrarse (cambiar el
+  tamaño de caja no altera el stock histórico).
+- Los ajustes no cuentan como demanda para EOQ/ABC.
+- Empleado: solo su sucursal en movimientos; solo lectura en catálogo.
+
+## Cómo levantar el proyecto
+```bash
+# Backend (desde backend/)
+./venv/Scripts/python.exe manage.py migrate
+./venv/Scripts/python.exe manage.py runserver          # :8000, Swagger en /api/docs/
+# Frontend (desde frontend/)
+npm run dev                                            # :5173, proxy /api -> :8000
+```
+Después de cada `git pull`: correr `migrate`.
+
+## Convenciones
+- Nada de lógica de negocio en `views.py` ni en `models.py`: va en un use case.
+- `domain/` y `use_cases/` no importan Django ni DRF.
+- Los repositorios concretos son el único lugar que traduce ORM ↔ entidad,
+  y guardan con `.save()`/`.delete()` por instancia (así se dispara la auditoría).
+- Un commit por paso/sub-paso; ramas por paso, se fusionan a `main` tras revisión.
