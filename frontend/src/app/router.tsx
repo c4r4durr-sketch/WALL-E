@@ -6,6 +6,7 @@ import { CatalogoPage } from '../features/catalogo/pages/CatalogoPage'
 import { MovimientosPage } from '../features/movimientos/pages/MovimientosPage'
 import { TransferenciasPage } from '../features/transferencias/pages/TransferenciasPage'
 import { DashboardPage } from '../features/dashboard/pages/DashboardPage'
+import { IndicadoresPage } from '../features/dashboard/pages/IndicadoresPage'
 import { CrearUsuarioPage } from '../features/usuarios/pages/CrearUsuarioPage'
 import { Rol } from '../shared/types/roles'
 
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       { path: '/catalogo', element: <CatalogoPage /> },
       { path: '/movimientos', element: <MovimientosPage /> },
       { path: '/transferencias', element: <TransferenciasPage /> },
+      { path: '/indicadores', element: <IndicadoresPage /> },
       {
         element: <RequireRol roles={[Rol.ADMINISTRADOR]} />,
         children: [{ path: '/usuarios/nuevo', element: <CrearUsuarioPage /> }],

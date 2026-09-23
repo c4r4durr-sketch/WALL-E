@@ -9,22 +9,39 @@ import { httpClient } from '../../../shared/api/httpClient'
 
 export interface ResultadoEOQ {
   herramienta_id: number
-  demanda_anual: number
-  costo_pedido: number
-  costo_almacenamiento_unitario: number
-  eoq: number
+  codigo: string
+  nombre: string
+  demanda_anual: number | null
+  costo_pedido: number | null
+  costo_almacenamiento_unitario: number | null
+  unidades_por_caja: number
+  // null si falta algún dato (ver datos_faltantes).
+  eoq: number | null
+  eoq_ajustado_cajas: number | null
+  // Ventas reales de los últimos 12 meses (HU21).
+  demanda_observada: number
+  datos_faltantes: string[]
 }
 
 export interface ResultadoROP {
   herramienta_id: number
-  demanda_diaria_promedio: number
-  lead_time_dias: number
-  punto_reorden: number
+  codigo: string
+  nombre: string
+  demanda_anual: number | null
+  demanda_diaria_promedio: number | null
+  lead_time_dias: number | null
+  punto_reorden: number | null
+  stock_total: number
+  requiere_reorden: boolean
+  datos_faltantes: string[]
 }
 
 export interface ClasificacionABC {
   herramienta_id: number
-  valor_consumo: number
+  codigo: string
+  nombre: string
+  unidades_vendidas: number
+  porcentaje: number
   porcentaje_acumulado: number
   clase: 'A' | 'B' | 'C'
 }
