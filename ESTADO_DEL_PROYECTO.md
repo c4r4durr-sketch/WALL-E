@@ -4,7 +4,7 @@
 > nuevo, leer esto primero. Se actualiza en el mismo commit que cambia algo
 > importante. Versiones exactas del stack: ver `STACK_VERSIONES.md`.
 >
-> **Última actualización: 23/09/2026** (semana 4 del cronograma).
+> **Última actualización: 14/10/2026** (semana 7 del cronograma).
 
 ## Equipo y materia
 Proyecto académico (Programación III y Análisis y Diseño II) para una
@@ -44,6 +44,15 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
   Django.** `base_datos.sql` se descartó (sus tablas no coincidían con las
   de Django y empezaba con `DROP SCHEMA public CASCADE`); está archivado en
   `docs/archivo/base_datos_descartado.sql` como referencia. **No ejecutarlo.**
+  Tampoco ejecutar `walle_importaciones_db_v7.sql` (Jostin): también empieza
+  con `DROP SCHEMA public CASCADE`.
+- **Nombres físicos de la base** según la convención de la base académica
+  (`walle_importaciones_db_v7.sql`): tablas en plural (`herramientas`,
+  `movimientos`…), PK `cod_<entidad>`, columnas `<dato>_<entidad>`. Se aplica
+  **solo en la base** con `Meta.db_table` / `db_column`; en Python, la API y
+  el frontend los nombres siguen siendo los de siempre. Mapa completo en
+  `docs/DICCIONARIO_DE_DATOS.md`. Al agregar un campo o modelo, seguir la
+  misma convención (`db_column="<dato>_<entidad>"`).
 - **Frontend**: React 18 + TypeScript + Vite + Tailwind v4 + Axios +
   TanStack Query, carpetas por feature (`features/<feature>/{api,hooks,components,pages}`).
 
@@ -81,6 +90,14 @@ Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **101 pruebas
   herramienta es A si el acumulado *anterior* a ella es < 80 % (la más
   vendida siempre es A).
 - Empleado: solo su sucursal en movimientos; solo lectura en catálogo.
+- Convención de nombres de la base académica aplicada **solo en la base**
+  (14/10/2026): no se renombró nada en Python, serializers ni frontend. Las
+  migraciones solo renombran tablas y columnas (los datos se conservan).
+  `is_staff`, `is_superuser` y las tablas de permisos de Django
+  (`usuarios_groups`, `usuarios_user_permissions`, `auth_*`, `django_*`)
+  quedan con su nombre de Django. Las PK siguen siendo enteros.
+- La auditoría guarda la etiqueta del modelo (`catalogo.Herramienta`) y los
+  nombres de campo de Python, no los nombres físicos: no cambia con el renombre.
 - Estancamiento: más de 40 días sin una SALIDA real (los ajustes no son
   ventas); si nunca se vendió, se cuenta desde su primer movimiento en esa
   sucursal (el SQL original la marcaba estancada desde el primer día).
