@@ -1,3 +1,5 @@
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -46,7 +48,25 @@ class UsuarioSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"sucursal": "Supervisor y Empleado deben tener una sucursal asignada."}
             )
+
+        password = attrs.get("password")
+        if password:
+            self._validar_password(password, attrs)
         return attrs
+
+    def _validar_password(self, password, attrs):
+        # Aplica AUTH_PASSWORD_VALIDATORS de settings (largo mínimo, comunes,
+        # solo números, parecida al usuario). Los mensajes salen en español
+        # por LANGUAGE_CODE = "es". Se compara contra un Usuario en memoria
+        # con los datos finales (los enviados o los actuales), sin guardarlo.
+        datos = {
+            campo: attrs.get(campo, getattr(self.instance, campo, ""))
+            for campo in ("username", "first_name", "last_name")
+        }
+        try:
+            validate_password(password, user=Usuario(**datos))
+        except DjangoValidationError as error:
+            raise serializers.ValidationError({"password": list(error.messages)})
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)

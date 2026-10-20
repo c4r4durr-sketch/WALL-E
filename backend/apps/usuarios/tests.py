@@ -1,6 +1,7 @@
 """
 Pruebas de la regla HU5 (sucursal obligatoria para Supervisor y Empleado),
-tanto la función pura del dominio como su aplicación en la API.
+tanto la función pura del dominio como su aplicación en la API, y de la
+validación de contraseñas (AUTH_PASSWORD_VALIDATORS) al crear y editar.
 
 Correr con: python manage.py test apps.usuarios
 """
@@ -75,3 +76,57 @@ class SucursalObligatoriaApiTests(APITestCase):
             f"{URL_USUARIOS}{empleado.id}/", {"first_name": "Ana"}, format="json"
         )
         self.assertEqual(respuesta.status_code, 200)
+
+
+class ValidacionPasswordApiTests(APITestCase):
+    def setUp(self):
+        admin = Usuario.objects.create_user("admin_test", password="x", rol="ADMINISTRADOR")
+        self.client.force_authenticate(admin)
+
+    def _crear(self, password, **datos):
+        payload = {"username": "nuevo", "password": password, "rol": "ADMINISTRADOR", **datos}
+        return self.client.post(URL_USUARIOS, payload, format="json")
+
+    def test_crear_con_password_corta_es_400_en_espanol(self):
+        respuesta = self._crear("Ab1")
+        self.assertEqual(respuesta.status_code, 400)
+        mensajes = " ".join(respuesta.json()["password"])
+        self.assertIn("contraseña", mensajes)
+        self.assertIn("8", mensajes)
+
+    def test_crear_con_password_comun_es_400(self):
+        respuesta = self._crear("password123")
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("password", respuesta.json())
+
+    def test_crear_con_password_solo_numeros_es_400(self):
+        respuesta = self._crear("83920571")
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_crear_con_password_parecida_al_usuario_es_400(self):
+        respuesta = self._crear("rodrigo.perez", username="rodrigo.perez")
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_crear_con_password_segura_ok(self):
+        respuesta = self._crear("Clave-Segura-123")
+        self.assertEqual(respuesta.status_code, 201)
+        usuario = Usuario.objects.get(username="nuevo")
+        self.assertTrue(usuario.check_password("Clave-Segura-123"))
+
+    def test_editar_con_password_debil_es_400_y_no_la_cambia(self):
+        otro = Usuario.objects.create_user("otro", password="Clave-Vieja-456", rol="ADMINISTRADOR")
+        respuesta = self.client.patch(
+            f"{URL_USUARIOS}{otro.id}/", {"password": "123"}, format="json"
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        otro.refresh_from_db()
+        self.assertTrue(otro.check_password("Clave-Vieja-456"))
+
+    def test_editar_con_password_segura_la_cambia(self):
+        otro = Usuario.objects.create_user("otro", password="Clave-Vieja-456", rol="ADMINISTRADOR")
+        respuesta = self.client.patch(
+            f"{URL_USUARIOS}{otro.id}/", {"password": "Clave-Nueva-789"}, format="json"
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        otro.refresh_from_db()
+        self.assertTrue(otro.check_password("Clave-Nueva-789"))
