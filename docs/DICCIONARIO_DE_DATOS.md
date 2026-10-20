@@ -46,6 +46,8 @@ usuarios   1 ──< transferencias           (cod_usuario: quién la pidió; co
 usuarios   1 ──< historial_modificaciones (cod_usuario: autor del cambio, opcional)
 herramientas 1 ──< movimientos            (movimientos.cod_herramienta)
 herramientas 1 ──< transferencias         (transferencias.cod_herramienta)
+herramientas 1 ──< historial_costos       (historial_costos.cod_herramienta)
+usuarios     1 ──< historial_costos       (cod_usuario: quién cambió el costo)
 movimientos  1 ── 0..1 transferencias     (cod_movimiento_salida / cod_movimiento_entrada, únicos)
 ```
 
@@ -99,8 +101,22 @@ Modelo `catalogo.Herramienta`. Catálogo y datos de entrada de EOQ/ROP.
 | `costo_pedido_herramienta` | `costo_pedido` | numeric(12,2) | sí | S de EOQ |
 | `costo_almacenamiento_herramienta` | `costo_almacenamiento_unitario` | numeric(12,2) | sí | H de EOQ |
 | `dias_entrega_herramienta` | `tiempo_entrega_dias` | integer | sí | ≥ 0 (lead time del ROP) |
+| `costo_unitario_herramienta` | `costo_unitario` | numeric(12,2) | sí | > 0 (lo valida el caso de uso); HU7, cada cambio va a `historial_costos` |
 | `fecha_registro_herramienta` | `creado_en` | timestamptz | no | se fija al crear |
 | `fecha_actualizacion_herramienta` | `actualizado_en` | timestamptz | no | se actualiza en cada guardado |
+
+## historial_costos
+Modelo `catalogo.HistorialCosto` (HU7). Una fila por cada vez que se carga o
+cambia el costo unitario de una herramienta. Solo se insertan filas.
+
+| Columna | ← Campo Python | Tipo | Nulo | Clave / restricción |
+|---|---|---|---|---|
+| `cod_historial_costo` | `id` | bigint (identity) | no | **PK** |
+| `cod_herramienta` | `herramienta` | bigint | no | **FK** → `herramientas.cod_herramienta`; índice `historial_costo_herr_fecha_idx` (con la fecha, descendente) |
+| `costo_anterior_historial_costo` | `costo_anterior` | numeric(12,2) | sí | null la primera vez que se carga el costo |
+| `costo_nuevo_historial_costo` | `costo_nuevo` | numeric(12,2) | no | |
+| `cod_usuario` | `usuario` | bigint | no | **FK** → `usuarios.cod_usuario` (quién lo cambió) |
+| `fecha_historial_costo` | `fecha` | timestamptz | no | se fija al crear |
 
 ## movimientos
 Modelo `movimientos.Movimiento`. Entradas, salidas, ajustes y los

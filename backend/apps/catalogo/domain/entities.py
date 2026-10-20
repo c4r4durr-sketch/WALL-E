@@ -22,6 +22,25 @@ class Herramienta:
     costo_pedido: Optional[Decimal] = None
     costo_almacenamiento_unitario: Optional[Decimal] = None
     tiempo_entrega_dias: Optional[int] = None
+    # HU7: costo de compra de una unidad. Opcional (las herramientas ya
+    # cargadas no lo tienen); cada cambio queda en el historial de costos.
+    costo_unitario: Optional[Decimal] = None
     # Los asigna la base al guardar; None en una herramienta nueva.
     creado_en: Optional[datetime] = None
     actualizado_en: Optional[datetime] = None
+
+
+@dataclass(frozen=True)
+class CambioCosto:
+    """HU7: un cambio del costo unitario de una herramienta. Inmutable: es
+    el historial, no se edita ni se borra. costo_anterior es None cuando
+    es la primera vez que se carga el costo."""
+
+    id: Optional[int]
+    herramienta_id: int
+    costo_anterior: Optional[Decimal]
+    costo_nuevo: Decimal
+    usuario_id: int
+    # Solo lectura, para mostrar; lo completa el repositorio.
+    usuario_username: str = ""
+    fecha: Optional[datetime] = None

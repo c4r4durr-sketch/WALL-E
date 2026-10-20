@@ -4,7 +4,7 @@ apps/usuarios/domain/repositories.py."""
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from .entities import Herramienta
+from .entities import CambioCosto, Herramienta
 
 
 class HerramientaRepository(ABC):
@@ -28,6 +28,17 @@ class HerramientaRepository(ABC):
 
     @abstractmethod
     def eliminar(self, herramienta_id: int) -> None:
-        """Lanza HerramientaEnUsoError si tiene movimientos o
-        transferencias que la referencian."""
+        """Lanza HerramientaEnUsoError si tiene movimientos, transferencias
+        o historial de costos que la referencian."""
+        ...
+
+
+class HistorialCostoRepository(ABC):
+    @abstractmethod
+    def registrar(self, cambio: CambioCosto) -> CambioCosto:
+        ...
+
+    @abstractmethod
+    def listar_por_herramienta(self, herramienta_id: int) -> list[CambioCosto]:
+        """Del cambio más reciente al más antiguo."""
         ...

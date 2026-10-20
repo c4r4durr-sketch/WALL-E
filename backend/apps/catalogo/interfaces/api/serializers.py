@@ -29,5 +29,21 @@ class HerramientaSerializer(serializers.Serializer):
         required=False, allow_null=True, default=None, coerce_to_string=False,
     )
     tiempo_entrega_dias = serializers.IntegerField(min_value=0, required=False, allow_null=True, default=None)
+    # HU7. "Mayor que cero" y "solo el Administrador lo cambia" son reglas
+    # del caso de uso; acá solo la forma.
+    costo_unitario = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=0,
+        required=False, allow_null=True, default=None, coerce_to_string=False,
+    )
     creado_en = serializers.DateTimeField(read_only=True)
     actualizado_en = serializers.DateTimeField(read_only=True)
+
+
+class CambioCostoSerializer(serializers.Serializer):
+    """HU7: una fila del historial de costos (solo lectura)."""
+
+    id = serializers.IntegerField()
+    costo_anterior = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True, coerce_to_string=False)
+    costo_nuevo = serializers.DecimalField(max_digits=12, decimal_places=2, coerce_to_string=False)
+    usuario = serializers.CharField(source="usuario_username")
+    fecha = serializers.DateTimeField()

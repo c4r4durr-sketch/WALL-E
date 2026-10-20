@@ -10,10 +10,11 @@ from typing import Optional
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 
-from ..domain.entities import Herramienta
+from ..domain.entities import CambioCosto, Herramienta
 from ..domain.exceptions import CodigoDuplicadoError, HerramientaEnUsoError
-from ..domain.repositories import HerramientaRepository
+from ..domain.repositories import HerramientaRepository, HistorialCostoRepository
 from .models import Herramienta as HerramientaModel
+from .models import HistorialCosto as HistorialCostoModel
 
 # Los que asigna la base; nunca se copian de la entidad al modelo.
 _CAMPOS_DEL_SISTEMA = {"id", "creado_en", "actualizado_en"}
@@ -30,6 +31,7 @@ def _a_entidad(modelo: HerramientaModel) -> Herramienta:
         costo_pedido=modelo.costo_pedido,
         costo_almacenamiento_unitario=modelo.costo_almacenamiento_unitario,
         tiempo_entrega_dias=modelo.tiempo_entrega_dias,
+        costo_unitario=modelo.costo_unitario,
         creado_en=modelo.creado_en,
         actualizado_en=modelo.actualizado_en,
     )
@@ -71,3 +73,36 @@ class HerramientaRepositoryDjango(HerramientaRepository):
             HerramientaModel.objects.get(pk=herramienta_id).delete()
         except ProtectedError as error:
             raise HerramientaEnUsoError(herramienta_id) from error
+
+
+def _cambio_a_entidad(modelo: HistorialCostoModel) -> CambioCosto:
+    return CambioCosto(
+        id=modelo.id,
+        herramienta_id=modelo.herramienta_id,
+        costo_anterior=modelo.costo_anterior,
+        costo_nuevo=modelo.costo_nuevo,
+        usuario_id=modelo.usuario_id,
+        usuario_username=modelo.usuario.username,
+        fecha=modelo.fecha,
+    )
+
+
+class HistorialCostoRepositoryDjango(HistorialCostoRepository):
+    def registrar(self, cambio: CambioCosto) -> CambioCosto:
+        modelo = HistorialCostoModel(
+            herramienta_id=cambio.herramienta_id,
+            costo_anterior=cambio.costo_anterior,
+            costo_nuevo=cambio.costo_nuevo,
+            usuario_id=cambio.usuario_id,
+        )
+        modelo.save()
+        return _cambio_a_entidad(HistorialCostoModel.objects.select_related("usuario").get(pk=modelo.pk))
+
+    def listar_por_herramienta(self, herramienta_id: int) -> list[CambioCosto]:
+        # select_related: el username sale en la misma consulta.
+        filas = (
+            HistorialCostoModel.objects.select_related("usuario")
+            .filter(herramienta_id=herramienta_id)
+            .order_by("-fecha", "-id")
+        )
+        return [_cambio_a_entidad(m) for m in filas]

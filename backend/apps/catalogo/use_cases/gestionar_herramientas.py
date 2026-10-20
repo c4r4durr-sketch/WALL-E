@@ -11,19 +11,28 @@ en el modelo:
   - una caja trae al menos 1 unidad;
   - los datos de EOQ/ROP son opcionales pero nunca negativos;
   - no se elimina una herramienta con movimientos (el repositorio lo
-    detecta y lanza HerramientaEnUsoError).
+    detecta y lanza HerramientaEnUsoError);
+  - HU7: el costo unitario es mayor que cero; solo el Administrador lo
+    carga o lo cambia; una vez cargado no se puede quitar, solo
+    reemplazar; y cada cambio queda en el historial de costos con fecha y
+    usuario. La vista ejecuta alta y edición dentro de una transacción:
+    la herramienta y su fila de historial se guardan juntas o ninguna.
 """
 
 from dataclasses import fields, replace
-from typing import Any
+from typing import Any, Optional
 
-from ..domain.entities import Herramienta
+from apps.usuarios.domain.entities import Actor
+from apps.usuarios.domain.value_objects import Rol
+
+from ..domain.entities import CambioCosto, Herramienta
 from ..domain.exceptions import (
+    CambioDeCostoNoPermitidoError,
     CodigoDuplicadoError,
     DatosHerramientaInvalidosError,
     HerramientaNoEncontradaError,
 )
-from ..domain.repositories import HerramientaRepository
+from ..domain.repositories import HerramientaRepository, HistorialCostoRepository
 
 # Campos que el usuario puede cargar/editar (id y fechas los pone el sistema).
 CAMPOS_EDITABLES = {
@@ -52,9 +61,38 @@ def _validar(herramienta: Herramienta) -> Herramienta:
         valor = getattr(herramienta, campo)
         if valor is not None and valor < 0:
             errores[campo] = "No puede ser negativo."
+    if herramienta.costo_unitario is not None and herramienta.costo_unitario <= 0:
+        errores["costo_unitario"] = "El costo unitario debe ser mayor que cero."
     if errores:
         raise DatosHerramientaInvalidosError(errores)
     return herramienta
+
+
+def _verificar_cambio_de_costo(actor: Actor, anterior: Optional[Herramienta], nueva: Herramienta) -> bool:
+    """Devuelve True si el costo unitario cambia (y el actor puede
+    cambiarlo); lanza un error si el cambio no está permitido."""
+    costo_anterior = anterior.costo_unitario if anterior else None
+    if nueva.costo_unitario == costo_anterior:
+        return False
+    if costo_anterior is not None and nueva.costo_unitario is None:
+        raise DatosHerramientaInvalidosError(
+            {"costo_unitario": "El costo unitario no se puede quitar; ingresa el valor nuevo."}
+        )
+    if Rol(actor.rol) != Rol.ADMINISTRADOR:
+        raise CambioDeCostoNoPermitidoError()
+    return True
+
+
+def _registrar_cambio_de_costo(
+    historial: HistorialCostoRepository, actor: Actor, anterior: Optional[Herramienta], guardada: Herramienta
+) -> None:
+    historial.registrar(CambioCosto(
+        id=None,
+        herramienta_id=guardada.id,
+        costo_anterior=anterior.costo_unitario if anterior else None,
+        costo_nuevo=guardada.costo_unitario,
+        usuario_id=actor.usuario_id,
+    ))
 
 
 def _verificar_codigo_unico(repo: HerramientaRepository, herramienta: Herramienta) -> None:
@@ -74,18 +112,33 @@ def obtener_herramienta(repo: HerramientaRepository, herramienta_id: int) -> Her
     return herramienta
 
 
-def registrar_herramienta(repo: HerramientaRepository, datos: dict[str, Any]) -> Herramienta:
+def registrar_herramienta(
+    repo: HerramientaRepository,
+    datos: dict[str, Any],
+    *,
+    actor: Actor,
+    historial: HistorialCostoRepository,
+) -> Herramienta:
     nueva = Herramienta(
         id=None,
         **{campo: valor for campo, valor in datos.items() if campo in CAMPOS_EDITABLES},
     )
     nueva = _validar(nueva)
     _verificar_codigo_unico(repo, nueva)
-    return repo.guardar(nueva)
+    cambia_costo = _verificar_cambio_de_costo(actor, None, nueva)
+    guardada = repo.guardar(nueva)
+    if cambia_costo:
+        _registrar_cambio_de_costo(historial, actor, None, guardada)
+    return guardada
 
 
 def actualizar_herramienta(
-    repo: HerramientaRepository, herramienta_id: int, cambios: dict[str, Any]
+    repo: HerramientaRepository,
+    herramienta_id: int,
+    cambios: dict[str, Any],
+    *,
+    actor: Actor,
+    historial: HistorialCostoRepository,
 ) -> Herramienta:
     """Aplica solo los campos recibidos (sirve para PUT y PATCH) y valida
     el estado final de la herramienta, no solo lo que cambió."""
@@ -95,7 +148,18 @@ def actualizar_herramienta(
     )
     actualizada = _validar(actualizada)
     _verificar_codigo_unico(repo, actualizada)
-    return repo.guardar(actualizada)
+    cambia_costo = _verificar_cambio_de_costo(actor, actual, actualizada)
+    guardada = repo.guardar(actualizada)
+    if cambia_costo:
+        _registrar_cambio_de_costo(historial, actor, actual, guardada)
+    return guardada
+
+
+def historial_de_costos(
+    repo: HerramientaRepository, historial: HistorialCostoRepository, herramienta_id: int
+) -> list[CambioCosto]:
+    obtener_herramienta(repo, herramienta_id)
+    return historial.listar_por_herramienta(herramienta_id)
 
 
 def eliminar_herramienta(repo: HerramientaRepository, herramienta_id: int) -> None:
