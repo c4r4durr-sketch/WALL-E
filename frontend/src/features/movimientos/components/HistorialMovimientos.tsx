@@ -2,23 +2,12 @@ import type { Herramienta } from '../../catalogo/api/catalogoApi'
 import type { Sucursal } from '../../usuarios/api/usuariosApi'
 import type { Movimiento, TipoMovimiento } from '../api/movimientosApi'
 import { useHistorialMovimientos, useStock } from '../hooks/useMovimientos'
-import { cajas, desgloseCajas } from '../formato'
+import { ETIQUETA, cajas, desgloseCajas } from '../formato'
 
 // Historial de movimientos de una herramienta (todas las sucursales, del
 // más reciente al más antiguo) y su stock actual por sucursal (HU11).
 
 const fechaHora = new Intl.DateTimeFormat('es', { dateStyle: 'short', timeStyle: 'short' })
-
-// Los ajustes llevan etiqueta propia (ámbar, igual que su formulario) para
-// distinguir una corrección de una operación normal del mostrador.
-const ETIQUETA: Record<TipoMovimiento, { texto: string; clase: string }> = {
-  ENTRADA: { texto: 'Entrada', clase: 'bg-green-50 text-green-700' },
-  SALIDA: { texto: 'Salida', clase: 'bg-slate-100 text-slate-700' },
-  AJUSTE_POSITIVO: { texto: 'Ajuste +', clase: 'bg-amber-100 text-amber-800' },
-  AJUSTE_NEGATIVO: { texto: 'Ajuste −', clase: 'bg-amber-100 text-amber-800' },
-  TRANSFERENCIA_SALIDA: { texto: 'Transferencia enviada', clase: 'bg-blue-50 text-blue-700' },
-  TRANSFERENCIA_ENTRADA: { texto: 'Transferencia recibida', clase: 'bg-blue-50 text-blue-700' },
-}
 
 // Tipos que suman al stock (espejo de EFECTO_EN_STOCK del backend).
 const SUMA = new Set<TipoMovimiento>(['ENTRADA', 'AJUSTE_POSITIVO', 'TRANSFERENCIA_ENTRADA'])

@@ -10,6 +10,7 @@ import { IndicadoresPage } from '../features/dashboard/pages/IndicadoresPage'
 import { CrearUsuarioPage } from '../features/usuarios/pages/CrearUsuarioPage'
 import { UsuariosPage } from '../features/usuarios/pages/UsuariosPage'
 import { ProveedoresPage } from '../features/proveedores/pages/ProveedoresPage'
+import { CierreDiarioPage } from '../features/reportes/pages/CierreDiarioPage'
 import { Rol } from '../shared/types/roles'
 
 // Enrutamiento centralizado: cada feature expone su(s) página(s) en
@@ -18,7 +19,8 @@ import { Rol } from '../shared/types/roles'
 //
 // Todas las rutas salvo /login viven bajo ProtectedRoute (exige sesión
 // JWT válida); /usuarios y /usuarios/nuevo además exigen rol
-// ADMINISTRADOR vía RequireRol.
+// ADMINISTRADOR, y /cierre-diario ADMINISTRADOR o SUPERVISOR, vía
+// RequireRol (el backend aplica la misma regla).
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   {
@@ -30,6 +32,10 @@ export const router = createBrowserRouter([
       { path: '/movimientos', element: <MovimientosPage /> },
       { path: '/transferencias', element: <TransferenciasPage /> },
       { path: '/indicadores', element: <IndicadoresPage /> },
+      {
+        element: <RequireRol roles={[Rol.ADMINISTRADOR, Rol.SUPERVISOR]} />,
+        children: [{ path: '/cierre-diario', element: <CierreDiarioPage /> }],
+      },
       {
         element: <RequireRol roles={[Rol.ADMINISTRADOR]} />,
         children: [

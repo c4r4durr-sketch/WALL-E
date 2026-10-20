@@ -15,6 +15,33 @@ export function fechaHora(iso: string): string {
   return fechaHoraFmt.format(new Date(iso))
 }
 
+const horaFmt = new Intl.DateTimeFormat('es', { timeStyle: 'short', timeZone: ZONA_DEL_NEGOCIO })
+
+// en-CA da AAAA-MM-DD, el formato de <input type="date"> y de la API.
+const fechaIsoFmt = new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  timeZone: ZONA_DEL_NEGOCIO,
+})
+
+const fechaLargaFmt = new Intl.DateTimeFormat('es', { dateStyle: 'full', timeZone: 'UTC' })
+
+export function hora(iso: string): string {
+  return horaFmt.format(new Date(iso))
+}
+
+// "Hoy" en La Paz como AAAA-MM-DD (no el de la zona de la computadora).
+export function hoyEnLaPaz(): string {
+  return fechaIsoFmt.format(new Date())
+}
+
+// "AAAA-MM-DD" -> "martes, 20 de octubre de 2026". Se interpreta en UTC
+// para que la fecha no se corra un día por la zona horaria.
+export function fechaLarga(isoFecha: string): string {
+  return fechaLargaFmt.format(new Date(`${isoFecha}T00:00:00Z`))
+}
+
 export function monto(valor: number): string {
   return montoFmt.format(valor)
 }
