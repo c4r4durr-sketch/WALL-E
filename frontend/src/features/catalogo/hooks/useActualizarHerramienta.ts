@@ -5,6 +5,10 @@ export function useActualizarHerramienta() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: actualizarHerramienta,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['herramientas'] }),
+    // También el historial de costos (HU7): puede tener un cambio nuevo.
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['herramientas'] })
+      void queryClient.invalidateQueries({ queryKey: ['historial-costos'] })
+    },
   })
 }

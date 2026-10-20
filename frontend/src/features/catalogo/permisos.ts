@@ -7,3 +7,9 @@ import { Rol } from '../../shared/types/roles'
 export function puedeEditarCatalogo(rol: Rol): boolean {
   return rol === Rol.ADMINISTRADOR || rol === Rol.SUPERVISOR
 }
+
+// HU7: el costo unitario solo lo cambia el Administrador (el backend
+// responde 403 a cualquier otro rol).
+export function puedeCambiarCosto(rol: Rol): boolean {
+  return rol === Rol.ADMINISTRADOR
+}

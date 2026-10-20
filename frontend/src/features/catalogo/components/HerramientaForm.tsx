@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { isAxiosError } from 'axios'
+import { erroresPorCampo, mensajeDeError } from '../../../shared/api/errores'
 import { useCrearHerramienta } from '../hooks/useCrearHerramienta'
 import { useActualizarHerramienta } from '../hooks/useActualizarHerramienta'
 import type { Herramienta, HerramientaPayload } from '../api/catalogoApi'
@@ -12,6 +12,10 @@ import type { Herramienta, HerramientaPayload } from '../api/catalogoApi'
 // Con `herramienta` funciona en modo edición (precargado, PUT al guardar);
 // sin ella, en modo alta. El padre lo monta con una `key` distinta por
 // herramienta para que el estado se reinicie al cambiar de una a otra.
+//
+// HU7: el costo unitario solo lo cambia el Administrador; para el
+// Supervisor el campo se ve deshabilitado y se reenvía sin cambios (el
+// backend responde 403 si alguien fuerza un cambio).
 
 const FORM_VACIO = {
   codigo: '',
@@ -22,6 +26,7 @@ const FORM_VACIO = {
   costo_pedido: '',
   costo_almacenamiento_unitario: '',
   tiempo_entrega_dias: '',
+  costo_unitario: '',
 }
 
 type FormState = typeof FORM_VACIO
@@ -38,6 +43,7 @@ function aFormulario(herramienta: Herramienta): FormState {
     costo_pedido: texto(herramienta.costo_pedido),
     costo_almacenamiento_unitario: texto(herramienta.costo_almacenamiento_unitario),
     tiempo_entrega_dias: texto(herramienta.tiempo_entrega_dias),
+    costo_unitario: texto(herramienta.costo_unitario),
   }
 }
 
@@ -45,39 +51,37 @@ function numeroONull(valor: string): number | null {
   return valor.trim() === '' ? null : Number(valor)
 }
 
-// El backend responde 400 con { campo: ["mensaje", ...] }: se muestra cada
-// mensaje debajo de su campo en vez de un error genérico.
-function erroresPorCampo(error: unknown): Record<string, string> {
-  if (!isAxiosError(error) || error.response?.status !== 400) return {}
-  const datos = error.response.data as Record<string, string[] | string>
-  return Object.fromEntries(
-    Object.entries(datos).map(([campo, mensajes]) => [
-      campo,
-      Array.isArray(mensajes) ? mensajes.join(' ') : String(mensajes),
-    ]),
-  )
-}
-
 interface Props {
   herramienta?: Herramienta | null
   onTerminar?: () => void
+  puedeCambiarCosto: boolean
 }
 
-export function HerramientaForm({ herramienta, onTerminar }: Props) {
+export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: Props) {
   const editando = Boolean(herramienta)
   const [form, setForm] = useState<FormState>(herramienta ? aFormulario(herramienta) : FORM_VACIO)
+  const [erroresLocales, setErroresLocales] = useState<Partial<Record<CampoForm, string>>>({})
   const crear = useCrearHerramienta()
   const actualizar = useActualizarHerramienta()
   const { isPending, error, isSuccess, reset } = editando ? actualizar : crear
-  const errores = erroresPorCampo(error)
+  // Los del backend (400 por campo) y los del formulario, que tienen
+  // prioridad mientras se corrigen.
+  const erroresServidor = erroresPorCampo(error)
+  const errores: Record<string, string | undefined> = { ...erroresServidor, ...erroresLocales }
 
   function cambiar(campo: CampoForm, valor: string) {
     setForm({ ...form, [campo]: valor })
+    if (erroresLocales[campo]) setErroresLocales({ ...erroresLocales, [campo]: undefined })
     if (isSuccess) reset()
   }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    const costo = numeroONull(form.costo_unitario)
+    if (costo !== null && !(costo > 0)) {
+      setErroresLocales({ costo_unitario: 'El costo unitario debe ser un número mayor que cero.' })
+      return
+    }
     const payload: HerramientaPayload = {
       codigo: form.codigo.trim(),
       nombre: form.nombre.trim(),
@@ -87,6 +91,7 @@ export function HerramientaForm({ herramienta, onTerminar }: Props) {
       costo_pedido: numeroONull(form.costo_pedido),
       costo_almacenamiento_unitario: numeroONull(form.costo_almacenamiento_unitario),
       tiempo_entrega_dias: numeroONull(form.tiempo_entrega_dias),
+      costo_unitario: costo,
     }
     if (herramienta) {
       actualizar.mutate({ id: herramienta.id, ...payload }, { onSuccess: () => onTerminar?.() })
@@ -95,7 +100,11 @@ export function HerramientaForm({ herramienta, onTerminar }: Props) {
     }
   }
 
-  function campo(nombre: CampoForm, etiqueta: string, props: { type?: string; step?: string; ayuda?: string } = {}) {
+  function campo(
+    nombre: CampoForm,
+    etiqueta: string,
+    props: { type?: string; step?: string; ayuda?: string; disabled?: boolean } = {},
+  ) {
     return (
       <div>
         <label htmlFor={nombre} className="mb-1 block text-sm font-medium text-slate-700">
@@ -107,8 +116,9 @@ export function HerramientaForm({ herramienta, onTerminar }: Props) {
           step={props.step}
           min={props.type === 'number' ? 0 : undefined}
           value={form[nombre]}
+          disabled={props.disabled}
           onChange={(event) => cambiar(nombre, event.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500"
         />
         {props.ayuda && !errores[nombre] && <p className="mt-1 text-xs text-slate-500">{props.ayuda}</p>}
         {errores[nombre] && <p className="mt-1 text-xs text-red-600">{errores[nombre]}</p>}
@@ -116,7 +126,10 @@ export function HerramientaForm({ herramienta, onTerminar }: Props) {
     )
   }
 
-  const errorGeneral = error && Object.keys(errores).length === 0
+  const errorGeneral =
+    error && Object.keys(erroresServidor).length === 0
+      ? mensajeDeError(error, 'No se pudo guardar la herramienta. Intenta de nuevo.')
+      : null
 
   return (
     <form
@@ -133,6 +146,14 @@ export function HerramientaForm({ herramienta, onTerminar }: Props) {
         {campo('nombre', 'Nombre *')}
         {campo('modelo', 'Modelo')}
         {campo('unidades_por_caja', 'Unidades por caja *', { type: 'number', step: '1' })}
+        {campo('costo_unitario', 'Costo unitario de compra', {
+          type: 'number',
+          step: '0.01',
+          disabled: !puedeCambiarCosto,
+          ayuda: puedeCambiarCosto
+            ? 'Cada cambio queda en el historial de costos.'
+            : 'Solo el Administrador puede cambiarlo.',
+        })}
       </div>
 
       <fieldset className="rounded-md border border-slate-200 p-4">
@@ -145,13 +166,8 @@ export function HerramientaForm({ herramienta, onTerminar }: Props) {
         </div>
       </fieldset>
 
-      {errores.detail && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errores.detail}</p>
-      )}
       {errorGeneral && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          No se pudo guardar la herramienta. Intenta de nuevo.
-        </p>
+        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errorGeneral}</p>
       )}
       {isSuccess && !editando && (
         <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">Herramienta guardada correctamente.</p>

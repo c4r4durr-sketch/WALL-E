@@ -1,16 +1,20 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isAxiosError } from 'axios'
+import { History } from 'lucide-react'
 import { getSession } from '../../auth/session'
+import { monto } from '../../../shared/formato'
 import { HerramientaForm } from '../components/HerramientaForm'
+import { HistorialCostos } from '../components/HistorialCostos'
 import { useHerramientas } from '../hooks/useHerramientas'
 import { useEliminarHerramienta } from '../hooks/useEliminarHerramienta'
-import { puedeEditarCatalogo } from '../permisos'
+import { puedeCambiarCosto, puedeEditarCatalogo } from '../permisos'
 import type { Herramienta } from '../api/catalogoApi'
 
 // Catálogo de herramientas (HU6): listado para todos los roles; alta,
 // edición y borrado solo para Administrador y Supervisor (el Empleado ve
-// la tabla sin formulario ni botones).
+// la tabla sin formulario ni botones). HU7: el costo unitario lo cambia
+// solo el Administrador; su historial lo consultan todos.
 function mostrar(valor: number | null) {
   return valor ?? <span className="text-slate-400">—</span>
 }
@@ -29,10 +33,17 @@ export function CatalogoPage() {
   const eliminar = useEliminarHerramienta()
   const [editando, setEditando] = useState<Herramienta | null>(null)
   const [confirmandoId, setConfirmandoId] = useState<number | null>(null)
+  const [viendoHistorial, setViendoHistorial] = useState<Herramienta | null>(null)
 
   function empezarEdicion(herramienta: Herramienta) {
     setEditando(herramienta)
+    setViendoHistorial(null)
     setConfirmandoId(null)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function verHistorial(herramienta: Herramienta) {
+    setViendoHistorial(herramienta)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -45,7 +56,7 @@ export function CatalogoPage() {
     })
   }
 
-  const columnas = puedeEditar ? 9 : 8
+  const columnas = 10
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -65,6 +76,15 @@ export function CatalogoPage() {
             key={editando?.id ?? 'nueva'}
             herramienta={editando}
             onTerminar={() => setEditando(null)}
+            puedeCambiarCosto={session ? puedeCambiarCosto(session.rol) : false}
+          />
+        )}
+
+        {viendoHistorial && (
+          <HistorialCostos
+            key={viendoHistorial.id}
+            herramienta={viendoHistorial}
+            onCerrar={() => setViendoHistorial(null)}
           />
         )}
 
@@ -82,11 +102,12 @@ export function CatalogoPage() {
                 <th className="px-3 py-2">Nombre</th>
                 <th className="px-3 py-2">Modelo</th>
                 <th className="px-3 py-2 text-right">Unid./caja</th>
+                <th className="px-3 py-2 text-right">Costo unit.</th>
                 <th className="px-3 py-2 text-right">Demanda anual</th>
                 <th className="px-3 py-2 text-right">Costo pedido</th>
                 <th className="px-3 py-2 text-right">Costo almac.</th>
                 <th className="px-3 py-2 text-right">Entrega (días)</th>
-                {puedeEditar && <th className="px-3 py-2 text-right">Acciones</th>}
+                <th className="px-3 py-2 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -105,13 +126,15 @@ export function CatalogoPage() {
                   <td className="px-3 py-2">{h.nombre}</td>
                   <td className="px-3 py-2">{h.modelo || <span className="text-slate-400">—</span>}</td>
                   <td className="px-3 py-2 text-right">{h.unidades_por_caja}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {h.costo_unitario === null ? <span className="text-slate-400">—</span> : monto(h.costo_unitario)}
+                  </td>
                   <td className="px-3 py-2 text-right">{mostrar(h.demanda_anual)}</td>
                   <td className="px-3 py-2 text-right">{mostrar(h.costo_pedido)}</td>
                   <td className="px-3 py-2 text-right">{mostrar(h.costo_almacenamiento_unitario)}</td>
                   <td className="px-3 py-2 text-right">{mostrar(h.tiempo_entrega_dias)}</td>
-                  {puedeEditar && (
-                    <td className="whitespace-nowrap px-3 py-2 text-right">
-                      {confirmandoId === h.id ? (
+                  <td className="whitespace-nowrap px-3 py-2 text-right">
+                      {puedeEditar && confirmandoId === h.id ? (
                         <span className="inline-flex items-center gap-2">
                           <span className="text-slate-600">¿Eliminar?</span>
                           <button
@@ -131,28 +154,40 @@ export function CatalogoPage() {
                           </button>
                         </span>
                       ) : (
-                        <span className="inline-flex gap-3">
+                        <span className="inline-flex items-center gap-3">
                           <button
                             type="button"
-                            onClick={() => empezarEdicion(h)}
-                            className="font-medium text-blue-600 hover:underline"
+                            onClick={() => verHistorial(h)}
+                            title="Historial de costos"
+                            aria-label={`Historial de costos de ${h.codigo}`}
+                            className="rounded-md p-1 text-slate-600 hover:bg-slate-100"
                           >
-                            Editar
+                            <History size={16} aria-hidden />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              eliminar.reset()
-                              setConfirmandoId(h.id)
-                            }}
-                            className="font-medium text-red-600 hover:underline"
-                          >
-                            Eliminar
-                          </button>
+                          {puedeEditar && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => empezarEdicion(h)}
+                                className="font-medium text-blue-600 hover:underline"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  eliminar.reset()
+                                  setConfirmandoId(h.id)
+                                }}
+                                className="font-medium text-red-600 hover:underline"
+                              >
+                                Eliminar
+                              </button>
+                            </>
+                          )}
                         </span>
                       )}
-                    </td>
-                  )}
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -13,6 +13,17 @@ export interface Herramienta {
   costo_pedido: number | null
   costo_almacenamiento_unitario: number | null
   tiempo_entrega_dias: number | null
+  // HU7: costo de compra de una unidad. Solo el Administrador lo cambia.
+  costo_unitario: number | null
+}
+
+// HU7: un cambio del costo unitario (historial, solo lectura).
+export interface CambioCosto {
+  id: number
+  costo_anterior: number | null
+  costo_nuevo: number
+  usuario: string
+  fecha: string
 }
 
 export type HerramientaPayload = Omit<Herramienta, 'id'>
@@ -35,6 +46,11 @@ export async function actualizarHerramienta(
   { id, ...payload }: HerramientaPayload & { id: number },
 ): Promise<Herramienta> {
   const { data } = await httpClient.put<Herramienta>(`${URL}${id}/`, payload)
+  return data
+}
+
+export async function listarHistorialCostos(id: number): Promise<CambioCosto[]> {
+  const { data } = await httpClient.get<CambioCosto[]>(`${URL}${id}/historial-costos/`)
   return data
 }
 
