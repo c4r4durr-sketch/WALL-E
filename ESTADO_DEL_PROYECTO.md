@@ -28,7 +28,8 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 - **PostgreSQL 18.6 nativo** (servicio de Windows `postgresql-x64-18`) en
   el puerto **5433**. **No se usa Docker** (no está instalado).
   `docker-compose.yml` (postgres:16) quedó de un plan inicial y **no se usa**.
-- Base `eoq_db`, usuario `eoq_user` / `eoq_pass` (ver `backend/.env`), con
+- Base `eoq_db`; usuario y contraseña solo en `backend/.env` (no versionado;
+  plantilla en `backend/.env.example`). El usuario necesita el
   permiso `CREATEDB` para que `manage.py test` pueda crear la base de pruebas.
 - Python 3.12.10 en `backend/venv`. Node 24 + npm 11.
 

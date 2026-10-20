@@ -10,8 +10,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: eoq_db
-      POSTGRES_USER: eoq_user
-      POSTGRES_PASSWORD: eoq_pass
+      # Usuario y contraseña desde un .env en la raíz (no versionado).
+      POSTGRES_USER: ${POSTGRES_USER:?Definir POSTGRES_USER en .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Definir POSTGRES_PASSWORD en .env}
     ports:
       # 5433 en el host (no 5432) porque esta máquina ya tiene un
       # PostgreSQL nativo corriendo como servicio en el puerto 5432; así
@@ -21,7 +22,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eoq_user -d eoq_db"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d eoq_db"]
       interval: 5s
       timeout: 5s
       retries: 5
