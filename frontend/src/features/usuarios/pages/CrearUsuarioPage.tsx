@@ -10,37 +10,94 @@ const ROL_LABEL: Record<Rol, string> = {
   EMPLEADO: 'Empleado',
 }
 
-// HU4/HU5: el Administrador crea una cuenta asignando rol y, si no es
-// Administrador, sucursal obligatoria. El formulario solo guía al usuario:
-// la regla real la valida el backend (usuarios/domain/reglas.py, aplicada
-// en UsuarioSerializer.validate), que responde 400 si falta la sucursal.
-// Flujo mínimo demostrable: falta validación fina y feedback de carga más
-// pulido.
+type FormState = {
+  username: string
+  password: string
+  first_name: string
+  last_name: string
+  rol: Rol
+  sucursal: string
+}
+
+type Errores = Partial<Record<keyof FormState, string>>
+
+// Declarado fuera del componente: si se crea dentro del render, React lo
+// trata como un componente nuevo en cada render (oxlint static-components).
+function MensajeError({ mensaje }: { mensaje?: string }) {
+  return mensaje ? <p className="mt-1 text-xs text-red-600">{mensaje}</p> : null
+}
+
+function validar(form: FormState): Errores {
+  const errores: Errores = {}
+
+  if (!form.username.trim()) {
+    errores.username = 'El usuario es obligatorio.'
+  } else if (form.username.trim().length < 3) {
+    errores.username = 'Debe tener al menos 3 caracteres.'
+  } else if (/\s/.test(form.username)) {
+    errores.username = 'No puede contener espacios.'
+  }
+
+  if (!form.password) {
+    errores.password = 'La contraseña es obligatoria.'
+  } else if (form.password.length < 8) {
+    errores.password = 'Debe tener al menos 8 caracteres.'
+  }
+
+  if (!form.first_name.trim()) errores.first_name = 'El nombre es obligatorio.'
+  if (!form.last_name.trim()) errores.last_name = 'El apellido es obligatorio.'
+
+  if (form.rol !== Rol.ADMINISTRADOR && !form.sucursal) {
+    errores.sucursal = 'Selecciona una sucursal.'
+  }
+
+  return errores
+}
+
 export function CrearUsuarioPage() {
   const navigate = useNavigate()
   const { data: sucursales } = useSucursales()
   const { mutate, isPending, error, isSuccess } = useCrearUsuario()
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<FormState>({
     username: '',
     password: '',
     first_name: '',
     last_name: '',
-    rol: Rol.EMPLEADO as Rol,
+    rol: Rol.EMPLEADO,
     sucursal: '',
   })
+  const [errores, setErrores] = useState<Errores>({})
+
+  // Actualiza un campo y limpia su error mientras el usuario escribe
+  function setCampo<K extends keyof FormState>(campo: K, valor: FormState[K]) {
+    setForm((prev) => ({ ...prev, [campo]: valor }))
+    if (errores[campo]) {
+      setErrores((prev) => ({ ...prev, [campo]: undefined }))
+    }
+  }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
+
+    const erroresNuevos = validar(form)
+    setErrores(erroresNuevos)
+    if (Object.keys(erroresNuevos).length > 0) return // no envía
+
     mutate({
-      username: form.username,
+      username: form.username.trim(),
       password: form.password,
-      first_name: form.first_name,
-      last_name: form.last_name,
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
       rol: form.rol,
       sucursal: form.rol === Rol.ADMINISTRADOR ? null : Number(form.sucursal),
     })
   }
+
+  const inputClass = (campo: keyof FormState) =>
+    `w-full rounded-md border px-3 py-2 text-sm ${
+      errores[campo] ? 'border-red-500' : 'border-slate-300'
+    }`
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -53,51 +110,64 @@ export function CrearUsuarioPage() {
           ← Volver
         </button>
         <h1 className="mb-4 text-xl font-semibold text-slate-800">Crear cuenta nueva</h1>
+
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Usuario</label>
             <input
               value={form.username}
-              onChange={(event) => setForm({ ...form, username: event.target.value })}
-              required
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              onChange={(e) => setCampo('username', e.target.value)}
+              className={inputClass('username')}
             />
+            <MensajeError mensaje={errores.username} />
           </div>
+
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Contraseña</label>
             <input
               type="password"
               value={form.password}
-              onChange={(event) => setForm({ ...form, password: event.target.value })}
-              required
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              onChange={(e) => setCampo('password', e.target.value)}
+              className={inputClass('password')}
             />
+            <MensajeError mensaje={errores.password} />
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
               <input
                 value={form.first_name}
-                onChange={(event) => setForm({ ...form, first_name: event.target.value })}
-                required
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                onChange={(e) => setCampo('first_name', e.target.value)}
+                className={inputClass('first_name')}
               />
+              <MensajeError mensaje={errores.first_name} />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Apellido</label>
               <input
                 value={form.last_name}
-                onChange={(event) => setForm({ ...form, last_name: event.target.value })}
-                required
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                onChange={(e) => setCampo('last_name', e.target.value)}
+                className={inputClass('last_name')}
               />
+              <MensajeError mensaje={errores.last_name} />
             </div>
           </div>
+
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Rol</label>
             <select
               value={form.rol}
-              onChange={(event) => setForm({ ...form, rol: event.target.value as Rol })}
+              onChange={(e) => {
+                const rol = e.target.value as Rol
+                setForm((prev) => ({
+                  ...prev,
+                  rol,
+                  // al pasar a Administrador, la sucursal ya no aplica
+                  sucursal: rol === Rol.ADMINISTRADOR ? '' : prev.sucursal,
+                }))
+                setErrores((prev) => ({ ...prev, sucursal: undefined }))
+              }}
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
             >
               {Object.values(Rol).map((rol) => (
@@ -107,14 +177,14 @@ export function CrearUsuarioPage() {
               ))}
             </select>
           </div>
+
           {form.rol !== Rol.ADMINISTRADOR && (
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Sucursal</label>
               <select
                 value={form.sucursal}
-                onChange={(event) => setForm({ ...form, sucursal: event.target.value })}
-                required
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                onChange={(e) => setCampo('sucursal', e.target.value)}
+                className={`${inputClass('sucursal')} bg-white`}
               >
                 <option value="" disabled>
                   Selecciona una sucursal
@@ -125,8 +195,10 @@ export function CrearUsuarioPage() {
                   </option>
                 ))}
               </select>
+              <MensajeError mensaje={errores.sucursal} />
             </div>
           )}
+
           {error && (
             <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
               No se pudo crear la cuenta. Revisa los datos.
@@ -137,6 +209,7 @@ export function CrearUsuarioPage() {
               Cuenta creada correctamente.
             </p>
           )}
+
           <button
             type="submit"
             disabled={isPending}
