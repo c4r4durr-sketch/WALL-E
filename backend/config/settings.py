@@ -123,7 +123,10 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 
 LANGUAGE_CODE = "es"
-TIME_ZONE = "UTC"  # ajustar a la zona horaria real del negocio si aplica
+# Zona horaria del negocio (Bolivia, UTC-4 sin horario de verano). La base
+# sigue guardando en UTC (USE_TZ); esto define qué es "hoy" para el cierre
+# diario, el estancamiento y las fechas que ve el usuario.
+TIME_ZONE = "America/La_Paz"
 USE_I18N = True
 USE_TZ = True
 

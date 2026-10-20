@@ -205,6 +205,21 @@ class PanelAuditoriaApiTests(APITestCase):
         self.assertEqual(datos["estancadas"][0]["dias_sin_venta"], 60)
         self.assertEqual((datos["total_herramientas"], datos["total_sucursales_activas"]), (1, 1))
 
+    def test_dias_sin_venta_se_cuentan_en_hora_de_la_paz(self):
+        # Venta a las 22:00 de La Paz hace 41 días: en UTC ya es el día
+        # siguiente (02:00), y contando en UTC saldrían 40 días (no estancada).
+        from datetime import datetime, time
+        from django.utils import timezone
+        la_paz = timezone.get_current_timezone()
+        venta = datetime.combine(timezone.localdate() - timedelta(days=41), time(22, 0), tzinfo=la_paz)
+        self._mov("ENTRADA", 10, dias_atras=100)
+        self._mov("SALIDA", 1, dias_atras=0)
+        self.Movimiento.objects.filter(tipo_movimiento="SALIDA").update(creado_en=venta)
+        self.client.force_authenticate(self.emp)
+        datos = self.client.get("/api/indicadores/panel/").json()
+        self.assertEqual(datos["total_herramientas_estancadas"], 1)
+        self.assertEqual(datos["estancadas"][0]["dias_sin_venta"], 41)
+
     def test_sin_sesion_es_401(self):
         self.assertEqual(self.client.get("/api/indicadores/panel/").status_code, 401)
 

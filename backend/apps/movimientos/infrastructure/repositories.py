@@ -8,6 +8,7 @@ from collections import defaultdict
 from typing import Optional
 
 from django.db.models import Max, Min, Q, Sum
+from django.utils import timezone
 
 from apps.catalogo.infrastructure.models import Herramienta as HerramientaModel
 
@@ -89,8 +90,11 @@ class MovimientoRepositoryDjango(MovimientoRepository):
                 herramienta_id=f["herramienta_id"],
                 sucursal_id=f["sucursal_id"],
                 unidades_por_tipo=totales[(f["herramienta_id"], f["sucursal_id"])],
-                primer_movimiento=f["primero"],
-                ultima_salida=f["ultima_salida"],
+                # En hora local (TIME_ZONE): el panel compara su .date() con
+                # la fecha local de hoy; en UTC, una venta hecha después de
+                # las 20:00 en La Paz contaría como del día siguiente.
+                primer_movimiento=timezone.localtime(f["primero"]),
+                ultima_salida=timezone.localtime(f["ultima_salida"]) if f["ultima_salida"] else None,
             )
             for f in fechas
         ]
