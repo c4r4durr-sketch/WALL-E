@@ -1,6 +1,6 @@
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -8,14 +8,19 @@ from rest_framework.views import APIView
 from apps.catalogo.domain.exceptions import HerramientaNoEncontradaError
 from apps.catalogo.infrastructure.repositories import HerramientaRepositoryDjango
 from apps.movimientos.infrastructure.repositories import MovimientoRepositoryDjango
+from apps.usuarios.domain.entities import Actor
 from apps.usuarios.infrastructure.repositories import SucursalRepositoryDjango
 
+from ...domain.exceptions import FechaFuturaError, ReporteNoPermitidoError, SucursalInexistenteError
 from ...use_cases.calcular_eoq import calcular_eoq
+from ...use_cases.cierre_diario import construir_cierre
 from ...use_cases.calcular_punto_reorden import calcular_punto_reorden
 from ...use_cases.clasificar_abc import clasificar_abc
 from ...use_cases.panel_auditoria import construir_panel
 from .serializers import (
+    CierreDiarioSerializer,
     ClasificacionABCSerializer,
+    FiltroCierreDiarioSerializer,
     PanelAuditoriaSerializer,
     ResultadoEOQSerializer,
     ResultadoROPSerializer,
@@ -94,3 +99,40 @@ class PanelAuditoriaView(APIView):
             hoy=timezone.localdate(),
         )
         return Response(PanelAuditoriaSerializer(panel).data)
+
+
+class CierreDiarioView(APIView):
+    """GET /api/indicadores/cierre-diario/?sucursal=<id>&fecha=AAAA-MM-DD
+    Cierre y resumen diario (HU14): movimientos del día de una sucursal, en
+    hora de La Paz, con totales por tipo. Administrador: cualquier sucursal
+    (debe indicarla); Supervisor: la suya (por defecto); Empleado: 403."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(parameters=[FiltroCierreDiarioSerializer], responses=CierreDiarioSerializer)
+    def get(self, request):
+        filtro = FiltroCierreDiarioSerializer(data=request.query_params)
+        filtro.is_valid(raise_exception=True)
+        usuario = request.user
+        actor = Actor(usuario_id=usuario.id, rol=usuario.rol, sucursal_id=usuario.sucursal_id)
+        sucursal_id = filtro.validated_data.get("sucursal", usuario.sucursal_id)
+        if sucursal_id is None:
+            raise ValidationError({"sucursal": ["Indica la sucursal."]})
+        hoy = timezone.localdate()
+        try:
+            cierre = construir_cierre(
+                MovimientoRepositoryDjango(),
+                HerramientaRepositoryDjango(),
+                SucursalRepositoryDjango(),
+                actor,
+                sucursal_id,
+                fecha=filtro.validated_data.get("fecha", hoy),
+                hoy=hoy,
+            )
+        except ReporteNoPermitidoError:
+            raise PermissionDenied("Solo el Administrador o el Supervisor de esa sucursal pueden ver su cierre diario.")
+        except FechaFuturaError:
+            raise ValidationError({"fecha": ["La fecha no puede ser posterior a hoy."]})
+        except SucursalInexistenteError:
+            raise ValidationError({"sucursal": ["No existe esa sucursal."]})
+        return Response(CierreDiarioSerializer(cierre).data)

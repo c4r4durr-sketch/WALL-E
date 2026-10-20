@@ -72,3 +72,43 @@ class PanelAuditoriaSerializer(serializers.Serializer):
     dias_para_estancamiento = serializers.IntegerField()
     alertas = AlertaReordenSerializer(many=True)
     estancadas = HerramientaEstancadaSerializer(many=True)
+
+
+# --- Cierre diario (HU14) ---
+
+
+class FiltroCierreDiarioSerializer(serializers.Serializer):
+    # Opcional para el Supervisor (se usa su sucursal); el Administrador
+    # debe indicarla. Sin fecha, es el día de hoy (hora de La Paz).
+    sucursal = serializers.IntegerField(min_value=1, required=False)
+    fecha = serializers.DateField(required=False)
+
+
+class LineaCierreSerializer(serializers.Serializer):
+    movimiento_id = serializers.IntegerField()
+    fecha_hora = serializers.DateTimeField()
+    herramienta_id = serializers.IntegerField()
+    codigo = serializers.CharField()
+    nombre = serializers.CharField()
+    tipo_movimiento = serializers.CharField()
+    tipo_unidad = serializers.CharField()
+    cantidad = serializers.IntegerField()
+    cantidad_unidades = serializers.IntegerField()
+    usuario = serializers.CharField()
+    motivo = serializers.CharField()
+
+
+class TotalPorTipoSerializer(serializers.Serializer):
+    tipo_movimiento = serializers.CharField()
+    movimientos = serializers.IntegerField()
+    unidades = serializers.IntegerField()
+
+
+class CierreDiarioSerializer(serializers.Serializer):
+    fecha = serializers.DateField()
+    sucursal_id = serializers.IntegerField()
+    sucursal_nombre = serializers.CharField()
+    lineas = LineaCierreSerializer(many=True)
+    totales = TotalPorTipoSerializer(many=True)
+    total_salidas_unidades = serializers.IntegerField()
+    cantidad_salidas = serializers.IntegerField()

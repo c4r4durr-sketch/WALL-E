@@ -5,6 +5,7 @@ puro de un cálculo, devuelto por los use_cases de esta app.
 """
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Optional
 
 
@@ -122,3 +123,41 @@ class PanelAuditoria:
     dias_para_estancamiento: int
     alertas: list[AlertaReorden]
     estancadas: list[HerramientaEstancada]
+
+
+@dataclass(frozen=True)
+class LineaCierre:
+    """HU14: un movimiento del día, con los datos para mostrarlo."""
+
+    movimiento_id: int
+    fecha_hora: datetime
+    herramienta_id: int
+    codigo: str
+    nombre: str
+    tipo_movimiento: str
+    tipo_unidad: str
+    cantidad: int
+    cantidad_unidades: int
+    usuario: str
+    motivo: str
+
+
+@dataclass(frozen=True)
+class TotalPorTipo:
+    tipo_movimiento: str
+    movimientos: int
+    unidades: int
+
+
+@dataclass(frozen=True)
+class CierreDiario:
+    """HU14: resumen del día de una sucursal para cuadrar la caja. Las
+    salidas (ventas) se destacan aparte porque son lo que se cuadra."""
+
+    fecha: date
+    sucursal_id: int
+    sucursal_nombre: str
+    lineas: tuple[LineaCierre, ...]
+    totales: tuple[TotalPorTipo, ...]  # uno por cada tipo, aunque sea 0
+    total_salidas_unidades: int
+    cantidad_salidas: int

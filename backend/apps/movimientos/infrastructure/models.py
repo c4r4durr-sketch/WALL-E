@@ -53,6 +53,8 @@ class Movimiento(models.Model):
         verbose_name = "Movimiento"
         verbose_name_plural = "Movimientos"
         ordering = ["-creado_en"]
+        # Historial y cierre diario (HU14) filtran por sucursal y fecha.
+        indexes = [models.Index(fields=["sucursal", "creado_en"], name="movimiento_sucursal_fecha_idx")]
 
     def __str__(self) -> str:
         return f"{self.tipo_movimiento} {self.cantidad} {self.tipo_unidad} - {self.herramienta_id}"

@@ -329,3 +329,201 @@ class IndicadoresApiTests(APITestCase):
         self.assertEqual(self.client.get("/api/indicadores/rop/999/").status_code, 404)
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get("/api/indicadores/abc/").status_code, 401)
+
+
+# --- Cierre diario (HU14) ---
+
+from datetime import date as _date, datetime as _datetime, time as _time
+
+from apps.catalogo.domain.entities import Herramienta as _Herramienta
+from apps.movimientos.domain.entities import Movimiento as _Movimiento
+from apps.movimientos.domain.value_objects import TipoMovimiento as _Tipo, TipoUnidad as _Unidad
+from apps.usuarios.domain.entities import Actor as _Actor, Sucursal as _Sucursal
+from apps.usuarios.domain.value_objects import Rol as _Rol
+
+from .domain.exceptions import FechaFuturaError, ReporteNoPermitidoError, SucursalInexistenteError
+from .use_cases.cierre_diario import construir_cierre
+
+_HOY = _date(2026, 10, 20)
+
+
+class _MovimientosDelDia:
+    def __init__(self, movimientos):
+        self.movimientos = movimientos
+        self.pedidos = []
+
+    def listar_del_dia(self, sucursal_id, fecha):
+        self.pedidos.append((sucursal_id, fecha))
+        return [m for m in self.movimientos if m.sucursal_id == sucursal_id]
+
+
+class _Catalogo:
+    def __init__(self):
+        self.llamadas = 0
+
+    def listar(self):
+        self.llamadas += 1
+        return [_Herramienta(1, "T-1", "Taladro", "", 12), _Herramienta(2, "M-1", "Martillo", "", 1)]
+
+
+class _Sucursales:
+    def obtener_por_id(self, sucursal_id):
+        return {1: _Sucursal(1, "Central", ""), 2: _Sucursal(2, "Norte", "")}.get(sucursal_id)
+
+
+def _mov(id, tipo, unidades, herramienta=1, sucursal=1, motivo=""):
+    return _Movimiento(id=id, herramienta_id=herramienta, sucursal_id=sucursal, tipo_movimiento=tipo,
+                       tipo_unidad=_Unidad.UNIDAD, cantidad=unidades, cantidad_unidades=unidades,
+                       usuario_id=1, motivo=motivo, creado_en=_datetime(2026, 10, 20, 10, id),
+                       usuario_username="ana")
+
+
+_ADMIN = _Actor(usuario_id=1, rol=_Rol.ADMINISTRADOR, sucursal_id=None)
+_SUP_CENTRAL = _Actor(usuario_id=2, rol=_Rol.SUPERVISOR, sucursal_id=1)
+_EMPLEADO = _Actor(usuario_id=3, rol=_Rol.EMPLEADO, sucursal_id=1)
+
+
+class CierreDiarioUseCaseTests(SimpleTestCase):
+    def _cierre(self, movimientos, actor=_ADMIN, sucursal_id=1, fecha=_HOY):
+        self.repo = _MovimientosDelDia(movimientos)
+        self.catalogo = _Catalogo()
+        return construir_cierre(self.repo, self.catalogo, _Sucursales(), actor, sucursal_id, fecha, hoy=_HOY)
+
+    def test_totales_por_tipo_y_salidas_destacadas(self):
+        cierre = self._cierre([
+            _mov(1, _Tipo.ENTRADA, 24),
+            _mov(2, _Tipo.SALIDA, 3),
+            _mov(3, _Tipo.SALIDA, 2, herramienta=2),
+            _mov(4, _Tipo.AJUSTE_NEGATIVO, 1, motivo="Rota"),
+            _mov(5, _Tipo.TRANSFERENCIA_SALIDA, 5),
+            _mov(6, _Tipo.SALIDA, 99, sucursal=2),  # otra sucursal: no entra
+        ])
+        totales = {t.tipo_movimiento: (t.movimientos, t.unidades) for t in cierre.totales}
+        self.assertEqual(totales["ENTRADA"], (1, 24))
+        self.assertEqual(totales["SALIDA"], (2, 5))
+        self.assertEqual(totales["AJUSTE_NEGATIVO"], (1, 1))
+        self.assertEqual(totales["TRANSFERENCIA_SALIDA"], (1, 5))
+        self.assertEqual(totales["TRANSFERENCIA_ENTRADA"], (0, 0))
+        self.assertEqual((cierre.cantidad_salidas, cierre.total_salidas_unidades), (2, 5))
+        self.assertEqual([l.codigo for l in cierre.lineas], ["T-1", "T-1", "M-1", "T-1", "T-1"])
+        self.assertEqual(cierre.sucursal_nombre, "Central")
+        self.assertEqual(self.catalogo.llamadas, 1)  # una consulta al catálogo, no una por línea
+
+    def test_dia_sin_movimientos(self):
+        cierre = self._cierre([])
+        self.assertEqual((cierre.lineas, cierre.cantidad_salidas, cierre.total_salidas_unidades), ((), 0, 0))
+        self.assertEqual(self.catalogo.llamadas, 0)
+
+    def test_permisos_por_rol_y_sucursal(self):
+        self._cierre([], actor=_SUP_CENTRAL, sucursal_id=1)
+        with self.assertRaises(ReporteNoPermitidoError):
+            self._cierre([], actor=_SUP_CENTRAL, sucursal_id=2)
+        with self.assertRaises(ReporteNoPermitidoError):
+            self._cierre([], actor=_EMPLEADO, sucursal_id=1)
+        self._cierre([], actor=_ADMIN, sucursal_id=2)
+
+    def test_fecha_futura_y_sucursal_inexistente(self):
+        with self.assertRaises(FechaFuturaError):
+            self._cierre([], fecha=_date(2026, 10, 21))
+        with self.assertRaises(SucursalInexistenteError):
+            self._cierre([], sucursal_id=99)
+
+    def test_dia_pasado(self):
+        self._cierre([], fecha=_date(2026, 1, 15))
+        self.assertEqual(self.repo.pedidos, [(1, _date(2026, 1, 15))])
+
+
+class CierreDiarioApiTests(APITestCase):
+    URL = "/api/indicadores/cierre-diario/"
+
+    def setUp(self):
+        from apps.catalogo.infrastructure.models import Herramienta as HerramientaModel
+        from apps.movimientos.infrastructure.models import Movimiento
+        from apps.usuarios.infrastructure.models import Sucursal as SucursalModel, Usuario
+
+        self.Movimiento = Movimiento
+        self.central = SucursalModel.objects.create(nombre="Central")
+        self.norte = SucursalModel.objects.create(nombre="Norte")
+        self.h = HerramientaModel.objects.create(codigo="T-1", nombre="Taladro", unidades_por_caja=12)
+        self.admin = Usuario.objects.create_user("adm", password="x", rol="ADMINISTRADOR")
+        self.sup = Usuario.objects.create_user("sup", password="x", rol="SUPERVISOR", sucursal=self.central)
+        self.emp = Usuario.objects.create_user("emp", password="x", rol="EMPLEADO", sucursal=self.central)
+
+    def _mov(self, tipo, unidades, cuando, sucursal=None):
+        m = self.Movimiento.objects.create(
+            herramienta=self.h, sucursal=sucursal or self.central, usuario=self.sup, tipo_movimiento=tipo,
+            tipo_unidad="UNIDAD", cantidad=unidades, cantidad_unidades=unidades,
+            motivo="x" if "AJUSTE" in tipo else "",
+        )
+        self.Movimiento.objects.filter(pk=m.pk).update(creado_en=cuando)
+
+    def _la_paz(self, dia, hora, minuto=0):
+        from django.utils import timezone
+        return _datetime.combine(dia, _time(hora, minuto), tzinfo=timezone.get_current_timezone())
+
+    def test_el_dia_es_el_de_la_paz(self):
+        from django.utils import timezone
+        ayer = timezone.localdate() - timedelta(days=1)
+        # 23:30 de ayer en La Paz = 03:30 de hoy en UTC: es de AYER.
+        self._mov("SALIDA", 2, self._la_paz(ayer, 23, 30))
+        # 00:10 de hoy en La Paz = 04:10 UTC de hoy: es de HOY.
+        self._mov("SALIDA", 5, self._la_paz(ayer + timedelta(days=1), 0, 10))
+        self.client.force_authenticate(self.sup)
+        de_ayer = self.client.get(self.URL, {"fecha": ayer.isoformat()}).json()
+        self.assertEqual((de_ayer["cantidad_salidas"], de_ayer["total_salidas_unidades"]), (1, 2))
+        de_hoy = self.client.get(self.URL).json()  # sin fecha = hoy
+        self.assertEqual((de_hoy["cantidad_salidas"], de_hoy["total_salidas_unidades"]), (1, 5))
+        self.assertTrue(de_ayer["lineas"][0]["fecha_hora"].endswith("-04:00"))
+
+    def test_lineas_y_totales(self):
+        from django.utils import timezone
+        hoy = timezone.localdate()
+        self._mov("ENTRADA", 24, self._la_paz(hoy, 0, 5))
+        self._mov("SALIDA", 3, self._la_paz(hoy, 0, 20))
+        self._mov("AJUSTE_NEGATIVO", 1, self._la_paz(hoy, 0, 30))
+        self._mov("SALIDA", 7, self._la_paz(hoy, 0, 40), sucursal=self.norte)
+        self.client.force_authenticate(self.admin)
+        datos = self.client.get(self.URL, {"sucursal": self.central.id}).json()
+        self.assertEqual([l["tipo_movimiento"] for l in datos["lineas"]], ["ENTRADA", "SALIDA", "AJUSTE_NEGATIVO"])
+        self.assertEqual(datos["lineas"][0]["codigo"], "T-1")
+        self.assertEqual(datos["lineas"][0]["usuario"], "sup")
+        self.assertEqual(len(datos["totales"]), 6)
+        self.assertEqual((datos["sucursal_nombre"], datos["total_salidas_unidades"]), ("Central", 3))
+
+    def test_dia_sin_movimientos_responde_vacio(self):
+        self.client.force_authenticate(self.sup)
+        datos = self.client.get(self.URL).json()
+        self.assertEqual((datos["lineas"], datos["cantidad_salidas"]), ([], 0))
+
+    def test_permisos(self):
+        self.client.force_authenticate(self.emp)
+        self.assertEqual(self.client.get(self.URL).status_code, 403)
+        self.client.force_authenticate(self.sup)
+        self.assertEqual(self.client.get(self.URL, {"sucursal": self.norte.id}).status_code, 403)
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.client.get(self.URL, {"sucursal": self.norte.id}).status_code, 200)
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get(self.URL).status_code, 401)
+
+    def test_validaciones(self):
+        from django.utils import timezone
+        self.client.force_authenticate(self.admin)
+        sin_sucursal = self.client.get(self.URL)
+        self.assertEqual(sin_sucursal.status_code, 400)
+        self.assertIn("sucursal", sin_sucursal.json())
+        manana = (timezone.localdate() + timedelta(days=1)).isoformat()
+        futura = self.client.get(self.URL, {"sucursal": self.central.id, "fecha": manana})
+        self.assertEqual(futura.status_code, 400)
+        self.assertIn("fecha", futura.json())
+        self.assertEqual(self.client.get(self.URL, {"sucursal": self.central.id, "fecha": "20-10-2026"}).status_code, 400)
+        self.assertEqual(self.client.get(self.URL, {"sucursal": 9999}).status_code, 400)
+
+    def test_consultas_constantes(self):
+        from django.utils import timezone
+        hoy = timezone.localdate()
+        for minuto in range(5):
+            self._mov("SALIDA", 1, self._la_paz(hoy, 0, minuto))
+        self.client.force_authenticate(self.sup)
+        # sucursal + movimientos del día (con usuario) + catálogo
+        with self.assertNumQueries(3):
+            self.client.get(self.URL)

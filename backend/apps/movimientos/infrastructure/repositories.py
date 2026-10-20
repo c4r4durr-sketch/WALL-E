@@ -49,6 +49,17 @@ class MovimientoRepositoryDjango(MovimientoRepository):
             consulta = consulta.filter(sucursal_id=sucursal_id)
         return [_a_entidad(m) for m in consulta]
 
+    def listar_del_dia(self, sucursal_id: int, fecha) -> list[Movimiento]:
+        # __date convierte creado_en (UTC en la base) a la zona actual
+        # (TIME_ZONE = America/La_Paz) antes de comparar: el "día" es el de
+        # La Paz, no el de UTC. Usa el índice (sucursal, fecha).
+        consulta = (
+            MovimientoModel.objects.select_related("usuario")
+            .filter(sucursal_id=sucursal_id, creado_en__date=fecha)
+            .order_by("creado_en", "id")
+        )
+        return [_a_entidad(m) for m in consulta]
+
     def unidades_por_tipo(self, herramienta_id: int, sucursal_id: int) -> dict[TipoMovimiento, int]:
         filas = (
             MovimientoModel.objects.filter(herramienta_id=herramienta_id, sucursal_id=sucursal_id)

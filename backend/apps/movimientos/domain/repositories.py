@@ -6,7 +6,7 @@ registrado es inmutable (HU13, auditable). Un error se corrige con un
 movimiento nuevo, nunca editando el original."""
 
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import date, datetime
 from typing import Iterable, Optional
 
 from .entities import Movimiento, ResumenInventario
@@ -23,6 +23,13 @@ class MovimientoRepository(ABC):
         self, herramienta_id: Optional[int] = None, sucursal_id: Optional[int] = None
     ) -> list[Movimiento]:
         """Historial, del más reciente al más antiguo, con filtros opcionales."""
+        ...
+
+    @abstractmethod
+    def listar_del_dia(self, sucursal_id: int, fecha: date) -> list[Movimiento]:
+        """Movimientos de una sucursal en un día calendario de la zona
+        horaria del negocio (TIME_ZONE), del más antiguo al más reciente.
+        Insumo del cierre diario (HU14)."""
         ...
 
     @abstractmethod

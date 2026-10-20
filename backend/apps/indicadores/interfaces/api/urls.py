@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    CierreDiarioView,
     ClasificacionABCView,
     EOQPorHerramientaView,
     PanelAuditoriaView,
@@ -12,4 +13,5 @@ urlpatterns = [
     path("rop/<int:herramienta_id>/", PuntoReordenPorHerramientaView.as_view(), name="indicador-rop"),
     path("abc/", ClasificacionABCView.as_view(), name="indicador-abc"),
     path("panel/", PanelAuditoriaView.as_view(), name="panel-auditoria"),
+    path("cierre-diario/", CierreDiarioView.as_view(), name="cierre-diario"),
 ]
