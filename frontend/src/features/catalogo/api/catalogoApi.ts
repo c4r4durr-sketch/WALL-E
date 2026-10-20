@@ -15,6 +15,9 @@ export interface Herramienta {
   tiempo_entrega_dias: number | null
   // HU7: costo de compra de una unidad. Solo el Administrador lo cambia.
   costo_unitario: number | null
+  // HU8: proveedor al que se le compra (null = sin proveedor).
+  proveedor: number | null
+  proveedor_nombre: string | null
 }
 
 // HU7: un cambio del costo unitario (historial, solo lectura).
@@ -26,7 +29,7 @@ export interface CambioCosto {
   fecha: string
 }
 
-export type HerramientaPayload = Omit<Herramienta, 'id'>
+export type HerramientaPayload = Omit<Herramienta, 'id' | 'proveedor_nombre'>
 
 const URL = '/catalogo/herramientas/'
 

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { erroresPorCampo, mensajeDeError } from '../../../shared/api/errores'
 import { useCrearHerramienta } from '../hooks/useCrearHerramienta'
 import { useActualizarHerramienta } from '../hooks/useActualizarHerramienta'
+import { useProveedores } from '../../proveedores/hooks/useProveedores'
 import type { Herramienta, HerramientaPayload } from '../api/catalogoApi'
 
 // Formulario de alta y edición de herramientas (HU6), incluidos los datos
@@ -27,6 +28,7 @@ const FORM_VACIO = {
   costo_almacenamiento_unitario: '',
   tiempo_entrega_dias: '',
   costo_unitario: '',
+  proveedor: '',
 }
 
 type FormState = typeof FORM_VACIO
@@ -44,6 +46,7 @@ function aFormulario(herramienta: Herramienta): FormState {
     costo_almacenamiento_unitario: texto(herramienta.costo_almacenamiento_unitario),
     tiempo_entrega_dias: texto(herramienta.tiempo_entrega_dias),
     costo_unitario: texto(herramienta.costo_unitario),
+    proveedor: texto(herramienta.proveedor),
   }
 }
 
@@ -61,6 +64,11 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
   const editando = Boolean(herramienta)
   const [form, setForm] = useState<FormState>(herramienta ? aFormulario(herramienta) : FORM_VACIO)
   const [erroresLocales, setErroresLocales] = useState<Partial<Record<CampoForm, string>>>({})
+  // HU8: solo se ofrecen proveedores activos; si la herramienta ya tiene
+  // uno que luego se desactivó, se muestra igual para no perderlo al guardar.
+  const { data: proveedoresActivos } = useProveedores({ activos: true })
+  const proveedorActualInactivo =
+    herramienta?.proveedor != null && proveedoresActivos && !proveedoresActivos.some((p) => p.id === herramienta.proveedor)
   const crear = useCrearHerramienta()
   const actualizar = useActualizarHerramienta()
   const { isPending, error, isSuccess, reset } = editando ? actualizar : crear
@@ -92,6 +100,7 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
       costo_almacenamiento_unitario: numeroONull(form.costo_almacenamiento_unitario),
       tiempo_entrega_dias: numeroONull(form.tiempo_entrega_dias),
       costo_unitario: costo,
+      proveedor: numeroONull(form.proveedor),
     }
     if (herramienta) {
       actualizar.mutate({ id: herramienta.id, ...payload }, { onSuccess: () => onTerminar?.() })
@@ -154,6 +163,24 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
             ? 'Cada cambio queda en el historial de costos.'
             : 'Solo el Administrador puede cambiarlo.',
         })}
+        <div>
+          <label htmlFor="proveedor" className="mb-1 block text-sm font-medium text-slate-700">Proveedor</label>
+          <select
+            id="proveedor"
+            value={form.proveedor}
+            onChange={(event) => cambiar('proveedor', event.target.value)}
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">Sin proveedor</option>
+            {proveedorActualInactivo && herramienta && (
+              <option value={String(herramienta.proveedor)}>{herramienta.proveedor_nombre} (inactivo)</option>
+            )}
+            {proveedoresActivos?.map((p) => (
+              <option key={p.id} value={String(p.id)}>{p.nombre}</option>
+            ))}
+          </select>
+          {errores.proveedor && <p className="mt-1 text-xs text-red-600">{errores.proveedor}</p>}
+        </div>
       </div>
 
       <fieldset className="rounded-md border border-slate-200 p-4">

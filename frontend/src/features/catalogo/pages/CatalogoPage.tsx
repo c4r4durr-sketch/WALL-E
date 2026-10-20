@@ -56,7 +56,7 @@ export function CatalogoPage() {
     })
   }
 
-  const columnas = 10
+  const columnas = 11
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -101,6 +101,7 @@ export function CatalogoPage() {
                 <th className="px-3 py-2">Código</th>
                 <th className="px-3 py-2">Nombre</th>
                 <th className="px-3 py-2">Modelo</th>
+                <th className="px-3 py-2">Proveedor</th>
                 <th className="px-3 py-2 text-right">Unid./caja</th>
                 <th className="px-3 py-2 text-right">Costo unit.</th>
                 <th className="px-3 py-2 text-right">Demanda anual</th>
@@ -125,6 +126,7 @@ export function CatalogoPage() {
                   <td className="px-3 py-2 font-medium text-slate-800">{h.codigo}</td>
                   <td className="px-3 py-2">{h.nombre}</td>
                   <td className="px-3 py-2">{h.modelo || <span className="text-slate-400">—</span>}</td>
+                  <td className="px-3 py-2">{h.proveedor_nombre ?? <span className="text-slate-400">—</span>}</td>
                   <td className="px-3 py-2 text-right">{h.unidades_por_caja}</td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {h.costo_unitario === null ? <span className="text-slate-400">—</span> : monto(h.costo_unitario)}

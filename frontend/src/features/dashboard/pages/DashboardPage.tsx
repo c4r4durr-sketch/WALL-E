@@ -24,6 +24,7 @@ export function DashboardPage() {
 
   const accesos = [
     { to: '/catalogo', texto: 'Catálogo de herramientas' },
+    { to: '/proveedores', texto: 'Proveedores' },
     { to: '/movimientos', texto: 'Movimientos de inventario' },
     { to: '/transferencias', texto: 'Transferencias' },
     { to: '/indicadores', texto: 'Indicadores (EOQ / ROP / ABC)' },

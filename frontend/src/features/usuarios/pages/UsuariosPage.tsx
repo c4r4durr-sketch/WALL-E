@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, KeyRound, Pencil, UserCheck, UserPlus, UserX } from 'lucide-react'
 import { getSession } from '../../auth/session'
+import { BotonIcono } from '../../../shared/components/BotonIcono'
 import { mensajeDeError } from '../../../shared/api/errores'
 import { EditarUsuarioForm } from '../components/EditarUsuarioForm'
 import { RestablecerPasswordForm } from '../components/RestablecerPasswordForm'
@@ -172,30 +173,5 @@ export function UsuariosPage() {
         </div>
       </div>
     </div>
-  )
-}
-
-interface BotonIconoProps {
-  titulo: string
-  onClick: () => void
-  children: ReactNode
-  peligro?: boolean
-  disabled?: boolean
-}
-
-// Botón solo con icono: `title` muestra el texto al pasar el mouse y
-// `aria-label` lo lee el lector de pantalla.
-function BotonIcono({ titulo, onClick, children, peligro = false, disabled = false }: BotonIconoProps) {
-  return (
-    <button
-      type="button"
-      title={titulo}
-      aria-label={titulo}
-      onClick={onClick}
-      disabled={disabled}
-      className={`rounded-md p-1.5 hover:bg-slate-100 disabled:opacity-50 ${peligro ? 'text-red-600' : 'text-slate-600'}`}
-    >
-      {children}
-    </button>
   )
 }

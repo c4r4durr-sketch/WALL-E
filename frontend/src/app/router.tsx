@@ -9,6 +9,7 @@ import { DashboardPage } from '../features/dashboard/pages/DashboardPage'
 import { IndicadoresPage } from '../features/dashboard/pages/IndicadoresPage'
 import { CrearUsuarioPage } from '../features/usuarios/pages/CrearUsuarioPage'
 import { UsuariosPage } from '../features/usuarios/pages/UsuariosPage'
+import { ProveedoresPage } from '../features/proveedores/pages/ProveedoresPage'
 import { Rol } from '../shared/types/roles'
 
 // Enrutamiento centralizado: cada feature expone su(s) página(s) en
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <DashboardPage /> },
       { path: '/catalogo', element: <CatalogoPage /> },
+      { path: '/proveedores', element: <ProveedoresPage /> },
       { path: '/movimientos', element: <MovimientosPage /> },
       { path: '/transferencias', element: <TransferenciasPage /> },
       { path: '/indicadores', element: <IndicadoresPage /> },
