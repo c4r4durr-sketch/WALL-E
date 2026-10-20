@@ -55,6 +55,16 @@ class Herramienta(models.Model):
         help_text="Costo de compra de una unidad.",
         db_column="costo_unitario_herramienta",
     )
+    # HU8: proveedor al que se le compra. PROTECT: un proveedor con
+    # herramientas no se borra (se desactiva).
+    proveedor = models.ForeignKey(
+        "proveedores.Proveedor",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="herramientas",
+        db_column="cod_proveedor",
+    )
 
     creado_en = models.DateTimeField(auto_now_add=True, db_column="fecha_registro_herramienta")
     actualizado_en = models.DateTimeField(auto_now=True, db_column="fecha_actualizacion_herramienta")

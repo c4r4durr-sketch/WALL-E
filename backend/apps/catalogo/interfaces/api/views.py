@@ -6,6 +6,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.proveedores.infrastructure.repositories import ProveedorRepositoryDjango
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.interfaces.api.permissions import (
     LecturaParaTodosEscrituraAdministradorOSupervisor,
@@ -42,6 +43,7 @@ class HerramientaViewSet(viewsets.ViewSet):
         super().__init__(**kwargs)
         self.repo = HerramientaRepositoryDjango()
         self.historial = HistorialCostoRepositoryDjango()
+        self.proveedores = ProveedorRepositoryDjango()
 
     @staticmethod
     def _actor(request) -> Actor:
@@ -79,7 +81,7 @@ class HerramientaViewSet(viewsets.ViewSet):
         with transaction.atomic():
             herramienta = self._ejecutar(
                 casos.registrar_herramienta, serializer.validated_data,
-                actor=self._actor(request), historial=self.historial,
+                actor=self._actor(request), historial=self.historial, proveedores=self.proveedores,
             )
         return self._responder(herramienta, status.HTTP_201_CREATED)
 
@@ -97,7 +99,7 @@ class HerramientaViewSet(viewsets.ViewSet):
         with transaction.atomic():
             herramienta = self._ejecutar(
                 casos.actualizar_herramienta, int(pk), serializer.validated_data,
-                actor=self._actor(request), historial=self.historial,
+                actor=self._actor(request), historial=self.historial, proveedores=self.proveedores,
             )
         return self._responder(herramienta)
 

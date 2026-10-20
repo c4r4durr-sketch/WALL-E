@@ -17,7 +17,7 @@ from .models import Herramienta as HerramientaModel
 from .models import HistorialCosto as HistorialCostoModel
 
 # Los que asigna la base; nunca se copian de la entidad al modelo.
-_CAMPOS_DEL_SISTEMA = {"id", "creado_en", "actualizado_en"}
+_CAMPOS_DEL_SISTEMA = {"id", "creado_en", "actualizado_en", "proveedor_nombre"}
 
 
 def _a_entidad(modelo: HerramientaModel) -> Herramienta:
@@ -32,22 +32,28 @@ def _a_entidad(modelo: HerramientaModel) -> Herramienta:
         costo_almacenamiento_unitario=modelo.costo_almacenamiento_unitario,
         tiempo_entrega_dias=modelo.tiempo_entrega_dias,
         costo_unitario=modelo.costo_unitario,
+        proveedor_id=modelo.proveedor_id,
         creado_en=modelo.creado_en,
         actualizado_en=modelo.actualizado_en,
+        proveedor_nombre=modelo.proveedor.nombre if modelo.proveedor_id else None,
     )
 
 
 class HerramientaRepositoryDjango(HerramientaRepository):
+    def _consulta(self):
+        # select_related: el nombre del proveedor sale en la misma consulta.
+        return HerramientaModel.objects.select_related("proveedor")
+
     def obtener_por_id(self, herramienta_id: int) -> Optional[Herramienta]:
-        modelo = HerramientaModel.objects.filter(pk=herramienta_id).first()
+        modelo = self._consulta().filter(pk=herramienta_id).first()
         return _a_entidad(modelo) if modelo else None
 
     def obtener_por_codigo(self, codigo: str) -> Optional[Herramienta]:
-        modelo = HerramientaModel.objects.filter(codigo=codigo).first()
+        modelo = self._consulta().filter(codigo=codigo).first()
         return _a_entidad(modelo) if modelo else None
 
     def listar(self) -> list[Herramienta]:
-        return [_a_entidad(m) for m in HerramientaModel.objects.order_by("nombre", "codigo")]
+        return [_a_entidad(m) for m in self._consulta().order_by("nombre", "codigo")]
 
     def guardar(self, herramienta: Herramienta) -> Herramienta:
         valores = {k: v for k, v in asdict(herramienta).items() if k not in _CAMPOS_DEL_SISTEMA}
@@ -66,7 +72,7 @@ class HerramientaRepositoryDjango(HerramientaRepository):
             if "codigo" not in str(error):
                 raise
             raise CodigoDuplicadoError(herramienta.codigo) from error
-        return _a_entidad(modelo)
+        return self.obtener_por_id(modelo.id)
 
     def eliminar(self, herramienta_id: int) -> None:
         try:

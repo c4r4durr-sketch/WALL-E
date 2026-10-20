@@ -23,6 +23,7 @@ urlpatterns = [
     # Un prefijo por bounded context
     path("api/usuarios/", include("apps.usuarios.interfaces.api.urls")),
     path("api/catalogo/", include("apps.catalogo.interfaces.api.urls")),
+    path("api/proveedores/", include("apps.proveedores.interfaces.api.urls")),
     path("api/movimientos/", include("apps.movimientos.interfaces.api.urls")),
     path("api/transferencias/", include("apps.transferencias.interfaces.api.urls")),
     path("api/indicadores/", include("apps.indicadores.interfaces.api.urls")),

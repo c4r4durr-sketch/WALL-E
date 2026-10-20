@@ -47,6 +47,7 @@ usuarios   1 ──< historial_modificaciones (cod_usuario: autor del cambio, op
 herramientas 1 ──< movimientos            (movimientos.cod_herramienta)
 herramientas 1 ──< transferencias         (transferencias.cod_herramienta)
 herramientas 1 ──< historial_costos       (historial_costos.cod_herramienta)
+proveedores  1 ──< herramientas           (herramientas.cod_proveedor, opcional)
 usuarios     1 ──< historial_costos       (cod_usuario: quién cambió el costo)
 movimientos  1 ── 0..1 transferencias     (cod_movimiento_salida / cod_movimiento_entrada, únicos)
 ```
@@ -102,8 +103,23 @@ Modelo `catalogo.Herramienta`. Catálogo y datos de entrada de EOQ/ROP.
 | `costo_almacenamiento_herramienta` | `costo_almacenamiento_unitario` | numeric(12,2) | sí | H de EOQ |
 | `dias_entrega_herramienta` | `tiempo_entrega_dias` | integer | sí | ≥ 0 (lead time del ROP) |
 | `costo_unitario_herramienta` | `costo_unitario` | numeric(12,2) | sí | > 0 (lo valida el caso de uso); HU7, cada cambio va a `historial_costos` |
+| `cod_proveedor` | `proveedor` | bigint | sí | **FK** → `proveedores.cod_proveedor` (HU8; solo se asigna uno activo) |
 | `fecha_registro_herramienta` | `creado_en` | timestamptz | no | se fija al crear |
 | `fecha_actualizacion_herramienta` | `actualizado_en` | timestamptz | no | se actualiza en cada guardado |
+
+## proveedores
+Modelo `proveedores.Proveedor` (HU8). Directorio de proveedores. Un
+proveedor con herramientas asociadas no se elimina: se desactiva.
+
+| Columna | ← Campo Python | Tipo | Nulo | Clave / restricción |
+|---|---|---|---|---|
+| `cod_proveedor` | `id` | bigint (identity) | no | **PK** |
+| `nombre_proveedor` | `nombre` | varchar(150) | no | **UNIQUE** (además, único sin distinguir mayúsculas, lo valida el caso de uso) |
+| `telefono_proveedor` | `telefono` | varchar(30) | no | 7 a 15 dígitos (caso de uso) |
+| `email_proveedor` | `email` | varchar(254) | no (vacío permitido) | |
+| `estado_proveedor` | `activo` | boolean | no | default `true` |
+| `fecha_registro_proveedor` | `creado_en` | timestamptz | no | se fija al crear |
+| `fecha_actualizacion_proveedor` | `actualizado_en` | timestamptz | no | se actualiza en cada guardado |
 
 ## historial_costos
 Modelo `catalogo.HistorialCosto` (HU7). Una fila por cada vez que se carga o

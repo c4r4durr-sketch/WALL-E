@@ -35,6 +35,12 @@ class HerramientaSerializer(serializers.Serializer):
         max_digits=12, decimal_places=2, min_value=0,
         required=False, allow_null=True, default=None, coerce_to_string=False,
     )
+    # HU8: id del proveedor (null = sin proveedor); que exista y esté
+    # activo lo valida el caso de uso.
+    proveedor = serializers.IntegerField(
+        source="proveedor_id", min_value=1, required=False, allow_null=True, default=None
+    )
+    proveedor_nombre = serializers.CharField(read_only=True, allow_null=True)
     creado_en = serializers.DateTimeField(read_only=True)
     actualizado_en = serializers.DateTimeField(read_only=True)
 

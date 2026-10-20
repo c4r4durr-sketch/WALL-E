@@ -15,6 +15,8 @@ from django.test import SimpleTestCase
 from rest_framework.test import APITestCase
 
 from apps.movimientos.infrastructure.models import Movimiento
+from apps.proveedores.domain.entities import Proveedor
+from apps.proveedores.domain.repositories import ProveedorRepository
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.domain.value_objects import Rol
 from apps.usuarios.infrastructure.models import Sucursal, Usuario
@@ -71,6 +73,29 @@ class HistorialEnMemoria(HistorialCostoRepository):
         return [c for c in reversed(self.cambios) if c.herramienta_id == herramienta_id]
 
 
+class ProveedoresEnMemoria(ProveedorRepository):
+    """Proveedor 1 activo y 2 inactivo; solo se usa obtener_por_id."""
+
+    def __init__(self):
+        self.datos = {1: Proveedor(1, "Ferretera Andina", "2223344"),
+                      2: Proveedor(2, "Importadora Cerrada", "2223355", activo=False)}
+
+    def obtener_por_id(self, proveedor_id):
+        return self.datos.get(proveedor_id)
+
+    def obtener_por_nombre(self, nombre):
+        return None
+
+    def listar(self, buscar="", solo_activos=False):
+        return list(self.datos.values())
+
+    def guardar(self, proveedor):
+        return proveedor
+
+    def eliminar(self, proveedor_id):
+        pass
+
+
 ADMIN = Actor(usuario_id=1, rol=Rol.ADMINISTRADOR, sucursal_id=None)
 SUPERVISOR = Actor(usuario_id=2, rol=Rol.SUPERVISOR, sucursal_id=1)
 
@@ -79,16 +104,17 @@ class GestionarHerramientasUseCaseTests(SimpleTestCase):
     def setUp(self):
         self.repo = RepositorioEnMemoria()
         self.historial = HistorialEnMemoria()
+        self.proveedores = ProveedoresEnMemoria()
 
     def _registrar(self, actor=ADMIN, **datos):
         return casos.registrar_herramienta(
             self.repo, {"codigo": "T-1", "nombre": "Taladro", "modelo": "", "unidades_por_caja": 1, **datos},
-            actor=actor, historial=self.historial,
+            actor=actor, historial=self.historial, proveedores=self.proveedores,
         )
 
     def _actualizar(self, herramienta_id, cambios, actor=ADMIN):
         return casos.actualizar_herramienta(
-            self.repo, herramienta_id, cambios, actor=actor, historial=self.historial
+            self.repo, herramienta_id, cambios, actor=actor, historial=self.historial, proveedores=self.proveedores
         )
 
     def test_registrar_normaliza_espacios(self):
@@ -260,15 +286,16 @@ class CostoUnitarioUseCaseTests(SimpleTestCase):
     def setUp(self):
         self.repo = RepositorioEnMemoria()
         self.historial = HistorialEnMemoria()
+        self.proveedores = ProveedoresEnMemoria()
 
     def _registrar(self, actor=ADMIN, **datos):
         return casos.registrar_herramienta(
             self.repo, {"codigo": "T-1", "nombre": "Taladro", "modelo": "", "unidades_por_caja": 1, **datos},
-            actor=actor, historial=self.historial,
+            actor=actor, historial=self.historial, proveedores=self.proveedores,
         )
 
     def _actualizar(self, herramienta_id, cambios, actor=ADMIN):
-        return casos.actualizar_herramienta(self.repo, herramienta_id, cambios, actor=actor, historial=self.historial)
+        return casos.actualizar_herramienta(self.repo, herramienta_id, cambios, actor=actor, historial=self.historial, proveedores=self.proveedores)
 
     def test_alta_con_costo_registra_el_primer_valor(self):
         herramienta = self._registrar(costo_unitario=Decimal("10.50"))

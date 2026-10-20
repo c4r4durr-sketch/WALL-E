@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     # estructura interna: domain/ use_cases/ infrastructure/ interfaces/api/
     "apps.usuarios.apps.UsuariosConfig",
     "apps.catalogo.apps.CatalogoConfig",
+    "apps.proveedores.apps.ProveedoresConfig",
     "apps.movimientos.apps.MovimientosConfig",
     "apps.transferencias.apps.TransferenciasConfig",
     "apps.indicadores.apps.IndicadoresConfig",
@@ -102,6 +103,7 @@ DATABASES = {
 MIGRATION_MODULES = {
     "usuarios": "apps.usuarios.infrastructure.migrations",
     "catalogo": "apps.catalogo.infrastructure.migrations",
+    "proveedores": "apps.proveedores.infrastructure.migrations",
     "movimientos": "apps.movimientos.infrastructure.migrations",
     "transferencias": "apps.transferencias.infrastructure.migrations",
     "auditoria": "apps.auditoria.infrastructure.migrations",

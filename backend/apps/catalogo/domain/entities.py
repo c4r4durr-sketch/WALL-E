@@ -25,9 +25,14 @@ class Herramienta:
     # HU7: costo de compra de una unidad. Opcional (las herramientas ya
     # cargadas no lo tienen); cada cambio queda en el historial de costos.
     costo_unitario: Optional[Decimal] = None
+    # HU8: a qué proveedor se le compra (opcional). Solo se puede asignar
+    # un proveedor activo.
+    proveedor_id: Optional[int] = None
     # Los asigna la base al guardar; None en una herramienta nueva.
     creado_en: Optional[datetime] = None
     actualizado_en: Optional[datetime] = None
+    # Solo lectura, para mostrar; lo completa el repositorio.
+    proveedor_nombre: Optional[str] = None
 
 
 @dataclass(frozen=True)

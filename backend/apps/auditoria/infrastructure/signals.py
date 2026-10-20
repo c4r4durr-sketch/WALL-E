@@ -25,6 +25,7 @@ MODELOS_AUDITADOS = [
     "usuarios.Usuario",
     "usuarios.Sucursal",
     "catalogo.Herramienta",
+    "proveedores.Proveedor",
     "movimientos.Movimiento",
     "transferencias.Transferencia",
 ]

@@ -16,12 +16,15 @@ en el modelo:
     carga o lo cambia; una vez cargado no se puede quitar, solo
     reemplazar; y cada cambio queda en el historial de costos con fecha y
     usuario. La vista ejecuta alta y edición dentro de una transacción:
-    la herramienta y su fila de historial se guardan juntas o ninguna.
+    la herramienta y su fila de historial se guardan juntas o ninguna;
+  - HU8: el proveedor asignado debe existir y estar activo (una
+    herramienta que ya tenía un proveedor luego desactivado lo conserva).
 """
 
 from dataclasses import fields, replace
 from typing import Any, Optional
 
+from apps.proveedores.domain.repositories import ProveedorRepository
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.domain.value_objects import Rol
 
@@ -36,7 +39,8 @@ from ..domain.repositories import HerramientaRepository, HistorialCostoRepositor
 
 # Campos que el usuario puede cargar/editar (id y fechas los pone el sistema).
 CAMPOS_EDITABLES = {
-    f.name for f in fields(Herramienta) if f.name not in {"id", "creado_en", "actualizado_en"}
+    f.name for f in fields(Herramienta)
+    if f.name not in {"id", "creado_en", "actualizado_en", "proveedor_nombre"}
 }
 CAMPOS_NO_NEGATIVOS = ["demanda_anual", "costo_pedido", "costo_almacenamiento_unitario", "tiempo_entrega_dias"]
 
@@ -83,6 +87,16 @@ def _verificar_cambio_de_costo(actor: Actor, anterior: Optional[Herramienta], nu
     return True
 
 
+def _verificar_proveedor(
+    proveedores: ProveedorRepository, anterior: Optional[Herramienta], nueva: Herramienta
+) -> None:
+    if nueva.proveedor_id is None or (anterior and anterior.proveedor_id == nueva.proveedor_id):
+        return
+    proveedor = proveedores.obtener_por_id(nueva.proveedor_id)
+    if proveedor is None or not proveedor.activo:
+        raise DatosHerramientaInvalidosError({"proveedor": "El proveedor no existe o está inactivo."})
+
+
 def _registrar_cambio_de_costo(
     historial: HistorialCostoRepository, actor: Actor, anterior: Optional[Herramienta], guardada: Herramienta
 ) -> None:
@@ -118,6 +132,7 @@ def registrar_herramienta(
     *,
     actor: Actor,
     historial: HistorialCostoRepository,
+    proveedores: ProveedorRepository,
 ) -> Herramienta:
     nueva = Herramienta(
         id=None,
@@ -125,6 +140,7 @@ def registrar_herramienta(
     )
     nueva = _validar(nueva)
     _verificar_codigo_unico(repo, nueva)
+    _verificar_proveedor(proveedores, None, nueva)
     cambia_costo = _verificar_cambio_de_costo(actor, None, nueva)
     guardada = repo.guardar(nueva)
     if cambia_costo:
@@ -139,6 +155,7 @@ def actualizar_herramienta(
     *,
     actor: Actor,
     historial: HistorialCostoRepository,
+    proveedores: ProveedorRepository,
 ) -> Herramienta:
     """Aplica solo los campos recibidos (sirve para PUT y PATCH) y valida
     el estado final de la herramienta, no solo lo que cambió."""
@@ -148,6 +165,7 @@ def actualizar_herramienta(
     )
     actualizada = _validar(actualizada)
     _verificar_codigo_unico(repo, actualizada)
+    _verificar_proveedor(proveedores, actual, actualizada)
     cambia_costo = _verificar_cambio_de_costo(actor, actual, actualizada)
     guardada = repo.guardar(actualizada)
     if cambia_costo:
