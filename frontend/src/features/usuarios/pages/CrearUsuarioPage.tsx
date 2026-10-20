@@ -1,14 +1,11 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
 import { Rol } from '../../../shared/types/roles'
 import { useSucursales } from '../hooks/useSucursales'
 import { useCrearUsuario } from '../hooks/useCrearUsuario'
-
-const ROL_LABEL: Record<Rol, string> = {
-  ADMINISTRADOR: 'Administrador',
-  SUPERVISOR: 'Supervisor',
-  EMPLEADO: 'Empleado',
-}
+import { ROL_LABEL } from '../roles'
+import { erroresPorCampo, mensajeDeError } from '../../../shared/api/errores'
 
 type FormState = {
   username: string
@@ -55,9 +52,8 @@ function validar(form: FormState): Errores {
 }
 
 export function CrearUsuarioPage() {
-  const navigate = useNavigate()
   const { data: sucursales } = useSucursales()
-  const { mutate, isPending, error, isSuccess } = useCrearUsuario()
+  const { mutate, isPending, error, isSuccess, reset } = useCrearUsuario()
 
   const [form, setForm] = useState<FormState>({
     username: '',
@@ -68,10 +64,19 @@ export function CrearUsuarioPage() {
     sucursal: '',
   })
   const [errores, setErrores] = useState<Errores>({})
+  // Errores del backend (usuario repetido, contraseña débil...) junto a su
+  // campo; los del formulario tienen prioridad mientras se corrigen.
+  const erroresServidor = erroresPorCampo(error) as Errores
+  const visibles: Errores = { ...erroresServidor, ...errores }
+  const errorGeneral =
+    error && Object.keys(erroresServidor).length === 0
+      ? mensajeDeError(error, 'No se pudo crear la cuenta. Intenta de nuevo.')
+      : null
 
   // Actualiza un campo y limpia su error mientras el usuario escribe
   function setCampo<K extends keyof FormState>(campo: K, valor: FormState[K]) {
     setForm((prev) => ({ ...prev, [campo]: valor }))
+    if (isSuccess) reset()
     if (errores[campo]) {
       setErrores((prev) => ({ ...prev, [campo]: undefined }))
     }
@@ -91,24 +96,23 @@ export function CrearUsuarioPage() {
       last_name: form.last_name.trim(),
       rol: form.rol,
       sucursal: form.rol === Rol.ADMINISTRADOR ? null : Number(form.sucursal),
+    }, {
+      onSuccess: () => setForm((prev) => ({ ...prev, username: '', password: '', first_name: '', last_name: '' })),
     })
   }
 
   const inputClass = (campo: keyof FormState) =>
     `w-full rounded-md border px-3 py-2 text-sm ${
-      errores[campo] ? 'border-red-500' : 'border-slate-300'
+      visibles[campo] ? 'border-red-500' : 'border-slate-300'
     }`
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="mb-4 text-sm text-slate-500 hover:underline"
-        >
-          ← Volver
-        </button>
+        <Link to="/usuarios" className="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 hover:underline">
+          <ArrowLeft size={14} aria-hidden />
+          Volver a cuentas
+        </Link>
         <h1 className="mb-4 text-xl font-semibold text-slate-800">Crear cuenta nueva</h1>
 
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
@@ -119,7 +123,7 @@ export function CrearUsuarioPage() {
               onChange={(e) => setCampo('username', e.target.value)}
               className={inputClass('username')}
             />
-            <MensajeError mensaje={errores.username} />
+            <MensajeError mensaje={visibles.username} />
           </div>
 
           <div>
@@ -130,7 +134,7 @@ export function CrearUsuarioPage() {
               onChange={(e) => setCampo('password', e.target.value)}
               className={inputClass('password')}
             />
-            <MensajeError mensaje={errores.password} />
+            <MensajeError mensaje={visibles.password} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -141,7 +145,7 @@ export function CrearUsuarioPage() {
                 onChange={(e) => setCampo('first_name', e.target.value)}
                 className={inputClass('first_name')}
               />
-              <MensajeError mensaje={errores.first_name} />
+              <MensajeError mensaje={visibles.first_name} />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">Apellido</label>
@@ -150,7 +154,7 @@ export function CrearUsuarioPage() {
                 onChange={(e) => setCampo('last_name', e.target.value)}
                 className={inputClass('last_name')}
               />
-              <MensajeError mensaje={errores.last_name} />
+              <MensajeError mensaje={visibles.last_name} />
             </div>
           </div>
 
@@ -195,13 +199,13 @@ export function CrearUsuarioPage() {
                   </option>
                 ))}
               </select>
-              <MensajeError mensaje={errores.sucursal} />
+              <MensajeError mensaje={visibles.sucursal} />
             </div>
           )}
 
-          {error && (
+          {errorGeneral && (
             <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-              No se pudo crear la cuenta. Revisa los datos.
+              {errorGeneral}
             </p>
           )}
           {isSuccess && (

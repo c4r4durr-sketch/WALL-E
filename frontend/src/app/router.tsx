@@ -8,6 +8,7 @@ import { TransferenciasPage } from '../features/transferencias/pages/Transferenc
 import { DashboardPage } from '../features/dashboard/pages/DashboardPage'
 import { IndicadoresPage } from '../features/dashboard/pages/IndicadoresPage'
 import { CrearUsuarioPage } from '../features/usuarios/pages/CrearUsuarioPage'
+import { UsuariosPage } from '../features/usuarios/pages/UsuariosPage'
 import { Rol } from '../shared/types/roles'
 
 // Enrutamiento centralizado: cada feature expone su(s) página(s) en
@@ -15,8 +16,8 @@ import { Rol } from '../shared/types/roles'
 // feature depende de otra para saber por dónde se navega.
 //
 // Todas las rutas salvo /login viven bajo ProtectedRoute (exige sesión
-// JWT válida); /usuarios/nuevo además exige rol ADMINISTRADOR vía
-// RequireRol.
+// JWT válida); /usuarios y /usuarios/nuevo además exigen rol
+// ADMINISTRADOR vía RequireRol.
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   {
@@ -29,7 +30,10 @@ export const router = createBrowserRouter([
       { path: '/indicadores', element: <IndicadoresPage /> },
       {
         element: <RequireRol roles={[Rol.ADMINISTRADOR]} />,
-        children: [{ path: '/usuarios/nuevo', element: <CrearUsuarioPage /> }],
+        children: [
+          { path: '/usuarios', element: <UsuariosPage /> },
+          { path: '/usuarios/nuevo', element: <CrearUsuarioPage /> },
+        ],
       },
     ],
   },

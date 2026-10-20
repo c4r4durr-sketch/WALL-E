@@ -27,7 +27,7 @@ export function DashboardPage() {
     { to: '/movimientos', texto: 'Movimientos de inventario' },
     { to: '/transferencias', texto: 'Transferencias' },
     { to: '/indicadores', texto: 'Indicadores (EOQ / ROP / ABC)' },
-    ...(session.rol === Rol.ADMINISTRADOR ? [{ to: '/usuarios/nuevo', texto: 'Crear nueva cuenta' }] : []),
+    ...(session.rol === Rol.ADMINISTRADOR ? [{ to: '/usuarios', texto: 'Cuentas de usuario' }] : []),
   ]
 
   return (
