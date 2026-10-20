@@ -17,7 +17,7 @@ from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.db.models.signals import post_delete, post_save, pre_save
 
-from ..domain.value_objects import AccionAuditoria
+from ..domain.value_objects import CAMPOS_AUTOMATICOS, AccionAuditoria
 from .contexto import obtener_usuario_actual
 from .models import HistorialModificacion
 
@@ -36,7 +36,7 @@ CAMPOS_EXCLUIDOS = {"password"}
 
 # Si un UPDATE solo cambió estos campos, no se registra: los actualiza
 # Django solo (auto_now, último login) y llenarían el historial de ruido.
-CAMPOS_IGNORADOS_EN_CAMBIOS = {"last_login", "actualizado_en"}
+CAMPOS_IGNORADOS_EN_CAMBIOS = CAMPOS_AUTOMATICOS
 
 
 def _foto(instance) -> dict:

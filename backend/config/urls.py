@@ -27,4 +27,5 @@ urlpatterns = [
     path("api/movimientos/", include("apps.movimientos.interfaces.api.urls")),
     path("api/transferencias/", include("apps.transferencias.interfaces.api.urls")),
     path("api/indicadores/", include("apps.indicadores.interfaces.api.urls")),
+    path("api/auditoria/", include("apps.auditoria.interfaces.api.urls")),
 ]
