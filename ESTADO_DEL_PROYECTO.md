@@ -4,8 +4,9 @@
 > nuevo, leer esto primero. Se actualiza en el mismo commit que cambia algo
 > importante. Versiones exactas del stack: ver `STACK_VERSIONES.md`.
 >
-> **Última actualización: 20/10/2026** (semana 8 del cronograma). Rama de
-> trabajo: `sprint3-cierre`.
+> **Última actualización: 20/10/2026, bloque e-g** (semana 8 del
+> cronograma). Rama de trabajo: `sprint3-cierre` (los commits del bloque
+> e-g están solo en local, sin push).
 
 ## Equipo y materia
 Proyecto académico (Programación III y Análisis y Diseño II) para una
@@ -24,7 +25,7 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | — | Transferencias (HU12) | ✅ adelantado |
 | — | EOQ / ROP / ABC (HU17–HU21) | ✅ adelantado |
 | 8–9 | Deuda: zona horaria, usuarios en 4 capas, HU3, HU7 | ✅ (bloque a-d) |
-| 9–10 | HU8 proveedores, HU14 cierre diario, HU13 pantalla de historial | pendiente (bloque e-g) |
+| 9–10 | HU8 proveedores, HU14 cierre diario, HU13 pantalla de historial | ✅ adelantado (bloque e-g) |
 | — | Adelanto Sprint 4: HU22, HU23, HU25 | pendiente (bloque h-j) |
 | — | Adelanto Sprint 5: HU21 | pendiente (bloque k) |
 
@@ -43,10 +44,9 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
   reciben repositorios como interfaces) → `infrastructure/` (modelos ORM,
   repositorios concretos, migraciones) → `interfaces/api/` (serializers y
   vistas DRF que solo orquestan).
-- Apps: `usuarios`, `catalogo`, `movimientos`, `transferencias`,
-  `indicadores`, `auditoria` (y `proveedores`, en camino: el informe
-  describe 7 módulos). `indicadores` no tiene `infrastructure/` porque no
-  tiene tablas propias.
+- Apps (los 7 módulos del informe): `usuarios`, `catalogo`, `proveedores`,
+  `movimientos`, `transferencias`, `indicadores`, `auditoria`.
+  `indicadores` no tiene `infrastructure/` porque no tiene tablas propias.
 - **Zona horaria**: `TIME_ZONE = "America/La_Paz"` (la base guarda en UTC).
   "Hoy" y los días sin venta se cuentan en hora de La Paz.
 - **Errores de la API, formato único**: 400 → `{campo: ["mensaje"]}`;
@@ -78,29 +78,33 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 |---|---|---|
 | **Login JWT** | `POST /api/token/`, `/api/token/refresh/`; el token lleva rol y sucursal | Login, rutas protegidas por sesión y por rol, **refresh automático** del access (30 min) mientras el refresh (1 día) siga vigente |
 | **Usuarios** (HU3/HU4/HU5) | Use case `gestionar_usuarios.py`, solo Admin: crear, editar, desactivar (no hay DELETE: 405), `POST /usuarios/<id>/restablecer-password/`. Sucursal activa obligatoria para Supervisor y Empleado; username único sin mayúsculas; política de contraseñas de Django (en español); nadie se desactiva ni se quita el rol a sí mismo y siempre queda un Admin activo (409) | `/usuarios` (lista, editar, restablecer contraseña, desactivar/activar) y `/usuarios/nuevo`, solo Admin |
-| **Auditoría** (HU13) | App `auditoria`: signals guardan INSERT/UPDATE/DELETE de Usuario, Sucursal, Herramienta, Movimiento, Transferencia con autor y datos antes/después (sin contraseñas) | Solo lectura en `/admin/` → "Historial de modificaciones" |
+| **Auditoría** (HU13) | App `auditoria` (4 capas): signals guardan INSERT/UPDATE/DELETE de Usuario, Sucursal, Herramienta, Proveedor, Movimiento, Transferencia con autor y datos antes/después (sin contraseñas). `GET /api/auditoria/historial/` (filtros por días, usuario, tabla, acción; paginado; campos cambiados) y `.../opciones/`. Admin y Supervisor; Empleado 403; solo lectura | `/historial` (Admin y Supervisor): filtros, paginación y detalle antes/después. También en `/admin/` |
+| **Proveedores** (HU8) | App `proveedores` (4 capas). CRUD `/api/proveedores/` con `?buscar=` y `?activos=`; nombre único sin mayúsculas, teléfono obligatorio (7–15 dígitos), correo opcional. Solo el Admin escribe (403), todos consultan. Con herramientas asociadas no se elimina (409): se desactiva. Herramienta → proveedor (opcional, solo activos) | `/proveedores`: búsqueda, alta, edición, activar/desactivar, eliminar sin herramientas; selector y columna de proveedor en el catálogo |
 | **Catálogo** (HU6/HU7) | CRUD real con use cases; código único, caja ≥ 1 unidad, datos EOQ/ROP opcionales. Admin/Supervisor escriben, Empleado solo lee (403). **Costo unitario** (HU7): > 0, solo el Admin lo cambia (403), no se puede quitar; cada cambio va a `historial_costos` en la misma transacción; `GET /catalogo/herramientas/<id>/historial-costos/`. Borrar una herramienta con movimientos o historial de costos → **409** | `/catalogo`: alta, edición, borrado con confirmación, columna de costo y panel de historial de costos (todos los roles); el Supervisor ve el costo deshabilitado |
 | **Movimientos** (HU9/HU11) | Entrada, salida, **ajuste** (+/−, motivo obligatorio, solo Admin/Supervisor). Conversión caja→unidad. **Nunca stock negativo** (bloqueo `select_for_update`). Stock derivado de los movimientos. Inmutables para todos (405, `/admin/` solo lectura). Empleado solo opera en su sucursal | `/movimientos`: registro, sección de ajuste aparte, stock por sucursal e historial con motivo |
 | **Fórmulas** | `indicadores/domain/formulas.py`: EOQ, ROP, ajuste a cajas, cajas↔unidades (probadas) | — |
 | **Transferencias** (HU12) | Solicitar (cualquier rol; Empleado solo desde su sucursal) → PENDIENTE sin mover stock. Admin/Supervisor COMPLETAN (salida en origen + entrada en destino, misma validación y bloqueo de stock; si ya no alcanza → 409) o RECHAZAN con motivo. No se completa dos veces (bloqueo). Sin editar ni borrar | `/transferencias`: solicitud, pendientes/todas, completar y rechazar en la fila |
 | **Indicadores** (HU17–HU21) | `GET /api/indicadores/eoq/<id>/` (EOQ con D/S/H del catálogo, ajustado a cajas, + demanda observada de 12 meses), `rop/<id>/` (ROP vs stock total, `requiere_reorden`), `abc/` (por unidades vendidas en 12 meses: A < 80 % acumulado previo, B < 95 %, C resto y sin ventas). Si faltan datos: 200 con `null` + `datos_faltantes` | `/indicadores`: tabla ABC; al elegir una herramienta, "cuánto pedir" (EOQ) y "cuándo pedir" (ROP) |
+| **Cierre diario** (HU14) | `GET /api/indicadores/cierre-diario/?sucursal=&fecha=`: movimientos del día en hora de La Paz, totales por tipo, salidas destacadas. Admin cualquier sucursal, Supervisor la suya, Empleado 403; fecha futura 400 | `/cierre-diario` (Admin y Supervisor): fecha y sucursal, tarjetas de totales, tabla y aviso si no hubo salidas |
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
 
 Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **151 pruebas OK**.
 Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores ni avisos.
 
 ## Pendiente (en orden)
-1. Bloque e-g: HU8 (módulo `proveedores`), HU14 (cierre diario en
-   `indicadores`), HU13 (API y pantalla del historial en `auditoria`).
-2. Bloque h-j: HU22 (reporte de antigüedad), HU23 (promoción), HU25 (Excel).
-3. Bloque k: HU21 (actualizar la demanda anual con la observada).
-4. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
+1. Bloque h-j: HU22 (reporte de antigüedad), HU23 (promoción), HU25 (Excel).
+2. Bloque k: HU21 (actualizar la demanda anual con la observada).
+3. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
    el entorno real; ya no tiene credenciales escritas).
 
 ## Decisiones tomadas (para no volver a discutirlas)
 - Borrar herramienta con movimientos o historial de costos → 409; **no** hay
   campo "activo" en herramientas.
 - Las cuentas de usuario no se borran: se desactivan.
+- Proveedores: solo el Administrador los gestiona; con herramientas no se
+  borran (se desactivan); uno inactivo no se asigna a herramientas nuevas.
+- Cierre diario e historial: Admin y Supervisor (en el cierre, el
+  Supervisor solo ve su sucursal). El "día" siempre es el de La Paz.
 - HU7 es **costo unitario de compra** (no precio de venta); solo el
   Administrador lo cambia; historial propio en `historial_costos` (la
   auditoría genérica sigue registrando todo, pero es oculta).
@@ -136,7 +140,9 @@ Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores ni aviso
 npm run dev                                            # :5173, proxy /api -> :8000
 ```
 Después de cada `git pull`: correr `migrate`. (Al 20/10 la base local tiene
-pendientes las 5 migraciones de nombres del 14/10 y `catalogo.0004`.)
+pendientes las 5 migraciones de nombres del 14/10, `catalogo.0004` y
+`0005`, `proveedores.0001`, `movimientos.0008` y `auditoria.0003`: solo
+agregan tablas, columnas e índices, o renombran; no borran datos.)
 
 ## Convenciones
 - Nada de lógica de negocio en `views.py` ni en `models.py`: va en un use case.

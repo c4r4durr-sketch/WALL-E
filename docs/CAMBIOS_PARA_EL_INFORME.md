@@ -9,7 +9,8 @@
 
 1. **Diccionario de datos de 16 tablas.** No está en el repo ni en el
    informe actual (los capítulos de diseño tienen marcadores "ACA PONES").
-   `docs/DICCIONARIO_DE_DATOS.md` documenta las tablas **reales** (hoy 7).
+   `docs/DICCIONARIO_DE_DATOS.md` documenta las tablas **reales** (hoy 8:
+   se sumó `proveedores`).
    Al pasar el diccionario al informe, partir de ese archivo, no del script
    v7.
 
@@ -61,6 +62,19 @@
    eliminarse", pero el sistema no registra pedidos. Se implementa como
    "un proveedor con **herramientas** asociadas no puede eliminarse; solo
    desactivarse". El tiempo de entrega (HU16) sigue en la herramienta.
+   Otras decisiones de HU8 a documentar (se tomó la opción conservadora):
+   - **quién escribe**: la HU dice "como administrador" y la tabla 9 lista
+     Administrador y Supervisor para todo el módulo. Se aplicó **solo el
+     Administrador** registra, edita, desactiva o elimina; Supervisor y
+     Empleado consultan. Si el Supervisor también debe gestionar
+     proveedores, es un cambio de una línea;
+   - **datos**: nombre y teléfono obligatorios, correo opcional (CA1 nombra
+     los tres; muchos proveedores solo dan teléfono). Nombre único sin
+     distinguir mayúsculas. No se agregaron otros campos (dirección, NIT,
+     persona de contacto) porque el criterio no los pide;
+   - un proveedor **inactivo** no se puede asignar a herramientas nuevas;
+     las que ya lo tenían lo conservan;
+   - cada herramienta tiene **un** proveedor (opcional), no varios.
 
 9. **HU15 está completa.** Cumple sus tres criterios (S y H por
    herramienta, no negativos, "datos faltantes" si no están). El "falta un
@@ -82,3 +96,25 @@
 11. **Zona horaria.** El sistema trabaja en hora de La Paz (UTC-4): "hoy"
     para el cierre diario y los días sin venta se cuentan en esa zona.
     Mencionarlo en los supuestos o en el diseño.
+
+12. **HU14, cierre diario.** CA2 pide "cada salida y el total del día";
+    el sistema muestra **todos** los movimientos del día (entradas,
+    salidas, transferencias y ajustes) con totales por tipo, y destaca las
+    salidas y su total. Ajustar la redacción del criterio o de la tabla 11.
+    Permisos (opción conservadora, tabla 11): Administrador cualquier
+    sucursal, **Supervisor solo la suya**, Empleado no lo ve. Vive en el
+    módulo `indicadores` (ver punto 2).
+
+13. **HU13, historial de modificaciones.** La HU dice "como administrador,
+    quiero un registro **oculto**" y CA4 "solo lectura en el panel de
+    administración"; la tabla 11 lista Administrador y Supervisor. Ahora
+    hay una pantalla propia (`/historial`, solo lectura) para
+    **Administrador y Supervisor**, con filtros por fechas, usuario, tabla
+    y acción, y el detalle de qué cambió. Actualizar CA4 ("solo lectura,
+    visible para Administrador y Supervisor") y quitar "oculto" o aclarar
+    que es oculto para el Empleado. Además, el historial ahora también
+    registra **proveedores**, que no estaban en CA1.
+
+14. **Módulo `auditoria` con cuatro capas.** Ya no está vacío: tiene
+    entidades, repositorio de solo lectura, caso de uso y API. Los signals
+    (infraestructura) siguen siendo los únicos que escriben el historial.
