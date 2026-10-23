@@ -1,18 +1,25 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
+import { Save } from 'lucide-react'
+import { Aviso, Button, Field, Input, Select } from '../../../components/ui'
 import { erroresPorCampo, mensajeDeError } from '../../../shared/api/errores'
 import { useCrearHerramienta } from '../hooks/useCrearHerramienta'
 import { useActualizarHerramienta } from '../hooks/useActualizarHerramienta'
 import { useProveedores } from '../../proveedores/hooks/useProveedores'
+import { FotoDropzone } from './FotoDropzone'
 import type { Herramienta, HerramientaPayload } from '../api/catalogoApi'
 
 // Formulario de alta y edición de herramientas (HU6), incluidos los datos
 // de entrada de EOQ/ROP (HU15/HU16). Esos cuatro son opcionales: un campo
 // vacío se envía como null y el indicador correspondiente queda sin
-// calcular hasta que se complete.
+// calcular hasta que se complete. Vive dentro del panel lateral del
+// catálogo; las secciones van sobre superficie sólida (nunca vidrio).
 //
 // Con `herramienta` funciona en modo edición (precargado, PUT al guardar);
-// sin ella, en modo alta. El padre lo monta con una `key` distinta por
-// herramienta para que el estado se reinicie al cambiar de una a otra.
+// sin ella, en modo alta. El padre lo monta con una `key` distinta cada
+// vez que se abre, así el estado arranca limpio.
+//
+// Foto: obligatoria en el alta (el backend responde 400 sin ella); en la
+// edición se puede reemplazar.
 //
 // HU7: el costo unitario solo lo cambia el Administrador; para el
 // Supervisor el campo se ve deshabilitado y se reenvía sin cambios (el
@@ -54,16 +61,27 @@ function numeroONull(valor: string): number | null {
   return valor.trim() === '' ? null : Number(valor)
 }
 
+function Seccion({ titulo, descripcion, children }: { titulo: string; descripcion?: string; children: ReactNode }) {
+  return (
+    <section className="rounded-card bg-surf p-5 shadow-sh">
+      <h3 className="text-sm font-semibold text-ink">{titulo}</h3>
+      {descripcion && <p className="mt-0.5 text-xs text-muted">{descripcion}</p>}
+      <div className="mt-4">{children}</div>
+    </section>
+  )
+}
+
 interface Props {
   herramienta?: Herramienta | null
-  onTerminar?: () => void
+  onTerminar: () => void
   puedeCambiarCosto: boolean
 }
 
 export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: Props) {
   const editando = Boolean(herramienta)
   const [form, setForm] = useState<FormState>(herramienta ? aFormulario(herramienta) : FORM_VACIO)
-  const [erroresLocales, setErroresLocales] = useState<Partial<Record<CampoForm, string>>>({})
+  const [foto, setFoto] = useState<Blob | null>(null)
+  const [erroresLocales, setErroresLocales] = useState<Partial<Record<CampoForm | 'imagen', string>>>({})
   // HU8: solo se ofrecen proveedores activos; si la herramienta ya tiene
   // uno que luego se desactivó, se muestra igual para no perderlo al guardar.
   const { data: proveedoresActivos } = useProveedores({ activos: true })
@@ -71,7 +89,7 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
     herramienta?.proveedor != null && proveedoresActivos && !proveedoresActivos.some((p) => p.id === herramienta.proveedor)
   const crear = useCrearHerramienta()
   const actualizar = useActualizarHerramienta()
-  const { isPending, error, isSuccess, reset } = editando ? actualizar : crear
+  const { isPending, error, reset } = editando ? actualizar : crear
   // Los del backend (400 por campo) y los del formulario, que tienen
   // prioridad mientras se corrigen.
   const erroresServidor = erroresPorCampo(error)
@@ -80,14 +98,22 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
   function cambiar(campo: CampoForm, valor: string) {
     setForm({ ...form, [campo]: valor })
     if (erroresLocales[campo]) setErroresLocales({ ...erroresLocales, [campo]: undefined })
-    if (isSuccess) reset()
+    if (error) reset()
+  }
+
+  function cambiarFoto(nueva: Blob | null) {
+    setFoto(nueva)
+    if (erroresLocales.imagen) setErroresLocales({ ...erroresLocales, imagen: undefined })
   }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    const locales: typeof erroresLocales = {}
     const costo = numeroONull(form.costo_unitario)
-    if (costo !== null && !(costo > 0)) {
-      setErroresLocales({ costo_unitario: 'El costo unitario debe ser un número mayor que cero.' })
+    if (costo !== null && !(costo > 0)) locales.costo_unitario = 'El costo unitario debe ser un número mayor que cero.'
+    if (!editando && !foto) locales.imagen = 'La foto del producto es obligatoria.'
+    if (Object.keys(locales).length > 0) {
+      setErroresLocales(locales)
       return
     }
     const payload: HerramientaPayload = {
@@ -103,35 +129,28 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
       proveedor: numeroONull(form.proveedor),
     }
     if (herramienta) {
-      actualizar.mutate({ id: herramienta.id, ...payload }, { onSuccess: () => onTerminar?.() })
-    } else {
-      crear.mutate(payload, { onSuccess: () => setForm(FORM_VACIO) })
+      actualizar.mutate({ id: herramienta.id, ...payload, imagen: foto }, { onSuccess: onTerminar })
+    } else if (foto) {
+      crear.mutate({ ...payload, imagen: foto }, { onSuccess: onTerminar })
     }
   }
 
   function campo(
     nombre: CampoForm,
     etiqueta: string,
-    props: { type?: string; step?: string; ayuda?: string; disabled?: boolean } = {},
+    props: { type?: string; step?: string; ayuda?: string; disabled?: boolean; opcional?: boolean } = {},
   ) {
     return (
-      <div>
-        <label htmlFor={nombre} className="mb-1 block text-sm font-medium text-slate-700">
-          {etiqueta}
-        </label>
-        <input
-          id={nombre}
+      <Field etiqueta={etiqueta} ayuda={props.ayuda} error={errores[nombre]} opcional={props.opcional}>
+        <Input
           type={props.type ?? 'text'}
           step={props.step}
           min={props.type === 'number' ? 0 : undefined}
           value={form[nombre]}
           disabled={props.disabled}
           onChange={(event) => cambiar(nombre, event.target.value)}
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500"
         />
-        {props.ayuda && !errores[nombre] && <p className="mt-1 text-xs text-slate-500">{props.ayuda}</p>}
-        {errores[nombre] && <p className="mt-1 text-xs text-red-600">{errores[nombre]}</p>}
-      </div>
+      </Field>
     )
   }
 
@@ -141,82 +160,61 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
       : null
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className={`space-y-4 rounded-lg border bg-white p-6 shadow-sm ${editando ? 'border-blue-300' : 'border-slate-200'}`}
-      noValidate
-    >
-      <h2 className="text-lg font-semibold text-slate-800">
-        {herramienta ? `Editar herramienta ${herramienta.codigo}` : 'Nueva herramienta'}
-      </h2>
+    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      <Seccion titulo="Foto del producto" descripcion={editando ? undefined : 'Obligatoria para dar de alta la herramienta.'}>
+        <FotoDropzone
+          actual={herramienta?.imagen ?? null}
+          nombre={form.nombre}
+          onCambiar={cambiarFoto}
+          error={errores.imagen}
+        />
+      </Seccion>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {campo('codigo', 'Código *')}
-        {campo('nombre', 'Nombre *')}
-        {campo('modelo', 'Modelo')}
-        {campo('unidades_por_caja', 'Unidades por caja *', { type: 'number', step: '1' })}
-        {campo('costo_unitario', 'Costo unitario de compra', {
-          type: 'number',
-          step: '0.01',
-          disabled: !puedeCambiarCosto,
-          ayuda: puedeCambiarCosto
-            ? 'Cada cambio queda en el historial de costos.'
-            : 'Solo el Administrador puede cambiarlo.',
-        })}
-        <div>
-          <label htmlFor="proveedor" className="mb-1 block text-sm font-medium text-slate-700">Proveedor</label>
-          <select
-            id="proveedor"
-            value={form.proveedor}
-            onChange={(event) => cambiar('proveedor', event.target.value)}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-          >
-            <option value="">Sin proveedor</option>
-            {proveedorActualInactivo && herramienta && (
-              <option value={String(herramienta.proveedor)}>{herramienta.proveedor_nombre} (inactivo)</option>
-            )}
-            {proveedoresActivos?.map((p) => (
-              <option key={p.id} value={String(p.id)}>{p.nombre}</option>
-            ))}
-          </select>
-          {errores.proveedor && <p className="mt-1 text-xs text-red-600">{errores.proveedor}</p>}
+      <Seccion titulo="Datos de la herramienta">
+        <div className="grid grid-cols-2 gap-4">
+          {campo('codigo', 'Código')}
+          {campo('nombre', 'Nombre')}
+          {campo('modelo', 'Modelo', { opcional: true })}
+          {campo('unidades_por_caja', 'Unidades por caja', { type: 'number', step: '1' })}
+          {campo('costo_unitario', 'Costo unitario de compra', {
+            type: 'number',
+            step: '0.01',
+            opcional: true,
+            disabled: !puedeCambiarCosto,
+            ayuda: puedeCambiarCosto
+              ? 'Cada cambio queda en el historial de costos.'
+              : 'Solo el Administrador puede cambiarlo.',
+          })}
+          <Field etiqueta="Proveedor" error={errores.proveedor} opcional>
+            <Select value={form.proveedor} onChange={(event) => cambiar('proveedor', event.target.value)}>
+              <option value="">Sin proveedor</option>
+              {proveedorActualInactivo && herramienta && (
+                <option value={String(herramienta.proveedor)}>{herramienta.proveedor_nombre} (inactivo)</option>
+              )}
+              {proveedoresActivos?.map((p) => (
+                <option key={p.id} value={String(p.id)}>{p.nombre}</option>
+              ))}
+            </Select>
+          </Field>
         </div>
-      </div>
+      </Seccion>
 
-      <fieldset className="rounded-md border border-slate-200 p-4">
-        <legend className="px-1 text-sm font-medium text-slate-700">Datos para EOQ / Punto de reorden (opcionales)</legend>
-        <div className="grid gap-3 sm:grid-cols-2">
+      <Seccion titulo="Datos para EOQ y punto de reorden" descripcion="Opcionales: sin ellos el indicador queda sin calcular.">
+        <div className="grid grid-cols-2 gap-4">
           {campo('demanda_anual', 'Demanda anual (unidades)', { type: 'number', step: '1', ayuda: 'D en la fórmula EOQ.' })}
           {campo('costo_pedido', 'Costo por pedido', { type: 'number', step: '0.01', ayuda: 'S: costo fijo de cada pedido.' })}
-          {campo('costo_almacenamiento_unitario', 'Costo de almacenamiento por unidad/año', { type: 'number', step: '0.01', ayuda: 'H en la fórmula EOQ.' })}
+          {campo('costo_almacenamiento_unitario', 'Costo de almacenar 1 unidad al año', { type: 'number', step: '0.01', ayuda: 'H en la fórmula EOQ.' })}
           {campo('tiempo_entrega_dias', 'Tiempo de entrega (días)', { type: 'number', step: '1', ayuda: 'Para el punto de reorden.' })}
         </div>
-      </fieldset>
+      </Seccion>
 
-      {errorGeneral && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errorGeneral}</p>
-      )}
-      {isSuccess && !editando && (
-        <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">Herramienta guardada correctamente.</p>
-      )}
+      {errorGeneral && <Aviso tono="error">{errorGeneral}</Aviso>}
 
-      <div className="flex gap-3">
-        <button
-          type="submit"
-          disabled={isPending}
-          className="flex-1 rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-        >
-          {isPending ? 'Guardando...' : editando ? 'Guardar cambios' : 'Guardar herramienta'}
-        </button>
-        {editando && (
-          <button
-            type="button"
-            onClick={onTerminar}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
-            Cancelar
-          </button>
-        )}
+      <div className="flex justify-end gap-2 pt-2">
+        <Button variante="ghost" onClick={onTerminar}>Cancelar</Button>
+        <Button type="submit" variante="primary" cargando={isPending} icono={<Save size={16} aria-hidden />}>
+          {editando ? 'Guardar cambios' : 'Guardar herramienta'}
+        </Button>
       </div>
     </form>
   )

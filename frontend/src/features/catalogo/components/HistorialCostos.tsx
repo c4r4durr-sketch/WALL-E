@@ -1,71 +1,54 @@
-import { History, X } from 'lucide-react'
+import { History } from 'lucide-react'
+import { Aviso, Button, EmptyState, SkeletonFilas } from '../../../components/ui'
 import { fechaHora, monto } from '../../../shared/formato'
 import { useHistorialCostos } from '../hooks/useHistorialCostos'
 import type { Herramienta } from '../api/catalogoApi'
 
 // HU7: cambios del costo unitario de una herramienta, del más reciente al
 // más antiguo, con quién y cuándo los hizo. Solo lectura (todos los roles).
+// Se muestra en el panel lateral del catálogo.
 
-interface Props {
-  herramienta: Herramienta
-  onCerrar: () => void
-}
-
-export function HistorialCostos({ herramienta, onCerrar }: Props) {
+export function HistorialCostos({ herramienta }: { herramienta: Herramienta }) {
   const { data: cambios, isLoading, isError, refetch } = useHistorialCostos(herramienta.id)
 
-  return (
-    <section className="space-y-3 rounded-lg border border-slate-300 bg-white p-6 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h2 className="inline-flex items-center gap-2 text-lg font-semibold text-slate-800">
-          <History size={18} aria-hidden />
-          Historial de costos · {herramienta.codigo} {herramienta.nombre}
-        </h2>
-        <button
-          type="button"
-          onClick={onCerrar}
-          title="Cerrar"
-          aria-label="Cerrar historial"
-          className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
-        >
-          <X size={18} aria-hidden />
-        </button>
+  if (isLoading) {
+    return (
+      <div className="overflow-hidden rounded-card bg-surf shadow-sh">
+        <SkeletonFilas filas={4} columnas={3} />
       </div>
+    )
+  }
+  if (isError) {
+    return (
+      <Aviso tono="error" accion={<Button tamano="sm" onClick={() => refetch()}>Reintentar</Button>}>
+        No se pudo cargar el historial.
+      </Aviso>
+    )
+  }
+  if (!cambios || cambios.length === 0) {
+    return (
+      <div className="rounded-card bg-surf shadow-sh">
+        <EmptyState compacto icono={History} titulo="Sin costos cargados" ayuda="Todavía no se cargó un costo para esta herramienta." />
+      </div>
+    )
+  }
 
-      {isLoading && <p className="text-sm text-slate-500">Cargando...</p>}
-      {isError && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          No se pudo cargar el historial.{' '}
-          <button type="button" onClick={() => refetch()} className="font-medium underline">Reintentar</button>
-        </p>
-      )}
-      {cambios?.length === 0 && (
-        <p className="text-sm text-slate-500">Todavía no se cargó un costo para esta herramienta.</p>
-      )}
-      {cambios && cambios.length > 0 && (
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-100 text-slate-600">
-            <tr>
-              <th className="px-3 py-2">Fecha</th>
-              <th className="px-3 py-2 text-right">Costo anterior</th>
-              <th className="px-3 py-2 text-right">Costo nuevo</th>
-              <th className="px-3 py-2">Usuario</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cambios.map((c) => (
-              <tr key={c.id} className="border-t border-slate-100">
-                <td className="px-3 py-2">{fechaHora(c.fecha)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {c.costo_anterior === null ? <span className="text-slate-400">Primer costo</span> : monto(c.costo_anterior)}
-                </td>
-                <td className="px-3 py-2 text-right font-medium tabular-nums">{monto(c.costo_nuevo)}</td>
-                <td className="px-3 py-2">{c.usuario}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
+  return (
+    <ol className="space-y-2.5">
+      {cambios.map((c) => (
+        <li key={c.id} className="flex items-center justify-between gap-4 rounded-card bg-surf px-5 py-4 shadow-sh">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-ink">{c.usuario}</p>
+            <p className="text-xs text-muted tabular-nums">{fechaHora(c.fecha)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[17px] font-bold tracking-[-0.03em] text-ink tabular-nums">{monto(c.costo_nuevo)}</p>
+            <p className="text-xs text-muted tabular-nums">
+              {c.costo_anterior === null ? 'Primer costo' : `antes ${monto(c.costo_anterior)}`}
+            </p>
+          </div>
+        </li>
+      ))}
+    </ol>
   )
 }

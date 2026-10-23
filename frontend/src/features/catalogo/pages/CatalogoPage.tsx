@@ -1,9 +1,32 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo, useState } from 'react'
 import { isAxiosError } from 'axios'
-import { History } from 'lucide-react'
+import { Boxes, History, LayoutGrid, List, Pencil, Plus, SearchX, Trash2 } from 'lucide-react'
+import {
+  Aparecer,
+  Aviso,
+  Badge,
+  Button,
+  Card,
+  ConfirmModal,
+  EmptyState,
+  IconButton,
+  PageHeader,
+  ProductImage,
+  SearchInput,
+  SegmentedControl,
+  SidePanel,
+  SkeletonFilas,
+  SkeletonTarjetas,
+  Table,
+  THead,
+  Td,
+  Th,
+  Tr,
+} from '../../../components/ui'
 import { getSession } from '../../auth/session'
 import { monto } from '../../../shared/formato'
+import { usePreferencia } from '../../../shared/hooks/usePreferencia'
+import { CeldaHerramienta } from '../components/CeldaHerramienta'
 import { HerramientaForm } from '../components/HerramientaForm'
 import { HistorialCostos } from '../components/HistorialCostos'
 import { useHerramientas } from '../hooks/useHerramientas'
@@ -11,12 +34,30 @@ import { useEliminarHerramienta } from '../hooks/useEliminarHerramienta'
 import { puedeCambiarCosto, puedeEditarCatalogo } from '../permisos'
 import type { Herramienta } from '../api/catalogoApi'
 
-// Catálogo de herramientas (HU6): listado para todos los roles; alta,
-// edición y borrado solo para Administrador y Supervisor (el Empleado ve
-// la tabla sin formulario ni botones). HU7: el costo unitario lo cambia
-// solo el Administrador; su historial lo consultan todos.
-function mostrar(valor: number | null) {
-  return valor ?? <span className="text-slate-400">—</span>
+// Catálogo de herramientas (HU6): cuadrícula de tarjetas con foto (o
+// lista), búsqueda y filtros, para todos los roles; alta, edición y
+// borrado solo para Administrador y Supervisor (el Empleado no ve esos
+// botones), en un panel lateral. HU7: el costo unitario lo cambia solo el
+// Administrador; su historial lo consultan todos.
+
+type Filtro = 'todas' | 'listas' | 'faltan' | 'sin-foto'
+type Vista = 'cuadricula' | 'lista'
+type Panel = { tipo: 'nueva' } | { tipo: 'editar' | 'historial'; herramienta: Herramienta }
+
+function faltanDatosEOQ(h: Herramienta): boolean {
+  return [h.demanda_anual, h.costo_pedido, h.costo_almacenamiento_unitario, h.tiempo_entrega_dias].some((v) => v === null)
+}
+
+const FILTROS: Record<Filtro, (h: Herramienta) => boolean> = {
+  todas: () => true,
+  listas: (h) => !faltanDatosEOQ(h),
+  faltan: faltanDatosEOQ,
+  'sin-foto': (h) => !h.imagen,
+}
+
+function coincide(h: Herramienta, texto: string): boolean {
+  const buscado = texto.toLocaleLowerCase('es')
+  return [h.codigo, h.nombre, h.modelo, h.proveedor_nombre ?? ''].some((v) => v.toLocaleLowerCase('es').includes(buscado))
 }
 
 function mensajeErrorBorrado(error: unknown): string {
@@ -26,176 +67,262 @@ function mensajeErrorBorrado(error: unknown): string {
   return 'No se pudo eliminar la herramienta. Intenta de nuevo.'
 }
 
+const vacio = <span className="text-muted">—</span>
+
+interface AccionesProps {
+  herramienta: Herramienta
+  puedeEditar: boolean
+  onAbrir: (panel: Panel) => void
+  onEliminar: (h: Herramienta) => void
+}
+
+function Acciones({ herramienta: h, puedeEditar, onAbrir, onEliminar }: AccionesProps) {
+  return (
+    <div className="flex items-center justify-end gap-0.5">
+      <IconButton etiqueta={`Historial de costos de ${h.nombre}`} onClick={() => onAbrir({ tipo: 'historial', herramienta: h })}>
+        <History size={17} aria-hidden />
+      </IconButton>
+      {puedeEditar && (
+        <>
+          <IconButton etiqueta={`Editar ${h.nombre}`} onClick={() => onAbrir({ tipo: 'editar', herramienta: h })}>
+            <Pencil size={17} aria-hidden />
+          </IconButton>
+          <IconButton etiqueta={`Eliminar ${h.nombre}`} peligro onClick={() => onEliminar(h)}>
+            <Trash2 size={17} aria-hidden />
+          </IconButton>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function CatalogoPage() {
   const session = getSession()
   const puedeEditar = session ? puedeEditarCatalogo(session.rol) : false
-  const { data: herramientas, isLoading, isError } = useHerramientas()
+  const { data: herramientas, isLoading, isError, refetch } = useHerramientas()
   const eliminar = useEliminarHerramienta()
-  const [editando, setEditando] = useState<Herramienta | null>(null)
-  const [confirmandoId, setConfirmandoId] = useState<number | null>(null)
-  const [viendoHistorial, setViendoHistorial] = useState<Herramienta | null>(null)
+  const [buscar, setBuscar] = useState('')
+  const [filtro, setFiltro] = useState<Filtro>('todas')
+  const [vista, setVista] = usePreferencia<Vista>('catalogo-vista', 'cuadricula')
+  // El contenido del panel se conserva mientras se cierra (animación);
+  // `clave` reinicia el formulario cada vez que se abre.
+  const [panel, setPanel] = useState<Panel & { clave: number }>({ tipo: 'nueva', clave: 0 })
+  const [panelAbierto, setPanelAbierto] = useState(false)
+  const [porEliminar, setPorEliminar] = useState<Herramienta | null>(null)
 
-  function empezarEdicion(herramienta: Herramienta) {
-    setEditando(herramienta)
-    setViendoHistorial(null)
-    setConfirmandoId(null)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+  const visibles = useMemo(
+    () => (herramientas ?? []).filter((h) => FILTROS[filtro](h) && (!buscar.trim() || coincide(h, buscar.trim()))),
+    [herramientas, filtro, buscar],
+  )
+
+  function abrir(nuevo: Panel) {
+    setPanel((anterior) => ({ ...nuevo, clave: anterior.clave + 1 }))
+    setPanelAbierto(true)
   }
 
-  function verHistorial(herramienta: Herramienta) {
-    setViendoHistorial(herramienta)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+  function pedirBorrado(h: Herramienta) {
+    eliminar.reset()
+    setPorEliminar(h)
   }
 
-  function confirmarBorrado(id: number) {
-    eliminar.mutate(id, {
-      onSettled: () => setConfirmandoId(null),
-      onSuccess: () => {
-        if (editando?.id === id) setEditando(null)
-      },
-    })
+  function confirmarBorrado() {
+    if (!porEliminar) return
+    eliminar.mutate(porEliminar.id, { onSuccess: () => setPorEliminar(null) })
   }
 
-  const columnas = 11
+  const tituloPanel =
+    panel.tipo === 'nueva' ? 'Nueva herramienta' : panel.tipo === 'editar' ? `Editar ${panel.herramienta.nombre}` : 'Historial de costos'
+  const descripcionPanel =
+    panel.tipo === 'historial' ? `${panel.herramienta.codigo} · ${panel.herramienta.nombre}` : panel.tipo === 'editar' ? panel.herramienta.codigo : undefined
+
+  const hayFiltro = filtro !== 'todas' || buscar.trim() !== ''
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div>
-          <Link to="/" className="text-sm text-slate-500 hover:underline">
-            ← Volver
-          </Link>
-          <h1 className="mt-2 text-xl font-semibold text-slate-800">Catálogo de herramientas</h1>
-          {!puedeEditar && (
-            <p className="mt-1 text-sm text-slate-500">Solo consulta: el alta y la edición las hace un Administrador o Supervisor.</p>
-          )}
-        </div>
+    <>
+      <PageHeader
+        migas={['Inventario', 'Catálogo']}
+        titulo="Catálogo"
+        subtitulo={
+          puedeEditar
+            ? 'Herramientas con su foto, proveedor y datos de compra.'
+            : 'Solo consulta: el alta y la edición las hace un Administrador o Supervisor.'
+        }
+        acciones={
+          puedeEditar && (
+            <Button variante="primary" icono={<Plus size={16} aria-hidden />} onClick={() => abrir({ tipo: 'nueva' })}>
+              Nueva herramienta
+            </Button>
+          )
+        }
+      />
 
-        {puedeEditar && (
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchInput
+          etiqueta="Buscar herramienta"
+          placeholder="Buscar por código, nombre, modelo o proveedor"
+          value={buscar}
+          onChange={(e) => setBuscar(e.target.value)}
+          className="w-[340px]"
+        />
+        <SegmentedControl<Filtro>
+          etiqueta="Filtrar herramientas"
+          valor={filtro}
+          onCambiar={setFiltro}
+          opciones={[
+            { valor: 'todas', texto: 'Todas' },
+            { valor: 'listas', texto: 'Con datos EOQ' },
+            { valor: 'faltan', texto: 'Faltan datos' },
+            { valor: 'sin-foto', texto: 'Sin foto' },
+          ]}
+        />
+        <SegmentedControl<Vista>
+          etiqueta="Vista"
+          className="ml-auto"
+          valor={vista}
+          onCambiar={setVista}
+          opciones={[
+            { valor: 'cuadricula', texto: <LayoutGrid size={16} aria-hidden />, etiqueta: 'Vista en tarjetas' },
+            { valor: 'lista', texto: <List size={16} aria-hidden />, etiqueta: 'Vista en lista' },
+          ]}
+        />
+      </div>
+
+      {isError && (
+        <Aviso tono="error" accion={<Button tamano="sm" onClick={() => refetch()}>Reintentar</Button>}>
+          No se pudo cargar el catálogo.
+        </Aviso>
+      )}
+
+      {isLoading &&
+        (vista === 'cuadricula' ? (
+          <SkeletonTarjetas />
+        ) : (
+          <Card sinPadding>
+            <SkeletonFilas filas={6} columnas={6} />
+          </Card>
+        ))}
+
+      {herramientas && visibles.length === 0 && (
+        <Card sinPadding>
+          {hayFiltro ? (
+            <EmptyState
+              icono={SearchX}
+              titulo="Ninguna herramienta coincide"
+              ayuda="Prueba con otro texto o quita el filtro."
+              accion={<Button onClick={() => { setBuscar(''); setFiltro('todas') }}>Ver todas</Button>}
+            />
+          ) : (
+            <EmptyState
+              icono={Boxes}
+              titulo="Todavía no hay herramientas"
+              ayuda={puedeEditar ? 'Carga la primera con su foto y sus datos de compra.' : 'Cuando se carguen, aparecerán acá.'}
+              accion={puedeEditar && <Button icono={<Plus size={16} aria-hidden />} onClick={() => abrir({ tipo: 'nueva' })}>Nueva herramienta</Button>}
+            />
+          )}
+        </Card>
+      )}
+
+      {visibles.length > 0 && vista === 'cuadricula' && (
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5">
+          {visibles.map((h, i) => (
+            <li key={h.id}>
+              <Aparecer indice={i} className="h-full">
+                <Card interactiva sinPadding className="flex h-full flex-col p-3">
+                  <ProductImage src={h.imagen} alt={h.nombre} />
+                  <div className="flex flex-1 flex-col px-2 pt-3.5">
+                    <p className="text-xs font-semibold text-muted">{h.codigo}</p>
+                    <h2 className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-snug tracking-[-0.01em] text-ink">{h.nombre}</h2>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      {[h.modelo, h.proveedor_nombre].filter(Boolean).join(' · ') || 'Sin modelo ni proveedor'}
+                    </p>
+                    <div className="mt-3 flex items-center gap-2">
+                      <span className="text-[17px] font-bold tracking-[-0.03em] text-ink tabular-nums">
+                        {h.costo_unitario === null ? vacio : monto(h.costo_unitario)}
+                      </span>
+                      <span className="text-xs text-muted tabular-nums">· caja de {h.unidades_por_caja}</span>
+                    </div>
+                    <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+                      {faltanDatosEOQ(h) ? <Badge tono="warn">Faltan datos EOQ</Badge> : <Badge tono="ok">Datos EOQ</Badge>}
+                      <Acciones herramienta={h} puedeEditar={puedeEditar} onAbrir={abrir} onEliminar={pedirBorrado} />
+                    </div>
+                  </div>
+                </Card>
+              </Aparecer>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {visibles.length > 0 && vista === 'lista' && (
+        <Card sinPadding className="overflow-hidden">
+          <Table>
+            <THead>
+              <tr>
+                <Th>Herramienta</Th>
+                <Th>Proveedor</Th>
+                <Th numerico>Unid./caja</Th>
+                <Th numerico>Costo unit.</Th>
+                <Th numerico>Demanda anual</Th>
+                <Th numerico>Costo pedido</Th>
+                <Th numerico>Costo almac.</Th>
+                <Th numerico>Entrega (días)</Th>
+                <Th><span className="sr-only">Acciones</span></Th>
+              </tr>
+            </THead>
+            <tbody>
+              {visibles.map((h) => (
+                <Tr key={h.id}>
+                  <Td className="max-w-[280px]"><CeldaHerramienta codigo={h.codigo} nombre={h.nombre} imagen={h.imagen} /></Td>
+                  <Td>{h.proveedor_nombre ?? vacio}</Td>
+                  <Td numerico>{h.unidades_por_caja}</Td>
+                  <Td numerico className="font-semibold">{h.costo_unitario === null ? vacio : monto(h.costo_unitario)}</Td>
+                  <Td numerico>{h.demanda_anual ?? vacio}</Td>
+                  <Td numerico>{h.costo_pedido ?? vacio}</Td>
+                  <Td numerico>{h.costo_almacenamiento_unitario ?? vacio}</Td>
+                  <Td numerico>{h.tiempo_entrega_dias ?? vacio}</Td>
+                  <Td><Acciones herramienta={h} puedeEditar={puedeEditar} onAbrir={abrir} onEliminar={pedirBorrado} /></Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
+      )}
+
+      <SidePanel
+        abierto={panelAbierto}
+        onCerrar={() => setPanelAbierto(false)}
+        titulo={tituloPanel}
+        descripcion={descripcionPanel}
+        ancho={panel.tipo === 'historial' ? 'md' : 'lg'}
+      >
+        {panel.tipo === 'historial' ? (
+          <HistorialCostos key={panel.clave} herramienta={panel.herramienta} />
+        ) : (
           <HerramientaForm
-            key={editando?.id ?? 'nueva'}
-            herramienta={editando}
-            onTerminar={() => setEditando(null)}
+            key={panel.clave}
+            herramienta={panel.tipo === 'editar' ? panel.herramienta : null}
+            onTerminar={() => setPanelAbierto(false)}
             puedeCambiarCosto={session ? puedeCambiarCosto(session.rol) : false}
           />
         )}
+      </SidePanel>
 
-        {viendoHistorial && (
-          <HistorialCostos
-            key={viendoHistorial.id}
-            herramienta={viendoHistorial}
-            onCerrar={() => setViendoHistorial(null)}
-          />
+      <ConfirmModal
+        abierto={porEliminar !== null}
+        onCerrar={() => setPorEliminar(null)}
+        onConfirmar={confirmarBorrado}
+        titulo="¿Eliminar la herramienta?"
+        textoConfirmar="Eliminar"
+        cargando={eliminar.isPending}
+        error={eliminar.isError ? mensajeErrorBorrado(eliminar.error) : null}
+      >
+        {porEliminar && (
+          <>
+            Se eliminará <strong className="font-semibold text-ink">{porEliminar.codigo} · {porEliminar.nombre}</strong>. Si
+            ya tiene movimientos o historial de costos, no se puede eliminar.
+          </>
         )}
-
-        {eliminar.isError && (
-          <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-            {mensajeErrorBorrado(eliminar.error)}
-          </p>
-        )}
-
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-100 text-slate-600">
-              <tr>
-                <th className="px-3 py-2">Código</th>
-                <th className="px-3 py-2">Nombre</th>
-                <th className="px-3 py-2">Modelo</th>
-                <th className="px-3 py-2">Proveedor</th>
-                <th className="px-3 py-2 text-right">Unid./caja</th>
-                <th className="px-3 py-2 text-right">Costo unit.</th>
-                <th className="px-3 py-2 text-right">Demanda anual</th>
-                <th className="px-3 py-2 text-right">Costo pedido</th>
-                <th className="px-3 py-2 text-right">Costo almac.</th>
-                <th className="px-3 py-2 text-right">Entrega (días)</th>
-                <th className="px-3 py-2 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading && (
-                <tr><td colSpan={columnas} className="px-3 py-4 text-center text-slate-500">Cargando...</td></tr>
-              )}
-              {isError && (
-                <tr><td colSpan={columnas} className="px-3 py-4 text-center text-red-600">No se pudo cargar el catálogo.</td></tr>
-              )}
-              {herramientas?.length === 0 && (
-                <tr><td colSpan={columnas} className="px-3 py-4 text-center text-slate-500">Todavía no hay herramientas cargadas.</td></tr>
-              )}
-              {herramientas?.map((h) => (
-                <tr key={h.id} className={`border-t border-slate-100 ${editando?.id === h.id ? 'bg-blue-50' : ''}`}>
-                  <td className="px-3 py-2 font-medium text-slate-800">{h.codigo}</td>
-                  <td className="px-3 py-2">{h.nombre}</td>
-                  <td className="px-3 py-2">{h.modelo || <span className="text-slate-400">—</span>}</td>
-                  <td className="px-3 py-2">{h.proveedor_nombre ?? <span className="text-slate-400">—</span>}</td>
-                  <td className="px-3 py-2 text-right">{h.unidades_por_caja}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {h.costo_unitario === null ? <span className="text-slate-400">—</span> : monto(h.costo_unitario)}
-                  </td>
-                  <td className="px-3 py-2 text-right">{mostrar(h.demanda_anual)}</td>
-                  <td className="px-3 py-2 text-right">{mostrar(h.costo_pedido)}</td>
-                  <td className="px-3 py-2 text-right">{mostrar(h.costo_almacenamiento_unitario)}</td>
-                  <td className="px-3 py-2 text-right">{mostrar(h.tiempo_entrega_dias)}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right">
-                      {puedeEditar && confirmandoId === h.id ? (
-                        <span className="inline-flex items-center gap-2">
-                          <span className="text-slate-600">¿Eliminar?</span>
-                          <button
-                            type="button"
-                            onClick={() => confirmarBorrado(h.id)}
-                            disabled={eliminar.isPending}
-                            className="font-medium text-red-600 hover:underline disabled:opacity-50"
-                          >
-                            Sí
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmandoId(null)}
-                            className="font-medium text-slate-600 hover:underline"
-                          >
-                            No
-                          </button>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => verHistorial(h)}
-                            title="Historial de costos"
-                            aria-label={`Historial de costos de ${h.codigo}`}
-                            className="rounded-md p-1 text-slate-600 hover:bg-slate-100"
-                          >
-                            <History size={16} aria-hidden />
-                          </button>
-                          {puedeEditar && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => empezarEdicion(h)}
-                                className="font-medium text-blue-600 hover:underline"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  eliminar.reset()
-                                  setConfirmandoId(h.id)
-                                }}
-                                className="font-medium text-red-600 hover:underline"
-                              >
-                                Eliminar
-                              </button>
-                            </>
-                          )}
-                        </span>
-                      )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+      </ConfirmModal>
+    </>
   )
 }
