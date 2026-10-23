@@ -1,15 +1,21 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isAxiosError } from 'axios'
+import { motion, useReducedMotion } from 'motion/react'
+import { LogIn } from 'lucide-react'
+import { Aviso, Button, Field, Input } from '../../../components/ui'
+import { TRANSICION } from '../../../components/ui/movimiento'
 import { useLogin } from '../hooks/useLogin'
 
 // Login real (no mockeado): llama a POST /api/token/ vía useLogin, guarda
 // el token y redirige a "/" si las credenciales son válidas. Si no, muestra
-// el error dentro del formulario (nunca solo en consola).
+// el error dentro del formulario (nunca solo en consola). Se entra con el
+// nombre de usuario.
 export function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const navigate = useNavigate()
+  const reducido = useReducedMotion()
   const { mutate, isPending, error } = useLogin()
 
   function handleSubmit(event: FormEvent) {
@@ -29,53 +35,45 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50">
-      <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="mb-4 text-xl font-semibold text-slate-800">Iniciar sesión</h1>
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          <div>
-            <label htmlFor="username" className="mb-1 block text-sm font-medium text-slate-700">
-              Usuario
-            </label>
-            <input
-              id="username"
+    <main className="flex min-h-screen items-center justify-center p-6">
+      <motion.div
+        className="w-full max-w-[400px] rounded-panel bg-surf p-9 shadow-shh"
+        initial={reducido ? false : { opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={TRANSICION}
+      >
+        <span aria-hidden className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-acc text-lg font-bold text-on-acc">
+          W
+        </span>
+        <h1 className="mt-6 text-[28px] font-bold leading-tight tracking-[-0.035em] text-ink">Iniciar sesión</h1>
+        <p className="mt-1 text-[13px] font-medium text-muted">Walle-Importaciones · inventario multisucursal</p>
+
+        <form onSubmit={handleSubmit} className="mt-8 space-y-4" noValidate>
+          <Field etiqueta="Usuario">
+            <Input
               type="text"
               autoComplete="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               required
               autoFocus
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
             />
-          </div>
-          <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700">
-              Contraseña
-            </label>
-            <input
-              id="password"
+          </Field>
+          <Field etiqueta="Contraseña">
+            <Input
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
             />
-          </div>
-          {errorMessage && (
-            <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-              {errorMessage}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={isPending}
-            className="w-full rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-          >
-            {isPending ? 'Ingresando...' : 'Ingresar'}
-          </button>
+          </Field>
+          {errorMessage && <Aviso tono="error">{errorMessage}</Aviso>}
+          <Button type="submit" variante="primary" cargando={isPending} icono={<LogIn size={16} aria-hidden />} className="mt-2 w-full">
+            Ingresar
+          </Button>
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </main>
   )
 }

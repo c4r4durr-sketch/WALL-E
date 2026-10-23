@@ -1,8 +1,26 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, KeyRound, Pencil, UserCheck, UserPlus, UserX } from 'lucide-react'
+import { KeyRound, Pencil, UserCheck, UserPlus, Users, UserX } from 'lucide-react'
+import {
+  Aviso,
+  Badge,
+  Button,
+  Card,
+  ConfirmModal,
+  EmptyState,
+  IconButton,
+  PageHeader,
+  SidePanel,
+  SkeletonFilas,
+  Table,
+  THead,
+  Td,
+  Th,
+  Tr,
+  clasesBoton,
+  cx,
+} from '../../../components/ui'
 import { getSession } from '../../auth/session'
-import { BotonIcono } from '../../../shared/components/BotonIcono'
 import { mensajeDeError } from '../../../shared/api/errores'
 import { EditarUsuarioForm } from '../components/EditarUsuarioForm'
 import { RestablecerPasswordForm } from '../components/RestablecerPasswordForm'
@@ -15,163 +33,149 @@ import type { Usuario } from '../api/usuariosApi'
 // restablecer la contraseña y desactivar/activar. No se eliminan cuentas:
 // quedan referenciadas por movimientos y el historial.
 
-type Panel = { tipo: 'editar' | 'password'; usuario: Usuario } | null
-
-const COLUMNAS = 6
+type Panel = { tipo: 'editar' | 'password'; usuario: Usuario; clave: number }
 
 export function UsuariosPage() {
   const session = getSession()
   const { data: usuarios, isLoading, isError, refetch } = useUsuarios()
   const cambiarEstado = useEditarUsuario()
-  const [panel, setPanel] = useState<Panel>(null)
-  const [confirmandoId, setConfirmandoId] = useState<number | null>(null)
+  // El contenido del panel se conserva mientras se cierra (animación).
+  const [panel, setPanel] = useState<Panel | null>(null)
+  const [panelAbierto, setPanelAbierto] = useState(false)
+  const [porDesactivar, setPorDesactivar] = useState<Usuario | null>(null)
 
-  function abrir(tipo: 'editar' | 'password', usuario: Usuario) {
-    setPanel({ tipo, usuario })
-    setConfirmandoId(null)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+  function abrir(tipo: Panel['tipo'], usuario: Usuario) {
+    setPanel((anterior) => ({ tipo, usuario, clave: (anterior?.clave ?? 0) + 1 }))
+    setPanelAbierto(true)
   }
 
   function activar(usuario: Usuario, activo: boolean) {
-    cambiarEstado.mutate(
-      { id: usuario.id, is_active: activo },
-      { onSettled: () => setConfirmandoId(null) },
-    )
+    cambiarEstado.mutate({ id: usuario.id, is_active: activo }, { onSuccess: () => setPorDesactivar(null) })
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <Link to="/" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:underline">
-              <ArrowLeft size={14} aria-hidden />
-              Volver
-            </Link>
-            <h1 className="mt-2 text-xl font-semibold text-slate-800">Cuentas de usuario</h1>
-          </div>
-          <Link
-            to="/usuarios/nuevo"
-            className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700"
-          >
+    <>
+      <PageHeader
+        migas={['Administración', 'Cuentas']}
+        titulo="Cuentas"
+        subtitulo="Quién entra al sistema, con qué rol y en qué sucursal."
+        acciones={
+          <Link to="/usuarios/nuevo" className={clasesBoton({ variante: 'primary' })}>
             <UserPlus size={16} aria-hidden />
             Nueva cuenta
           </Link>
-        </div>
+        }
+      />
 
-        {panel?.tipo === 'editar' && (
-          <EditarUsuarioForm key={panel.usuario.id} usuario={panel.usuario} onTerminar={() => setPanel(null)} />
-        )}
-        {panel?.tipo === 'password' && (
-          <RestablecerPasswordForm key={panel.usuario.id} usuario={panel.usuario} onTerminar={() => setPanel(null)} />
-        )}
+      {cambiarEstado.isError && !porDesactivar && (
+        <Aviso tono="error">{mensajeDeError(cambiarEstado.error, 'No se pudo cambiar el estado de la cuenta.')}</Aviso>
+      )}
+      {isError && (
+        <Aviso tono="error" accion={<Button tamano="sm" onClick={() => refetch()}>Reintentar</Button>}>
+          No se pudieron cargar las cuentas.
+        </Aviso>
+      )}
 
-        {cambiarEstado.isError && (
-          <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-            {mensajeDeError(cambiarEstado.error, 'No se pudo cambiar el estado de la cuenta.')}
-          </p>
+      <Card sinPadding className="overflow-hidden">
+        {isLoading && <SkeletonFilas filas={5} columnas={5} />}
+        {usuarios?.length === 0 && (
+          <EmptyState icono={Users} titulo="No hay cuentas registradas" ayuda="Crea la primera cuenta para que alguien pueda entrar." />
         )}
-
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-100 text-slate-600">
+        {usuarios && usuarios.length > 0 && (
+          <Table>
+            <THead>
               <tr>
-                <th className="px-3 py-2">Usuario</th>
-                <th className="px-3 py-2">Nombre</th>
-                <th className="px-3 py-2">Rol</th>
-                <th className="px-3 py-2">Sucursal</th>
-                <th className="px-3 py-2">Estado</th>
-                <th className="px-3 py-2 text-right">Acciones</th>
+                <Th>Usuario</Th>
+                <Th>Nombre</Th>
+                <Th>Rol</Th>
+                <Th>Sucursal</Th>
+                <Th>Estado</Th>
+                <Th><span className="sr-only">Acciones</span></Th>
               </tr>
-            </thead>
+            </THead>
             <tbody>
-              {isLoading && (
-                <tr><td colSpan={COLUMNAS} className="px-3 py-4 text-center text-slate-500">Cargando...</td></tr>
-              )}
-              {isError && (
-                <tr>
-                  <td colSpan={COLUMNAS} className="px-3 py-4 text-center text-red-600">
-                    No se pudieron cargar las cuentas.{' '}
-                    <button type="button" onClick={() => refetch()} className="font-medium underline">Reintentar</button>
-                  </td>
-                </tr>
-              )}
-              {usuarios?.length === 0 && (
-                <tr><td colSpan={COLUMNAS} className="px-3 py-4 text-center text-slate-500">No hay cuentas registradas.</td></tr>
-              )}
-              {usuarios?.map((u) => {
+              {usuarios.map((u) => {
                 const esMiCuenta = session !== null && String(u.id) === String(session.user_id)
-                const seleccionado = panel?.usuario.id === u.id
                 return (
-                  <tr key={u.id} className={`border-t border-slate-100 ${seleccionado ? 'bg-blue-50' : ''} ${u.is_active ? '' : 'text-slate-400'}`}>
-                    <td className="px-3 py-2 font-medium">
+                  <Tr key={u.id} className={cx(!u.is_active && 'text-muted')}>
+                    <Td className="font-semibold">
                       {u.username}
-                      {esMiCuenta && <span className="ml-2 text-xs font-normal text-slate-500">(tú)</span>}
-                    </td>
-                    <td className="px-3 py-2">{`${u.first_name} ${u.last_name}`.trim() || <span className="text-slate-400">—</span>}</td>
-                    <td className="px-3 py-2">{ROL_LABEL[u.rol]}</td>
-                    <td className="px-3 py-2">{u.sucursal_nombre ?? <span className="text-slate-400">—</span>}</td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          u.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-600'
-                        }`}
-                      >
-                        {u.is_active ? 'Activa' : 'Inactiva'}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-right">
-                      {confirmandoId === u.id ? (
-                        <span className="inline-flex items-center gap-2">
-                          <span className="text-slate-600">¿Desactivar? No podrá iniciar sesión.</span>
-                          <button
-                            type="button"
-                            onClick={() => activar(u, false)}
-                            disabled={cambiarEstado.isPending}
-                            className="font-medium text-red-600 hover:underline disabled:opacity-50"
+                      {esMiCuenta && <span className="ml-2 text-xs font-medium text-muted">(tú)</span>}
+                    </Td>
+                    <Td>{`${u.first_name} ${u.last_name}`.trim() || <span className="text-muted">—</span>}</Td>
+                    <Td>{ROL_LABEL[u.rol]}</Td>
+                    <Td>{u.sucursal_nombre ?? <span className="text-muted">—</span>}</Td>
+                    <Td><Badge tono={u.is_active ? 'ok' : 'neutral'}>{u.is_active ? 'Activa' : 'Inactiva'}</Badge></Td>
+                    <Td>
+                      <div className="flex justify-end gap-0.5">
+                        <IconButton etiqueta={`Editar ${u.username}`} onClick={() => abrir('editar', u)}>
+                          <Pencil size={17} aria-hidden />
+                        </IconButton>
+                        <IconButton etiqueta={`Restablecer contraseña de ${u.username}`} onClick={() => abrir('password', u)}>
+                          <KeyRound size={17} aria-hidden />
+                        </IconButton>
+                        {/* Nadie se desactiva a sí mismo (el backend también lo impide). */}
+                        {!esMiCuenta && u.is_active && (
+                          <IconButton
+                            etiqueta={`Desactivar ${u.username}`}
+                            peligro
+                            onClick={() => {
+                              cambiarEstado.reset()
+                              setPorDesactivar(u)
+                            }}
                           >
-                            Sí
-                          </button>
-                          <button type="button" onClick={() => setConfirmandoId(null)} className="font-medium text-slate-600 hover:underline">
-                            No
-                          </button>
-                        </span>
-                      ) : (
-                        <span className="inline-flex gap-1">
-                          <BotonIcono titulo="Editar" onClick={() => abrir('editar', u)}>
-                            <Pencil size={16} aria-hidden />
-                          </BotonIcono>
-                          <BotonIcono titulo="Restablecer contraseña" onClick={() => abrir('password', u)}>
-                            <KeyRound size={16} aria-hidden />
-                          </BotonIcono>
-                          {/* Nadie se desactiva a sí mismo (el backend también lo impide). */}
-                          {!esMiCuenta && u.is_active && (
-                            <BotonIcono
-                              titulo="Desactivar"
-                              peligro
-                              onClick={() => {
-                                cambiarEstado.reset()
-                                setConfirmandoId(u.id)
-                              }}
-                            >
-                              <UserX size={16} aria-hidden />
-                            </BotonIcono>
-                          )}
-                          {!u.is_active && (
-                            <BotonIcono titulo="Activar" onClick={() => activar(u, true)} disabled={cambiarEstado.isPending}>
-                              <UserCheck size={16} aria-hidden />
-                            </BotonIcono>
-                          )}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
+                            <UserX size={17} aria-hidden />
+                          </IconButton>
+                        )}
+                        {!u.is_active && (
+                          <IconButton
+                            etiqueta={`Activar ${u.username}`}
+                            disabled={cambiarEstado.isPending}
+                            onClick={() => activar(u, true)}
+                          >
+                            <UserCheck size={17} aria-hidden />
+                          </IconButton>
+                        )}
+                      </div>
+                    </Td>
+                  </Tr>
                 )
               })}
             </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+          </Table>
+        )}
+      </Card>
+
+      <SidePanel
+        abierto={panelAbierto}
+        onCerrar={() => setPanelAbierto(false)}
+        titulo={panel?.tipo === 'password' ? 'Restablecer contraseña' : 'Editar cuenta'}
+        descripcion={panel?.usuario.username}
+      >
+        {panel?.tipo === 'editar' && (
+          <EditarUsuarioForm key={panel.clave} usuario={panel.usuario} onTerminar={() => setPanelAbierto(false)} />
+        )}
+        {panel?.tipo === 'password' && (
+          <RestablecerPasswordForm key={panel.clave} usuario={panel.usuario} onTerminar={() => setPanelAbierto(false)} />
+        )}
+      </SidePanel>
+
+      <ConfirmModal
+        abierto={porDesactivar !== null}
+        onCerrar={() => setPorDesactivar(null)}
+        onConfirmar={() => porDesactivar && activar(porDesactivar, false)}
+        titulo="¿Desactivar la cuenta?"
+        textoConfirmar="Desactivar"
+        cargando={cambiarEstado.isPending}
+        error={cambiarEstado.isError ? mensajeDeError(cambiarEstado.error, 'No se pudo desactivar la cuenta.') : null}
+      >
+        {porDesactivar && (
+          <>
+            <strong className="font-semibold text-ink">{porDesactivar.username}</strong> no podrá iniciar sesión. Su historial
+            se conserva y la cuenta se puede volver a activar.
+          </>
+        )}
+      </ConfirmModal>
+    </>
   )
 }

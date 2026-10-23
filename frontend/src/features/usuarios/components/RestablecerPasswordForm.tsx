@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { CheckCircle2, KeyRound, X } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
+import { Aviso, Button, Field, Input } from '../../../components/ui'
 import { erroresPorCampo, mensajeDeError } from '../../../shared/api/errores'
 import { useRestablecerPassword } from '../hooks/useUsuarios'
 import type { Usuario } from '../api/usuariosApi'
@@ -50,14 +51,13 @@ export function RestablecerPasswordForm({ usuario, onTerminar }: Props) {
 
   if (restablecer.isSuccess) {
     return (
-      <div className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
-        <span className="inline-flex items-center gap-2">
-          <CheckCircle2 size={18} aria-hidden />
+      <div className="space-y-4">
+        <Aviso tono="exito">
           Contraseña de {usuario.username} restablecida. La anterior ya no sirve; comunícale la nueva en persona.
-        </span>
-        <button type="button" onClick={onTerminar} className="font-medium hover:underline">
-          Cerrar
-        </button>
+        </Aviso>
+        <div className="flex justify-end">
+          <Button onClick={onTerminar}>Cerrar</Button>
+        </div>
       </div>
     )
   }
@@ -65,61 +65,23 @@ export function RestablecerPasswordForm({ usuario, onTerminar }: Props) {
   const mensaje = error ?? errorServidor
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      noValidate
-      className="space-y-4 rounded-lg border border-amber-300 bg-white p-6 shadow-sm"
-    >
-      <h2 className="text-lg font-semibold text-slate-800">Restablecer contraseña de {usuario.username}</h2>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700">Contraseña nueva</label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <p className="mt-1 text-xs text-slate-500">
-            Mínimo {LARGO_MINIMO} caracteres; no solo números ni parecida al usuario.
-          </p>
-        </div>
-        <div>
-          <label htmlFor="confirmacion" className="mb-1 block text-sm font-medium text-slate-700">Repetir contraseña</label>
-          <input
-            id="confirmacion"
-            type="password"
-            autoComplete="new-password"
-            value={confirmacion}
-            onChange={(e) => setConfirmacion(e.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
+      <div className="space-y-4 rounded-card bg-surf p-5 shadow-sh">
+        <Field etiqueta="Contraseña nueva" ayuda={`Mínimo ${LARGO_MINIMO} caracteres; no solo números ni parecida al usuario.`}>
+          <Input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
+        </Field>
+        <Field etiqueta="Repetir contraseña">
+          <Input type="password" autoComplete="new-password" value={confirmacion} onChange={(e) => setConfirmacion(e.target.value)} />
+        </Field>
       </div>
 
-      {mensaje && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{mensaje}</p>
-      )}
+      {mensaje && <Aviso tono="error">{mensaje}</Aviso>}
 
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={restablecer.isPending}
-          className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-        >
-          <KeyRound size={16} aria-hidden />
-          {restablecer.isPending ? 'Guardando...' : 'Restablecer contraseña'}
-        </button>
-        <button
-          type="button"
-          onClick={onTerminar}
-          className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-        >
-          <X size={16} aria-hidden />
-          Cancelar
-        </button>
+      <div className="flex justify-end gap-2 pt-2">
+        <Button variante="ghost" onClick={onTerminar}>Cancelar</Button>
+        <Button type="submit" variante="primary" cargando={restablecer.isPending} icono={<KeyRound size={16} aria-hidden />}>
+          Restablecer contraseña
+        </Button>
       </div>
     </form>
   )

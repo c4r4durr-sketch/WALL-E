@@ -22,24 +22,24 @@ export function DetalleCambio({ registro }: { registro: RegistroHistorial }) {
     accion === 'UPDATE' ? registro.campos_cambiados : accion === 'INSERT' ? campos(despues) : campos(antes)
 
   if (filas.length === 0) {
-    return <p className="text-sm text-slate-500">Sin datos para mostrar.</p>
+    return <p className="text-sm text-muted">Sin datos para mostrar.</p>
   }
 
   return (
     <table className="w-full text-left text-xs">
-      <thead className="text-slate-500">
+      <thead className="text-muted">
         <tr>
-          <th className="w-48 py-1 pr-3 font-medium">Campo</th>
-          {accion !== 'INSERT' && <th className="py-1 pr-3 font-medium">Antes</th>}
-          {accion !== 'DELETE' && <th className="py-1 font-medium">Después</th>}
+          <th className="w-56 py-2 pr-3 font-semibold">Campo</th>
+          {accion !== 'INSERT' && <th className="py-2 pr-3 font-semibold">Antes</th>}
+          {accion !== 'DELETE' && <th className="py-2 font-semibold">Después</th>}
         </tr>
       </thead>
       <tbody>
         {filas.map((campo) => (
-          <tr key={campo} className="border-t border-slate-200 align-top">
-            <td className="py-1 pr-3 font-mono text-slate-600">{campo}</td>
-            {accion !== 'INSERT' && <td className="break-all py-1 pr-3 text-slate-700">{valor(antes?.[campo])}</td>}
-            {accion !== 'DELETE' && <td className="break-all py-1 font-medium text-slate-900">{valor(despues?.[campo])}</td>}
+          <tr key={campo} className="border-t border-line align-top">
+            <td className="py-2 pr-3 font-mono text-muted">{campo}</td>
+            {accion !== 'INSERT' && <td className="break-all py-2 pr-3 text-ink">{valor(antes?.[campo])}</td>}
+            {accion !== 'DELETE' && <td className="break-all py-2 font-semibold text-ink">{valor(despues?.[campo])}</td>}
           </tr>
         ))}
       </tbody>
