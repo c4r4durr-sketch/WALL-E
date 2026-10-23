@@ -23,6 +23,7 @@ db.sqlite3
 dist/
 dist-ssr/
 staticfiles/
+media/
 *.log
 
 # Editor

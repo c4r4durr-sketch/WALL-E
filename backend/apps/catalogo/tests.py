@@ -3,15 +3,22 @@ Pruebas del catálogo:
   - use_cases con un repositorio falso en memoria (sin base de datos), que
     demuestran que las reglas de negocio no dependen de Django;
   - la API completa (CRUD, validaciones y permisos por rol);
-  - HU7: costo unitario con historial (solo el Administrador lo cambia).
+  - HU7: costo unitario con historial (solo el Administrador lo cambia);
+  - foto del producto: obligatoria en el alta, JPG/PNG/WebP de hasta 5 MB.
 
 Correr con: python manage.py test apps.catalogo
 """
 
+import io
+import shutil
+import tempfile
 from dataclasses import replace
 from typing import Optional
 
-from django.test import SimpleTestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
+from django.test import SimpleTestCase, override_settings
+from PIL import Image
 from rest_framework.test import APITestCase
 
 from apps.movimientos.infrastructure.models import Movimiento
@@ -35,6 +42,30 @@ from .use_cases import gestionar_herramientas as casos
 URL = "/api/catalogo/herramientas/"
 
 
+def imagen_de_prueba(formato: str = "PNG", nombre: str = "foto.png", relleno: int = 0) -> SimpleUploadedFile:
+    """Una imagen real (Pillow la puede abrir) de 8x8. `relleno` agrega
+    bytes al final para simular un archivo pesado sin dibujar uno enorme.
+    La usan también las pruebas de proveedores y auditoría que dan de alta
+    herramientas por la API."""
+    salida = io.BytesIO()
+    Image.new("RGB", (8, 8), "#C2410C").save(salida, format=formato)
+    return SimpleUploadedFile(nombre, salida.getvalue() + b"\0" * relleno)
+
+
+class MediaTemporal:
+    """Mixin para pruebas que suben fotos: las guarda en una carpeta
+    temporal (no en backend/media/) que se borra al terminar la clase."""
+
+    @classmethod
+    def setUpClass(cls):
+        carpeta = tempfile.mkdtemp(prefix="walle-media-")
+        ajuste = override_settings(MEDIA_ROOT=carpeta)
+        ajuste.enable()
+        cls.addClassCleanup(shutil.rmtree, carpeta, ignore_errors=True)
+        cls.addClassCleanup(ajuste.disable)
+        super().setUpClass()
+
+
 class RepositorioEnMemoria(HerramientaRepository):
     def __init__(self):
         self.datos: dict[int, Herramienta] = {}
@@ -49,10 +80,12 @@ class RepositorioEnMemoria(HerramientaRepository):
     def listar(self) -> list[Herramienta]:
         return list(self.datos.values())
 
-    def guardar(self, herramienta: Herramienta) -> Herramienta:
+    def guardar(self, herramienta: Herramienta, imagen=None) -> Herramienta:
         if herramienta.id is None:
             herramienta = replace(herramienta, id=self.siguiente_id)
             self.siguiente_id += 1
+        if imagen is not None:
+            herramienta = replace(herramienta, imagen=f"productos/{imagen.nombre}")
         self.datos[herramienta.id] = herramienta
         return herramienta
 
@@ -149,7 +182,7 @@ class GestionarHerramientasUseCaseTests(SimpleTestCase):
             casos.eliminar_herramienta(self.repo, 99)
 
 
-class HerramientaApiTests(APITestCase):
+class HerramientaApiTests(MediaTemporal, APITestCase):
     def setUp(self):
         self.sucursal = Sucursal.objects.create(nombre="Central")
         self.admin = Usuario.objects.create_user("admin_test", password="x", rol="ADMINISTRADOR")
@@ -162,7 +195,8 @@ class HerramientaApiTests(APITestCase):
         self.client.force_authenticate(self.admin)
 
     def _crear(self, **datos):
-        return self.client.post(URL, {"codigo": "T-1", "nombre": "Taladro", **datos}, format="json")
+        datos = {"codigo": "T-1", "nombre": "Taladro", "imagen": imagen_de_prueba(), **datos}
+        return self.client.post(URL, datos, format="multipart")
 
     # --- Alta (incluye lo del sub-paso 4.1) ---
 
@@ -341,14 +375,17 @@ class CostoUnitarioUseCaseTests(SimpleTestCase):
         self.assertEqual(len(self.historial.cambios), 1)
 
 
-class CostoUnitarioApiTests(APITestCase):
+class CostoUnitarioApiTests(MediaTemporal, APITestCase):
     def setUp(self):
         self.sucursal = Sucursal.objects.create(nombre="Central")
         self.admin = Usuario.objects.create_user("admin_test", password="x", rol="ADMINISTRADOR")
         self.supervisor = Usuario.objects.create_user("sup_test", password="x", rol="SUPERVISOR", sucursal=self.sucursal)
         self.empleado = Usuario.objects.create_user("emp_test", password="x", rol="EMPLEADO", sucursal=self.sucursal)
         self.client.force_authenticate(self.admin)
-        respuesta = self.client.post(URL, {"codigo": "T-1", "nombre": "Taladro", "costo_unitario": "10.50"}, format="json")
+        respuesta = self.client.post(
+            URL, {"codigo": "T-1", "nombre": "Taladro", "costo_unitario": "10.50", "imagen": imagen_de_prueba()},
+            format="multipart",
+        )
         self.herramienta_id = respuesta.json()["id"]
 
     def _url(self, sufijo=""):
@@ -411,3 +448,120 @@ class CostoUnitarioApiTests(APITestCase):
         respuesta = self.client.delete(self._url())
         self.assertEqual(respuesta.status_code, 409)
         self.assertTrue(HerramientaModel.objects.filter(pk=self.herramienta_id).exists())
+
+
+# --- Foto del producto ---
+
+from .domain.entities import ImagenProducto
+
+
+class FotoUseCaseTests(SimpleTestCase):
+    def setUp(self):
+        self.repo = RepositorioEnMemoria()
+
+    def _registrar(self, imagen, codigo="T-1"):
+        return casos.registrar_herramienta(
+            self.repo, {"codigo": codigo, "nombre": "Taladro", "modelo": "", "unidades_por_caja": 1},
+            actor=ADMIN, historial=HistorialEnMemoria(), proveedores=ProveedoresEnMemoria(), imagen=imagen,
+        )
+
+    def test_acepta_jpg_png_y_webp(self):
+        for formato in ("JPEG", "PNG", "WEBP"):
+            herramienta = self._registrar(ImagenProducto(f"f.{formato}", formato, 1000), codigo=formato)
+            self.assertEqual(herramienta.imagen, f"productos/f.{formato}")
+
+    def test_otro_formato_es_invalido_y_no_guarda_nada(self):
+        with self.assertRaises(DatosHerramientaInvalidosError) as ctx:
+            self._registrar(ImagenProducto("f.gif", "GIF", 1000))
+        self.assertIn("imagen", ctx.exception.errores)
+        self.assertEqual(self.repo.datos, {})
+
+    def test_hasta_5_mb_exactos(self):
+        herramienta = self._registrar(ImagenProducto("f", "PNG", 5 * 1024 * 1024))
+        with self.assertRaises(DatosHerramientaInvalidosError):
+            casos.actualizar_herramienta(
+                self.repo, herramienta.id, {}, actor=ADMIN, historial=HistorialEnMemoria(),
+                proveedores=ProveedoresEnMemoria(), imagen=ImagenProducto("g", "PNG", 5 * 1024 * 1024 + 1),
+            )
+        self.assertEqual(self.repo.obtener_por_id(herramienta.id).imagen, "productos/f")
+
+    def test_herramientas_sin_foto(self):
+        self.repo.guardar(Herramienta(None, "V-1", "Vieja", "", 1))
+        self._registrar(ImagenProducto("f", "PNG", 10))
+        self.assertEqual([h.codigo for h in casos.herramientas_sin_foto(self.repo)], ["V-1"])
+
+
+class FotoApiTests(MediaTemporal, APITestCase):
+    def setUp(self):
+        self.admin = Usuario.objects.create_user("admin_test", password="x", rol="ADMINISTRADOR")
+        self.client.force_authenticate(self.admin)
+
+    def _crear(self, **datos):
+        return self.client.post(URL, {"codigo": "T-1", "nombre": "Taladro", **datos}, format="multipart")
+
+    def test_alta_con_foto_devuelve_url_absoluta_en_el_detalle_y_el_listado(self):
+        respuesta = self._crear(imagen=imagen_de_prueba("JPEG", "mi foto.jpg"), unidades_por_caja="12")
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        url = respuesta.json()["imagen"]
+        self.assertRegex(url, r"^http://testserver/media/productos/t-1.*\.jpg$")
+        self.assertEqual(respuesta.json()["unidades_por_caja"], 12)
+        [fila] = self.client.get(URL).json()
+        self.assertEqual(fila["imagen"], url)
+
+    def test_alta_sin_foto_es_400(self):
+        for formato in ("multipart", "json"):
+            with self.subTest(formato=formato):
+                respuesta = self.client.post(URL, {"codigo": "T-1", "nombre": "Taladro"}, format=formato)
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertEqual(respuesta.json()["imagen"], ["La foto del producto es obligatoria."])
+        self.assertFalse(HerramientaModel.objects.exists())
+
+    def test_archivo_que_no_es_imagen_es_400(self):
+        respuesta = self._crear(imagen=SimpleUploadedFile("foto.png", b"no soy una imagen"))
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("imagen", respuesta.json())
+
+    def test_formato_no_permitido_es_400(self):
+        respuesta = self._crear(imagen=imagen_de_prueba("GIF", "foto.gif"))
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("JPG, PNG, WebP", respuesta.json()["imagen"][0])
+        self.assertFalse(HerramientaModel.objects.exists())
+
+    def test_archivo_mayor_a_5_mb_es_400(self):
+        respuesta = self._crear(imagen=imagen_de_prueba(relleno=5 * 1024 * 1024))
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("5 MB", respuesta.json()["imagen"][0])
+        self.assertFalse(HerramientaModel.objects.exists())
+
+    def test_webp_es_valido(self):
+        self.assertEqual(self._crear(imagen=imagen_de_prueba("WEBP", "foto.webp")).status_code, 201)
+
+    def test_editar_sin_foto_la_conserva_y_con_foto_la_reemplaza(self):
+        creada = self._crear(imagen=imagen_de_prueba()).json()
+        detalle = f"{URL}{creada['id']}/"
+        # Reenviar los datos tal como vinieron (con la URL) no toca la foto.
+        respuesta = self.client.put(detalle, {**creada, "nombre": "Taladro X"}, format="json")
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        self.assertEqual(respuesta.json()["imagen"], creada["imagen"])
+
+        anterior = HerramientaModel.objects.get(pk=creada["id"]).imagen
+        with self.captureOnCommitCallbacks(execute=True):
+            respuesta = self.client.patch(detalle, {"imagen": imagen_de_prueba("JPEG", "nueva.jpg")}, format="multipart")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertNotEqual(respuesta.json()["imagen"], creada["imagen"])
+        self.assertFalse(anterior.storage.exists(anterior.name))
+
+    def test_herramienta_antigua_sin_foto_devuelve_null(self):
+        HerramientaModel.objects.create(codigo="V-1", nombre="Vieja")
+        self.assertIsNone(self.client.get(URL).json()[0]["imagen"])
+
+    def test_cargar_fotos_demo_solo_completa_las_que_no_tienen(self):
+        con_foto = self._crear(imagen=imagen_de_prueba()).json()
+        HerramientaModel.objects.create(codigo="V-1", nombre="Vieja")
+        call_command("cargar_fotos_demo", stdout=io.StringIO())
+        filas = {h["codigo"]: h["imagen"] for h in self.client.get(URL).json()}
+        self.assertEqual(filas["T-1"], con_foto["imagen"])
+        self.assertRegex(filas["V-1"], r"\.png$")
+        salida = io.StringIO()
+        call_command("cargar_fotos_demo", stdout=salida)
+        self.assertIn(": 0.", salida.getvalue())

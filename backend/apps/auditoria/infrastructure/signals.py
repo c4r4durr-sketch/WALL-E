@@ -15,6 +15,7 @@ Transferencia en su lugar.
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
+from django.db.models.fields.files import FieldFile
 from django.db.models.signals import post_delete, post_save, pre_save
 
 from ..domain.value_objects import CAMPOS_AUTOMATICOS, AccionAuditoria
@@ -41,12 +42,15 @@ CAMPOS_IGNORADOS_EN_CAMBIOS = CAMPOS_AUTOMATICOS
 
 def _foto(instance) -> dict:
     """Valores de las columnas propias del registro (FKs como *_id), sin
-    campos many-to-many para no disparar consultas extra."""
-    return {
-        campo.attname: campo.value_from_object(instance)
-        for campo in instance._meta.concrete_fields
-        if campo.name not in CAMPOS_EXCLUIDOS
-    }
+    campos many-to-many para no disparar consultas extra. De un archivo
+    (la foto de la herramienta) se guarda solo su ruta."""
+    foto = {}
+    for campo in instance._meta.concrete_fields:
+        if campo.name in CAMPOS_EXCLUIDOS:
+            continue
+        valor = campo.value_from_object(instance)
+        foto[campo.attname] = (valor.name or None) if isinstance(valor, FieldFile) else valor
+    return foto
 
 
 def _sin_ignorados(foto: dict) -> dict:

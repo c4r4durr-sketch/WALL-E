@@ -104,6 +104,7 @@ Modelo `catalogo.Herramienta`. Catálogo y datos de entrada de EOQ/ROP.
 | `dias_entrega_herramienta` | `tiempo_entrega_dias` | integer | sí | ≥ 0 (lead time del ROP) |
 | `costo_unitario_herramienta` | `costo_unitario` | numeric(12,2) | sí | > 0 (lo valida el caso de uso); HU7, cada cambio va a `historial_costos` |
 | `cod_proveedor` | `proveedor` | bigint | sí | **FK** → `proveedores.cod_proveedor` (HU8; solo se asigna uno activo) |
+| `imagen_herramienta` | `imagen` | varchar(255) | sí | ruta de la foto dentro de `MEDIA_ROOT` (`productos/…`); obligatoria al dar de alta (lo exige la API), nula en las herramientas anteriores; JPG, PNG o WebP de hasta 5 MB |
 | `fecha_registro_herramienta` | `creado_en` | timestamptz | no | se fija al crear |
 | `fecha_actualizacion_herramienta` | `actualizado_en` | timestamptz | no | se actualiza en cada guardado |
 

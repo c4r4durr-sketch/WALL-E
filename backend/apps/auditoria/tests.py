@@ -14,6 +14,8 @@ from django.test import SimpleTestCase
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
+from apps.catalogo.tests import MediaTemporal, imagen_de_prueba
+
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.domain.value_objects import Rol
 from apps.usuarios.infrastructure.models import Sucursal, Usuario
@@ -89,7 +91,7 @@ class ConsultarHistorialTests(SimpleTestCase):
         self.assertEqual([a.texto for a in opciones["acciones"]], ["Alta", "Edición", "Baja"])
 
 
-class HistorialApiTests(APITestCase):
+class HistorialApiTests(MediaTemporal, APITestCase):
     def setUp(self):
         self.central = Sucursal.objects.create(nombre="Central")
         self.admin = Usuario.objects.create_user("admin_test", password="x", rol="ADMINISTRADOR")
@@ -98,7 +100,8 @@ class HistorialApiTests(APITestCase):
         # Cambios reales hechos por la API: quedan en el historial con autor.
         self.client.force_authenticate(self.admin)
         self.herramienta_id = self.client.post(
-            "/api/catalogo/herramientas/", {"codigo": "T-1", "nombre": "Taladro"}, format="json"
+            "/api/catalogo/herramientas/", {"codigo": "T-1", "nombre": "Taladro", "imagen": imagen_de_prueba()},
+            format="multipart",
         ).json()["id"]
         self.client.patch(f"/api/catalogo/herramientas/{self.herramienta_id}/", {"nombre": "Taladro grande"}, format="json")
         self.client.post(f"/api/usuarios/usuarios/{self.emp.id}/restablecer-password/",
