@@ -4,9 +4,9 @@
 > nuevo, leer esto primero. Se actualiza en el mismo commit que cambia algo
 > importante. Versiones exactas del stack: ver `STACK_VERSIONES.md`.
 >
-> **Última actualización: 20/10/2026, bloque e-g** (semana 8 del
-> cronograma). Rama de trabajo: `sprint3-cierre` (los commits del bloque
-> e-g están solo en local, sin push).
+> **Última actualización: 23/10/2026, fase 1 de diseño** (semana 8 del
+> cronograma). Rama de trabajo: `fase1-diseno`, salida de `sprint3-cierre`
+> (todo solo en local, sin push). Reglas visuales: `docs/DISENO.md`.
 
 ## Equipo y materia
 Proyecto académico (Programación III y Análisis y Diseño II) para una
@@ -88,7 +88,14 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | **Cierre diario** (HU14) | `GET /api/indicadores/cierre-diario/?sucursal=&fecha=`: movimientos del día en hora de La Paz, totales por tipo, salidas destacadas. Admin cualquier sucursal, Supervisor la suya, Empleado 403; fecha futura 400 | `/cierre-diario` (Admin y Supervisor): fecha y sucursal, tarjetas de totales, tabla y aviso si no hubo salidas |
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
 
-Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **151 pruebas OK**.
+Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **211 pruebas OK**.
+
+**Fase 1 de diseño** (`fase1-diseno`): todas las pantallas sobre el sistema
+de `docs/DISENO.md` (componentes en `frontend/src/components/ui/`, barra
+lateral en `frontend/src/app/layout/`), modo claro y oscuro, y **foto
+obligatoria** al dar de alta una herramienta (`herramientas.imagen_herramienta`,
+archivos en `backend/media/productos/`, fuera del repo). Para tener fotos de
+muestra: `manage.py cargar_fotos_demo` (solo completa las que no tienen).
 Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores ni avisos.
 
 ## Pendiente (en orden)
@@ -139,7 +146,11 @@ Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores ni aviso
 # Frontend (desde frontend/)
 npm run dev                                            # :5173, proxy /api -> :8000
 ```
-Después de cada `git pull`: correr `migrate`. (Al 20/10 la base local tiene
+Después de cada `git pull`: correr `migrate` y, si cambió
+`requirements.txt` o `package.json`, `pip install -r requirements.txt` y
+`npm install`. Fase 1 suma `catalogo.0006` (columna de la foto, nula) y
+las dependencias Pillow, motion, @radix-ui/react-dialog y
+@fontsource-variable/inter. (Al 20/10 la base local tiene
 pendientes las 5 migraciones de nombres del 14/10, `catalogo.0004` y
 `0005`, `proveedores.0001`, `movimientos.0008` y `auditoria.0003`: solo
 agregan tablas, columnas e índices, o renombran; no borran datos.)
