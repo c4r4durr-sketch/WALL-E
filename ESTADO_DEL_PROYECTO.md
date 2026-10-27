@@ -100,9 +100,10 @@ lateral en `frontend/src/app/layout/`), modo claro y oscuro, y **foto
 obligatoria** al dar de alta una herramienta (`herramientas.imagen_herramienta`,
 archivos en `backend/media/productos/`, fuera del repo). Para tener fotos de
 muestra: `manage.py cargar_fotos_demo` (solo completa las que no tienen).
-Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores
-(el build avisa que el paquete JS pesa 621 kB: se divide por rutas en el
-Sprint 4).
+Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores ni
+avisos. Cada página se carga por ruta (`React.lazy` en `app/router.tsx`,
+skeleton mientras llega): el archivo más grande es el de librerías
+compartidas (400 kB, 133 kB gzip); antes era uno solo de 621 kB.
 
 ## Pendiente (en orden)
 1. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
