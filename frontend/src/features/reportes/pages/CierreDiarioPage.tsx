@@ -1,11 +1,31 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, Info } from 'lucide-react'
+import { CalendarCheck, Info } from 'lucide-react'
+import {
+  Aviso,
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Field,
+  Input,
+  PageHeader,
+  Select,
+  SkeletonFilas,
+  SkeletonIndicadores,
+  Table,
+  THead,
+  Td,
+  Th,
+  Tr,
+} from '../../../components/ui'
 import { getSession } from '../../auth/session'
 import { Rol } from '../../../shared/types/roles'
 import { mensajeDeError } from '../../../shared/api/errores'
 import { fechaLarga, hora, hoyEnLaPaz } from '../../../shared/formato'
 import { StatTile } from '../../dashboard/components/StatTile'
+import { CeldaHerramienta } from '../../catalogo/components/CeldaHerramienta'
+import { useFotos } from '../../catalogo/hooks/useFotos'
 import { ETIQUETA, cajas } from '../../movimientos/formato'
 import { useSucursales } from '../../usuarios/hooks/useSucursales'
 import { useCierreDiario } from '../hooks/useCierreDiario'
@@ -32,6 +52,7 @@ export function CierreDiarioPage() {
   const [fecha, setFecha] = useState(hoy)
   const [sucursal, setSucursal] = useState<string>(session?.sucursal_id ? String(session.sucursal_id) : '')
   const { data: sucursales } = useSucursales()
+  const foto = useFotos()
 
   const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(fecha) && fecha <= hoy
   const listo = fechaValida && (!esAdmin || sucursal !== '')
@@ -41,141 +62,129 @@ export function CierreDiarioPage() {
   )
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div>
-          <Link to="/" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:underline">
-            <ArrowLeft size={14} aria-hidden />
-            Volver
-          </Link>
-          <h1 className="mt-2 text-xl font-semibold text-slate-800">Cierre diario</h1>
-          <p className="mt-1 text-sm text-slate-500">Movimientos del día por sucursal, en hora de La Paz.</p>
-        </div>
+    <>
+      <PageHeader
+        migas={['Inventario', 'Cierre diario']}
+        titulo="Cierre diario"
+        subtitulo="Movimientos del día por sucursal, en hora de La Paz."
+      />
 
-        <div className="flex flex-wrap items-end gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <Card className="flex flex-wrap items-start gap-5">
+        <Field etiqueta="Fecha" error={fechaValida ? null : 'Elige una fecha que no sea posterior a hoy.'} className="w-48">
+          <Input type="date" value={fecha} max={hoy} onChange={(e) => setFecha(e.target.value)} />
+        </Field>
+        {esAdmin ? (
+          <Field etiqueta="Sucursal" className="w-64">
+            <Select value={sucursal} onChange={(e) => setSucursal(e.target.value)}>
+              <option value="" disabled>Selecciona una sucursal</option>
+              {sucursales?.map((s) => (
+                <option key={s.id} value={s.id}>{s.nombre}</option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
           <div>
-            <label htmlFor="fecha" className="mb-1 block text-sm font-medium text-slate-700">Fecha</label>
-            <input
-              id="fecha"
-              type="date"
-              value={fecha}
-              max={hoy}
-              onChange={(e) => setFecha(e.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            <p className="mb-1.5 text-xs font-semibold text-muted">Sucursal</p>
+            <p className="flex h-10 items-center text-sm font-semibold text-ink">{session?.sucursal_nombre}</p>
+          </div>
+        )}
+      </Card>
+
+      {esAdmin && sucursal === '' && (
+        <Card sinPadding>
+          <EmptyState icono={CalendarCheck} titulo="Elige una sucursal" ayuda="El cierre se arma por sucursal y por día." />
+        </Card>
+      )}
+      {isLoading && listo && (
+        <>
+          <SkeletonIndicadores />
+          <Card sinPadding><SkeletonFilas filas={5} columnas={6} /></Card>
+        </>
+      )}
+      {isError && (
+        <Aviso tono="error" accion={<Button tamano="sm" onClick={() => refetch()}>Reintentar</Button>}>
+          {mensajeDeError(error, 'No se pudo cargar el cierre diario.')}
+        </Aviso>
+      )}
+
+      {cierre && listo && (
+        <>
+          <h2 className="text-xl font-bold tracking-[-0.02em] text-ink">
+            {cierre.sucursal_nombre} · <span className="font-medium text-muted">{fechaLarga(cierre.fecha)}</span>
+          </h2>
+
+          <div className="grid grid-cols-4 gap-5">
+            <StatTile
+              etiqueta="Salidas (unidades)"
+              valor={cierre.total_salidas_unidades}
+              nota={`${cierre.cantidad_salidas} ${cierre.cantidad_salidas === 1 ? 'venta registrada' : 'ventas registradas'}`}
             />
-            {!fechaValida && <p className="mt-1 text-xs text-red-600">Elige una fecha que no sea posterior a hoy.</p>}
+            <StatTile etiqueta="Entradas (unidades)" valor={unidades(cierre, 'ENTRADA')} />
+            <StatTile
+              etiqueta="Transferencias (unidades)"
+              valor={unidades(cierre, 'TRANSFERENCIA_SALIDA') + unidades(cierre, 'TRANSFERENCIA_ENTRADA')}
+              nota={`${unidades(cierre, 'TRANSFERENCIA_SALIDA')} enviadas · ${unidades(cierre, 'TRANSFERENCIA_ENTRADA')} recibidas`}
+            />
+            <StatTile
+              etiqueta="Ajustes (unidades)"
+              valor={unidades(cierre, 'AJUSTE_POSITIVO') + unidades(cierre, 'AJUSTE_NEGATIVO')}
+              nota={`+${unidades(cierre, 'AJUSTE_POSITIVO')} · −${unidades(cierre, 'AJUSTE_NEGATIVO')}`}
+            />
           </div>
-          <div>
-            <label htmlFor="sucursal" className="mb-1 block text-sm font-medium text-slate-700">Sucursal</label>
-            {esAdmin ? (
-              <select
-                id="sucursal"
-                value={sucursal}
-                onChange={(e) => setSucursal(e.target.value)}
-                className="min-w-48 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-              >
-                <option value="" disabled>Selecciona una sucursal</option>
-                {sucursales?.map((s) => (
-                  <option key={s.id} value={s.id}>{s.nombre}</option>
-                ))}
-              </select>
-            ) : (
-              <p id="sucursal" className="px-1 py-2 text-sm font-medium text-slate-800">{session?.sucursal_nombre}</p>
-            )}
-          </div>
-        </div>
 
-        {esAdmin && sucursal === '' && (
-          <p className="text-sm text-slate-500">Elige una sucursal para ver su cierre.</p>
-        )}
-        {isLoading && listo && <p className="text-sm text-slate-500">Cargando cierre...</p>}
-        {isError && (
-          <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-            {mensajeDeError(error, 'No se pudo cargar el cierre diario.')}{' '}
-            <button type="button" onClick={() => refetch()} className="font-medium underline">Reintentar</button>
-          </p>
-        )}
+          {/* CA3: un día sin salidas muestra un aviso, no una tabla vacía. */}
+          {cierre.cantidad_salidas === 0 && cierre.lineas.length > 0 && (
+            <Aviso tono="info">No hubo salidas (ventas) este día en {cierre.sucursal_nombre}.</Aviso>
+          )}
 
-        {cierre && listo && (
-          <>
-            <h2 className="text-lg font-semibold text-slate-800">
-              {cierre.sucursal_nombre} · <span className="font-normal">{fechaLarga(cierre.fecha)}</span>
-            </h2>
-
-            <div className="grid grid-cols-4 gap-3">
-              <StatTile
-                etiqueta="Salidas (unidades)"
-                valor={cierre.total_salidas_unidades}
-                nota={`${cierre.cantidad_salidas} ${cierre.cantidad_salidas === 1 ? 'venta registrada' : 'ventas registradas'}`}
+          {cierre.lineas.length === 0 ? (
+            <Card sinPadding>
+              <EmptyState
+                icono={Info}
+                titulo="Sin movimientos este día"
+                ayuda={`No hubo salidas (ventas) ni otros movimientos en ${cierre.sucursal_nombre}.`}
               />
-              <StatTile etiqueta="Entradas (unidades)" valor={unidades(cierre, 'ENTRADA')} />
-              <StatTile
-                etiqueta="Transferencias (unidades)"
-                valor={unidades(cierre, 'TRANSFERENCIA_SALIDA') + unidades(cierre, 'TRANSFERENCIA_ENTRADA')}
-                nota={`${unidades(cierre, 'TRANSFERENCIA_SALIDA')} enviadas · ${unidades(cierre, 'TRANSFERENCIA_ENTRADA')} recibidas`}
-              />
-              <StatTile
-                etiqueta="Ajustes (unidades)"
-                valor={unidades(cierre, 'AJUSTE_POSITIVO') + unidades(cierre, 'AJUSTE_NEGATIVO')}
-                nota={`+${unidades(cierre, 'AJUSTE_POSITIVO')} · −${unidades(cierre, 'AJUSTE_NEGATIVO')}`}
-              />
-            </div>
-
-            {/* CA3: un día sin salidas muestra un aviso, no una tabla vacía. */}
-            {cierre.cantidad_salidas === 0 && (
-              <p className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                <Info size={16} aria-hidden className="text-slate-500" />
-                No hubo salidas (ventas) este día en {cierre.sucursal_nombre}.
-                {cierre.lineas.length === 0 && ' Tampoco hubo otros movimientos.'}
-              </p>
-            )}
-
-            {cierre.lineas.length > 0 && (
-              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-100 text-slate-600">
-                    <tr>
-                      <th className="px-3 py-2">Hora</th>
-                      <th className="px-3 py-2">Tipo</th>
-                      <th className="px-3 py-2">Herramienta</th>
-                      <th className="px-3 py-2 text-right">Cantidad</th>
-                      <th className="px-3 py-2 text-right">Unidades</th>
-                      <th className="px-3 py-2">Usuario</th>
-                      <th className="px-3 py-2">Motivo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cierre.lineas.map((l) => (
-                      <tr key={l.movimiento_id} className="border-t border-slate-100">
-                        <td className="px-3 py-2 tabular-nums">{hora(l.fecha_hora)}</td>
-                        <td className="px-3 py-2">
-                          <span className={`whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${ETIQUETA[l.tipo_movimiento].clase}`}>
-                            {ETIQUETA[l.tipo_movimiento].texto}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className="font-medium">{l.codigo}</span> {l.nombre}
-                        </td>
-                        <td className="px-3 py-2 text-right">{cantidadRegistrada(l)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{l.cantidad_unidades}</td>
-                        <td className="px-3 py-2">{l.usuario}</td>
-                        <td className="px-3 py-2 text-slate-600">{l.motivo || <span className="text-slate-400">—</span>}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="border-t border-slate-200 bg-slate-50 font-medium">
-                    <tr>
-                      <td colSpan={4} className="px-3 py-2 text-right">Total de salidas del día</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{cierre.total_salidas_unidades}</td>
-                      <td colSpan={2} />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
+            </Card>
+          ) : (
+            <Card sinPadding className="overflow-hidden">
+              <CardHeader className="px-6 pb-4 pt-6" titulo="Movimientos del día" />
+              <Table>
+                <THead>
+                  <tr>
+                    <Th>Hora</Th>
+                    <Th>Tipo</Th>
+                    <Th>Herramienta</Th>
+                    <Th numerico>Cantidad</Th>
+                    <Th numerico>Unidades</Th>
+                    <Th>Usuario</Th>
+                    <Th>Motivo</Th>
+                  </tr>
+                </THead>
+                <tbody>
+                  {cierre.lineas.map((l) => (
+                    <Tr key={l.movimiento_id}>
+                      <Td className="tabular-nums">{hora(l.fecha_hora)}</Td>
+                      <Td><Badge tono={ETIQUETA[l.tipo_movimiento].tono}>{ETIQUETA[l.tipo_movimiento].texto}</Badge></Td>
+                      <Td className="max-w-[260px]"><CeldaHerramienta codigo={l.codigo} nombre={l.nombre} imagen={foto(l.herramienta_id)} /></Td>
+                      <Td numerico>{cantidadRegistrada(l)}</Td>
+                      <Td numerico className="font-semibold">{l.cantidad_unidades}</Td>
+                      <Td>{l.usuario}</Td>
+                      <Td className="text-muted">{l.motivo || '—'}</Td>
+                    </Tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="h-14 border-t border-line bg-surf2 font-semibold">
+                    <td colSpan={4} className="px-4 text-right">Total de salidas del día</td>
+                    <td className="px-4 text-right tabular-nums">{cierre.total_salidas_unidades}</td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </Table>
+            </Card>
+          )}
+        </>
+      )}
+    </>
   )
 }

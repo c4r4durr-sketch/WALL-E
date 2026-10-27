@@ -118,3 +118,19 @@
 14. **Módulo `auditoria` con cuatro capas.** Ya no está vacío: tiene
     entidades, repositorio de solo lectura, caso de uso y API. Los signals
     (infraestructura) siguen siendo los únicos que escriben el historial.
+
+15. **Foto del producto (fase 1 de diseño).** Nueva columna
+    `herramientas.imagen_herramienta` (ruta del archivo; los archivos
+    viven en `backend/media/productos/`, fuera del repo). Toda herramienta
+    nueva **debe** tener foto (JPG, PNG o WebP, máx. 5 MB, recortada 1:1
+    en el formulario); las ya cargadas quedan sin foto y la pantalla
+    muestra "Sin foto". No estaba en ninguna HU: agregarla al criterio de
+    HU6 ("registrar herramienta con su foto") y al diccionario de datos.
+    El alta de herramientas ahora se envía como `multipart/form-data`.
+    El historial de modificaciones guarda la ruta de la foto, no el
+    archivo.
+
+16. **Rediseño visual del frontend.** Modo claro y oscuro, barra lateral
+    con grupos (Inventario, Análisis, Compras, Administración) y catálogo
+    en tarjetas con foto. Las reglas están en `docs/DISENO.md`. Si el
+    informe trae capturas de pantalla, hay que rehacerlas.

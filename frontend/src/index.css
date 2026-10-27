@@ -1,1 +1,188 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/*
+ * Sistema de diseño (docs/DISENO.md). Los colores viven SOLO acá, como
+ * variables CSS con su valor claro y oscuro; los componentes usan las
+ * utilidades que genera @theme (bg-surf, text-muted, shadow-sh...), nunca
+ * un color escrito a mano. El modo oscuro se activa con la clase `dark`
+ * en <html> (ver app/providers/ThemeProvider.tsx).
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --acc: #c2410c;
+  /* Texto sobre el naranja: blanco en claro; en oscuro el naranja es más
+     claro y el blanco no llega a contraste AA, así que va tinta oscura. */
+  --on-acc: #ffffff;
+  --soft: #ffede0;
+  --softink: #9a3412;
+  --ink: #1d1d1f;
+  --muted: #6e6e73;
+  --bg: #f2f2f5;
+  --surf: #ffffff;
+  --surf2: #f2f2f5;
+  --line: rgba(0, 0, 0, 0.08);
+  --glass: rgba(255, 255, 255, 0.62);
+  --ok: #1e7a35;
+  --ok-b: rgba(34, 160, 70, 0.14);
+  --warn: #9a5b00;
+  --warn-b: rgba(245, 158, 11, 0.16);
+  --danger: #c62828;
+  --danger-b: rgba(220, 38, 38, 0.11);
+  --sh: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.05), 0 16px 32px -8px rgba(0, 0, 0, 0.08);
+  --shh: 0 2px 4px rgba(0, 0, 0, 0.05), 0 10px 24px rgba(0, 0, 0, 0.08), 0 28px 48px -12px rgba(0, 0, 0, 0.14);
+  /* Manchas del fondo (detrás del vidrio): naranja y azul, muy suaves. */
+  --mancha-a: rgba(194, 65, 12, 0.1);
+  --mancha-b: rgba(10, 132, 255, 0.08);
+  /* Velo detrás de modales y paneles laterales. */
+  --velo: rgba(0, 0, 0, 0.25);
+  color-scheme: light;
+}
+
+.dark {
+  --acc: #f2692f;
+  --on-acc: #0b0b0d;
+  --soft: rgba(242, 105, 47, 0.18);
+  --softink: #ffb690;
+  --ink: #f5f5f7;
+  --muted: #a1a1a6;
+  --bg: #0b0b0d;
+  --surf: #1c1c1e;
+  --surf2: #2c2c2e;
+  --line: rgba(255, 255, 255, 0.1);
+  --glass: rgba(40, 40, 44, 0.58);
+  --ok: #4cd263;
+  --ok-b: rgba(76, 210, 99, 0.16);
+  --warn: #ffc24d;
+  --warn-b: rgba(255, 159, 10, 0.18);
+  --danger: #ff6b63;
+  --danger-b: rgba(255, 69, 58, 0.18);
+  --sh: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.35), 0 16px 32px -8px rgba(0, 0, 0, 0.55);
+  --shh: 0 2px 4px rgba(0, 0, 0, 0.45), 0 10px 24px rgba(0, 0, 0, 0.45), 0 28px 48px -12px rgba(0, 0, 0, 0.7);
+  --mancha-a: rgba(242, 105, 47, 0.12);
+  --mancha-b: rgba(10, 132, 255, 0.1);
+  --velo: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-acc: var(--acc);
+  --color-on-acc: var(--on-acc);
+  --color-soft: var(--soft);
+  --color-softink: var(--softink);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-canvas: var(--bg);
+  --color-surf: var(--surf);
+  --color-surf2: var(--surf2);
+  --color-line: var(--line);
+  --color-glass: var(--glass);
+  --color-velo: var(--velo);
+  --color-ok: var(--ok);
+  --color-ok-b: var(--ok-b);
+  --color-warn: var(--warn);
+  --color-warn-b: var(--warn-b);
+  --color-danger: var(--danger);
+  --color-danger-b: var(--danger-b);
+
+  --shadow-sh: var(--sh);
+  --shadow-shh: var(--shh);
+  --shadow-acc: 0 6px 18px -6px var(--acc);
+
+  /* Radios de DISENO.md: chip/campo, tarjeta interna, panel. */
+  --radius-chip: 12px;
+  --radius-campo: 14px;
+  --radius-card: 20px;
+  --radius-panel: 28px;
+
+  --ease-apple: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    transition:
+      background-color 200ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      color 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  /* Fondo con dos manchas radiales fijas (se ven a través del vidrio). */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(42rem 32rem at 12% -6%, var(--mancha-a), transparent 70%),
+      radial-gradient(46rem 36rem at 96% 104%, var(--mancha-b), transparent 70%);
+  }
+
+  /* Foco visible en todo lo interactivo: anillo de 2 px en el acento. */
+  :focus-visible {
+    outline: 2px solid var(--acc);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--soft);
+    color: var(--ink);
+  }
+
+  /* Los íconos de lucide con trazo 1.8 (DISENO.md). */
+  .lucide {
+    stroke-width: 1.8;
+  }
+}
+
+@layer components {
+  /* Vidrio: solo barra lateral, paneles laterales y modales. */
+  .vidrio {
+    background: var(--glass);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid var(--line);
+    box-shadow: var(--sh);
+  }
+
+  /* Transición estándar de lo interactivo (200 ms, curva de DISENO.md). */
+  .transicion {
+    transition-property: color, background-color, box-shadow, transform, opacity;
+    transition-duration: 200ms;
+    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .esqueleto {
+    background: var(--surf2);
+    border-radius: 10px;
+    animation: pulso 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+@keyframes pulso {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

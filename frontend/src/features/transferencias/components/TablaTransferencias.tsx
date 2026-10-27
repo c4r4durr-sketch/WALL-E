@@ -1,5 +1,25 @@
 import { useState } from 'react'
+import { Check, Truck, X } from 'lucide-react'
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Input,
+  SegmentedControl,
+  SkeletonFilas,
+  Table,
+  THead,
+  Td,
+  Th,
+  Tr,
+  Aviso,
+  type TonoBadge,
+} from '../../../components/ui'
+import { fechaHora } from '../../../shared/formato'
 import type { Herramienta } from '../../catalogo/api/catalogoApi'
+import { CeldaHerramienta } from '../../catalogo/components/CeldaHerramienta'
 import type { Sucursal } from '../../usuarios/api/usuariosApi'
 import { cajas } from '../../movimientos/formato'
 import { erroresDelBackend } from '../../movimientos/errores'
@@ -11,12 +31,10 @@ import { useCompletarTransferencia, useRechazarTransferencia, useTransferencias 
 // o rechazar (con motivo). Los errores del backend (ej. 409: ya no hay
 // stock en origen) se muestran en la fila afectada.
 
-const fechaHora = new Intl.DateTimeFormat('es', { dateStyle: 'short', timeStyle: 'short' })
-
-const ESTADO: Record<EstadoTransferencia, { texto: string; clase: string }> = {
-  PENDIENTE: { texto: 'Pendiente', clase: 'bg-amber-100 text-amber-800' },
-  COMPLETADA: { texto: 'Completada', clase: 'bg-green-50 text-green-700' },
-  RECHAZADA: { texto: 'Rechazada', clase: 'bg-slate-100 text-slate-600' },
+const ESTADO: Record<EstadoTransferencia, { texto: string; tono: TonoBadge }> = {
+  PENDIENTE: { texto: 'Pendiente', tono: 'warn' },
+  COMPLETADA: { texto: 'Completada', tono: 'ok' },
+  RECHAZADA: { texto: 'Rechazada', tono: 'neutral' },
 }
 
 interface Props {
@@ -40,40 +58,39 @@ function FilaAcciones({ t }: { t: Transferencia }) {
   const error = mensajeError(completar.error) ?? mensajeError(rechazar.error)
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5 py-1">
       {rechazando ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <input
+        <div className="flex items-center gap-2">
+          <Input
             aria-label="Motivo del rechazo"
             value={motivo}
             maxLength={255}
             placeholder="Motivo del rechazo"
+            autoFocus
             onChange={(e) => { setMotivo(e.target.value); rechazar.reset() }}
-            className="min-w-40 flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs"
+            className="h-8! min-w-40 text-xs"
           />
-          <button type="button" disabled={ocupado || !motivo.trim()}
-            onClick={() => rechazar.mutate({ id: t.id, motivo: motivo.trim() })}
-            className="text-xs font-medium text-red-700 hover:underline disabled:opacity-50">
-            Confirmar rechazo
-          </button>
-          <button type="button" onClick={() => { setRechazando(false); rechazar.reset() }}
-            className="text-xs font-medium text-slate-600 hover:underline">
+          <Button tamano="sm" peligro disabled={!motivo.trim()} cargando={rechazar.isPending}
+            onClick={() => rechazar.mutate({ id: t.id, motivo: motivo.trim() })}>
+            Rechazar
+          </Button>
+          <Button tamano="sm" variante="ghost" onClick={() => { setRechazando(false); rechazar.reset() }}>
             Cancelar
-          </button>
+          </Button>
         </div>
       ) : (
-        <div className="flex gap-3">
-          <button type="button" disabled={ocupado} onClick={() => completar.mutate(t.id)}
-            className="text-xs font-medium text-green-700 hover:underline disabled:opacity-50">
-            {completar.isPending ? 'Completando...' : 'Completar'}
-          </button>
-          <button type="button" disabled={ocupado} onClick={() => { setRechazando(true); completar.reset() }}
-            className="text-xs font-medium text-red-700 hover:underline disabled:opacity-50">
+        <div className="flex gap-2">
+          <Button tamano="sm" disabled={ocupado} cargando={completar.isPending} icono={<Check size={14} aria-hidden />}
+            onClick={() => completar.mutate(t.id)}>
+            Completar
+          </Button>
+          <Button tamano="sm" variante="ghost" peligro disabled={ocupado} icono={<X size={14} aria-hidden />}
+            onClick={() => { setRechazando(true); completar.reset() }}>
             Rechazar
-          </button>
+          </Button>
         </div>
       )}
-      {error && <p role="alert" className="max-w-xs text-xs text-red-600">{error}</p>}
+      {error && <p role="alert" className="max-w-xs text-xs font-medium text-danger">{error}</p>}
     </div>
   )
 }
@@ -83,74 +100,77 @@ export function TablaTransferencias({ herramientas, sucursales, puedeResolver }:
   const { data: transferencias, isLoading, isError } = useTransferencias(filtro === 'TODAS' ? undefined : filtro)
   const herramienta = (id: number) => herramientas.find((h) => h.id === id)
   const sucursal = (id: number) => sucursales.find((s) => s.id === id)?.nombre ?? `#${id}`
-  const pestaña = (activa: boolean) =>
-    `rounded-md px-3 py-1.5 text-sm font-medium ${activa ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-lg font-semibold text-slate-800">Transferencias</h2>
-        <div className="flex gap-1" role="tablist" aria-label="Filtro de transferencias">
-          <button role="tab" aria-selected={filtro === 'PENDIENTE'} className={pestaña(filtro === 'PENDIENTE')} onClick={() => setFiltro('PENDIENTE')}>
-            Pendientes
-          </button>
-          <button role="tab" aria-selected={filtro === 'TODAS'} className={pestaña(filtro === 'TODAS')} onClick={() => setFiltro('TODAS')}>
-            Todas
-          </button>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-100 text-slate-600">
+    <Card sinPadding className="overflow-hidden">
+      <CardHeader
+        className="px-6 pb-4 pt-6"
+        titulo="Transferencias"
+        acciones={
+          <SegmentedControl<'PENDIENTE' | 'TODAS'>
+            etiqueta="Filtro de transferencias"
+            valor={filtro}
+            onCambiar={setFiltro}
+            opciones={[
+              { valor: 'PENDIENTE', texto: 'Pendientes' },
+              { valor: 'TODAS', texto: 'Todas' },
+            ]}
+          />
+        }
+      />
+      {isLoading && <SkeletonFilas filas={4} columnas={5} />}
+      {isError && <Aviso tono="error" className="mx-6 mb-6">No se pudieron cargar las transferencias.</Aviso>}
+      {transferencias?.length === 0 && (
+        <EmptyState
+          compacto
+          icono={Truck}
+          className="border-t border-line"
+          titulo={filtro === 'PENDIENTE' ? 'Nada pendiente' : 'Todavía no hay transferencias'}
+          ayuda={filtro === 'PENDIENTE' ? 'No hay transferencias esperando aprobación.' : 'Las solicitudes aparecerán acá.'}
+        />
+      )}
+      {transferencias && transferencias.length > 0 && (
+        <Table>
+          <THead>
             <tr>
-              <th className="px-3 py-2">Fecha</th>
-              <th className="px-3 py-2">Herramienta</th>
-              <th className="px-3 py-2">Desde → hacia</th>
-              <th className="px-3 py-2 text-right">Cantidad</th>
-              <th className="px-3 py-2">Estado</th>
-              <th className="px-3 py-2">Solicitó / resolvió</th>
-              {puedeResolver && <th className="px-3 py-2">Acciones</th>}
+              <Th>Herramienta</Th>
+              <Th>Desde → hacia</Th>
+              <Th numerico>Cantidad</Th>
+              <Th>Estado</Th>
+              <Th>Solicitó / resolvió</Th>
+              {puedeResolver && <Th><span className="sr-only">Acciones</span></Th>}
             </tr>
-          </thead>
+          </THead>
           <tbody>
-            {isLoading && <tr><td colSpan={7} className="px-3 py-4 text-center text-slate-500">Cargando...</td></tr>}
-            {isError && <tr><td colSpan={7} className="px-3 py-4 text-center text-red-600">No se pudieron cargar las transferencias.</td></tr>}
-            {transferencias?.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-4 text-center text-slate-500">
-                {filtro === 'PENDIENTE' ? 'No hay transferencias pendientes.' : 'Todavía no hay transferencias.'}
-              </td></tr>
-            )}
-            {transferencias?.map((t) => {
+            {transferencias.map((t) => {
               const h = herramienta(t.herramienta)
               return (
-                <tr key={t.id} className="border-t border-slate-100 align-top">
-                  <td className="whitespace-nowrap px-3 py-2">{fechaHora.format(new Date(t.creado_en))}</td>
-                  <td className="px-3 py-2">
-                    <span className="font-medium text-slate-800">{h?.codigo ?? `#${t.herramienta}`}</span>{' '}
-                    <span className="text-slate-600">{h?.nombre}</span>
-                  </td>
-                  <td className="px-3 py-2">{sucursal(t.sucursal_origen)} → {sucursal(t.sucursal_destino)}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                <Tr key={t.id}>
+                  <Td className="max-w-[240px]">
+                    <CeldaHerramienta codigo={h?.codigo ?? `#${t.herramienta}`} nombre={h?.nombre ?? 'Herramienta'} imagen={h?.imagen} />
+                  </Td>
+                  <Td>
+                    <span className="whitespace-nowrap">{sucursal(t.sucursal_origen)} → {sucursal(t.sucursal_destino)}</span>
+                    <span className="block text-xs text-muted tabular-nums">{fechaHora(t.creado_en)}</span>
+                  </Td>
+                  <Td numerico className="whitespace-nowrap">
                     {t.tipo_unidad === 'CAJA' ? `${cajas(t.cantidad)} (${t.cantidad_unidades} u.)` : `${t.cantidad} u.`}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${ESTADO[t.estado].clase}`}>{ESTADO[t.estado].texto}</span>
-                    {t.motivo_rechazo && <p className="mt-1 max-w-xs text-xs italic text-slate-500">{t.motivo_rechazo}</p>}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-slate-600">
+                  </Td>
+                  <Td>
+                    <Badge tono={ESTADO[t.estado].tono}>{ESTADO[t.estado].texto}</Badge>
+                    {t.motivo_rechazo && <p className="mt-1 max-w-xs text-xs italic text-muted">{t.motivo_rechazo}</p>}
+                  </Td>
+                  <Td className="text-xs text-muted">
                     {t.usuario_username}
                     {t.resuelto_por_username && <span className="block">→ {t.resuelto_por_username}</span>}
-                  </td>
-                  {puedeResolver && (
-                    <td className="px-3 py-2">{t.estado === 'PENDIENTE' ? <FilaAcciones t={t} /> : null}</td>
-                  )}
-                </tr>
+                  </Td>
+                  {puedeResolver && <Td>{t.estado === 'PENDIENTE' ? <FilaAcciones t={t} /> : null}</Td>}
+                </Tr>
               )
             })}
           </tbody>
-        </table>
-      </div>
-    </section>
+        </Table>
+      )}
+    </Card>
   )
 }

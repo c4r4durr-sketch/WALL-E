@@ -65,6 +65,12 @@ class Herramienta(models.Model):
         related_name="herramientas",
         db_column="cod_proveedor",
     )
+    # Foto del producto (la columna guarda la ruta dentro de MEDIA_ROOT).
+    # Nula en la base para no romper las herramientas ya cargadas; que sea
+    # obligatoria al dar de alta lo exige la API.
+    imagen = models.ImageField(
+        upload_to="productos/", null=True, blank=True, max_length=255, db_column="imagen_herramienta"
+    )
 
     creado_en = models.DateTimeField(auto_now_add=True, db_column="fecha_registro_herramienta")
     actualizado_en = models.DateTimeField(auto_now=True, db_column="fecha_actualizacion_herramienta")

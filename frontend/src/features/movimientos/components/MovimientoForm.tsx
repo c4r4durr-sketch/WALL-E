@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from 'react'
+import { ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
+import { Aviso, Button, Card, CardHeader, Field, Input, SegmentedControl, Select } from '../../../components/ui'
 import type { Herramienta } from '../../catalogo/api/catalogoApi'
 import type { Sucursal } from '../../usuarios/api/usuariosApi'
 import type { TipoOperacion, TipoUnidad } from '../api/movimientosApi'
@@ -49,97 +51,85 @@ export function MovimientoForm({ herramienta, sucursales, sucursalFija }: Props)
     )
   }
 
-  const opcion = (activa: boolean) =>
-    `flex-1 rounded-md border px-3 py-2 text-sm font-medium ${
-      activa ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'
-    }`
+  const ayudaSucursal = stockSucursal
+    ? `Stock actual: ${stockSucursal.unidades} unidades${
+        herramienta.unidades_por_caja > 1 ? ` (${desgloseCajas(stockSucursal.cajas_completas, stockSucursal.unidades_sueltas)})` : ''
+      }`
+    : undefined
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm" noValidate>
-      <h2 className="text-lg font-semibold text-slate-800">Registrar movimiento</h2>
+    <Card>
+      <CardHeader titulo="Registrar movimiento" descripcion="Entradas y salidas del mostrador. No se editan ni se borran." />
+      <form onSubmit={handleSubmit} className="mt-5 space-y-4" noValidate>
+        <SegmentedControl<TipoOperacion>
+          etiqueta="Tipo de movimiento"
+          valor={tipo}
+          onCambiar={(t) => { setTipo(t); limpiarAvisos() }}
+          className="w-full [&>button]:flex-1"
+          opciones={[
+            { valor: 'ENTRADA', texto: <><ArrowDownToLine size={15} aria-hidden />Entrada</> },
+            { valor: 'SALIDA', texto: <><ArrowUpFromLine size={15} aria-hidden />Salida</> },
+          ]}
+        />
 
-      <div className="flex gap-2" role="group" aria-label="Tipo de movimiento">
-        {(['ENTRADA', 'SALIDA'] as const).map((t) => (
-          <button key={t} type="button" className={opcion(tipo === t)} onClick={() => { setTipo(t); limpiarAvisos() }}>
-            {t === 'ENTRADA' ? 'Entrada' : 'Salida'}
-          </button>
-        ))}
-      </div>
-
-      <div>
-        <label htmlFor="sucursal" className="mb-1 block text-sm font-medium text-slate-700">Sucursal</label>
-        <select
-          id="sucursal"
-          value={sucursal}
-          disabled={sucursalFija !== null}
-          onChange={(event) => { setSucursal(event.target.value); limpiarAvisos() }}
-          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"
-        >
-          <option value="" disabled>Selecciona una sucursal</option>
-          {sucursales.map((s) => (
-            <option key={s.id} value={s.id}>{s.nombre}</option>
-          ))}
-        </select>
-        {stockSucursal && (
-          <p className="mt-1 text-xs text-slate-500">
-            Stock actual: <span className="font-medium text-slate-700">{stockSucursal.unidades} unidades</span>
-            {herramienta.unidades_por_caja > 1 &&
-              ` (${desgloseCajas(stockSucursal.cajas_completas, stockSucursal.unidades_sueltas)})`}
-          </p>
-        )}
-        {errores.sucursal && <p className="mt-1 text-xs text-red-600">{errores.sucursal}</p>}
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label htmlFor="cantidad" className="mb-1 block text-sm font-medium text-slate-700">Cantidad</label>
-          <input
-            id="cantidad"
-            type="number"
-            min={1}
-            step={1}
-            value={cantidad}
-            onChange={(event) => { setCantidad(event.target.value); limpiarAvisos() }}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <span className="mb-1 block text-sm font-medium text-slate-700">Unidad</span>
-          <div className="flex gap-2" role="group" aria-label="Unidad">
-            {(['UNIDAD', 'CAJA'] as const).map((u) => (
-              <button key={u} type="button" className={opcion(unidad === u)} onClick={() => { setUnidad(u); limpiarAvisos() }}>
-                {u === 'UNIDAD' ? 'Unidades' : `Cajas (×${herramienta.unidades_por_caja})`}
-              </button>
+        <Field etiqueta="Sucursal" ayuda={ayudaSucursal} error={errores.sucursal}>
+          <Select
+            value={sucursal}
+            disabled={sucursalFija !== null}
+            onChange={(event) => { setSucursal(event.target.value); limpiarAvisos() }}
+          >
+            <option value="" disabled>Selecciona una sucursal</option>
+            {sucursales.map((s) => (
+              <option key={s.id} value={s.id}>{s.nombre}</option>
             ))}
+          </Select>
+        </Field>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Field
+            etiqueta="Cantidad"
+            error={errores.cantidad}
+            ayuda={unidad === 'CAJA' && cantidadNumero > 0 ? `= ${unidadesEquivalentes} unidades` : undefined}
+          >
+            <Input
+              type="number"
+              min={1}
+              step={1}
+              value={cantidad}
+              onChange={(event) => { setCantidad(event.target.value); limpiarAvisos() }}
+            />
+          </Field>
+          <div>
+            <span className="mb-1.5 block text-xs font-semibold text-muted">Unidad</span>
+            <SegmentedControl<TipoUnidad>
+              etiqueta="Unidad"
+              valor={unidad}
+              onCambiar={(u) => { setUnidad(u); limpiarAvisos() }}
+              className="w-full [&>button]:flex-1"
+              opciones={[
+                { valor: 'UNIDAD', texto: 'Unidades' },
+                { valor: 'CAJA', texto: `Cajas ×${herramienta.unidades_por_caja}` },
+              ]}
+            />
           </div>
         </div>
-      </div>
-      {unidad === 'CAJA' && cantidadNumero > 0 && (
-        <p className="text-xs text-slate-500">
-          = {unidadesEquivalentes} unidades ({cantidadNumero} × {herramienta.unidades_por_caja})
-        </p>
-      )}
-      {errores.cantidad && <p className="text-sm text-red-600">{errores.cantidad}</p>}
 
-      {errores.detail && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{errores.detail}</p>
-      )}
-      {error && Object.keys(errores).length === 0 && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          No se pudo registrar el movimiento. Intenta de nuevo.
-        </p>
-      )}
-      {isSuccess && (
-        <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">Movimiento registrado.</p>
-      )}
+        {errores.detail && <Aviso tono="error">{errores.detail}</Aviso>}
+        {error && Object.keys(errores).length === 0 && (
+          <Aviso tono="error">No se pudo registrar el movimiento. Intenta de nuevo.</Aviso>
+        )}
+        {isSuccess && <Aviso tono="exito">Movimiento registrado.</Aviso>}
 
-      <button
-        type="submit"
-        disabled={isPending || !sucursal || !(cantidadNumero >= 1)}
-        className="w-full rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-      >
-        {isPending ? 'Registrando...' : tipo === 'ENTRADA' ? 'Registrar entrada' : 'Registrar salida'}
-      </button>
-    </form>
+        <Button
+          type="submit"
+          variante="primary"
+          className="w-full"
+          cargando={isPending}
+          disabled={!sucursal || !(cantidadNumero >= 1)}
+        >
+          {tipo === 'ENTRADA' ? 'Registrar entrada' : 'Registrar salida'}
+        </Button>
+      </form>
+    </Card>
   )
 }

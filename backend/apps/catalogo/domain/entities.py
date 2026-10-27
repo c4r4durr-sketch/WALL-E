@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 
 @dataclass(frozen=True)
@@ -28,11 +28,34 @@ class Herramienta:
     # HU8: a qué proveedor se le compra (opcional). Solo se puede asignar
     # un proveedor activo.
     proveedor_id: Optional[int] = None
+    # Foto del producto: ruta del archivo en el almacén de imágenes (None en
+    # las herramientas cargadas antes de que la foto fuera obligatoria).
+    # No se edita como un dato más: se cambia subiendo una ImagenProducto.
+    imagen: Optional[str] = None
     # Los asigna la base al guardar; None en una herramienta nueva.
     creado_en: Optional[datetime] = None
     actualizado_en: Optional[datetime] = None
     # Solo lectura, para mostrar; lo completa el repositorio.
     proveedor_nombre: Optional[str] = None
+
+
+# Formatos de la foto (como los nombra Pillow -> como se le muestran al
+# usuario) y tamaño máximo.
+FORMATOS_DE_IMAGEN = {"JPEG": "JPG", "PNG": "PNG", "WEBP": "WebP"}
+TAMANO_MAXIMO_IMAGEN = 5 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class ImagenProducto:
+    """Una foto recién subida, todavía sin guardar. `formato` es el que
+    detectó la capa de interfaz al leer el archivo (no la extensión del
+    nombre); `contenido` es el archivo en sí y solo lo entiende la
+    infraestructura que lo guarda."""
+
+    nombre: str
+    formato: str
+    tamano_bytes: int
+    contenido: Any = None
 
 
 @dataclass(frozen=True)

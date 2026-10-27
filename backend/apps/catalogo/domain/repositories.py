@@ -4,7 +4,7 @@ apps/usuarios/domain/repositories.py."""
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from .entities import CambioCosto, Herramienta
+from .entities import CambioCosto, Herramienta, ImagenProducto
 
 
 class HerramientaRepository(ABC):
@@ -21,9 +21,12 @@ class HerramientaRepository(ABC):
         ...
 
     @abstractmethod
-    def guardar(self, herramienta: Herramienta) -> Herramienta:
+    def guardar(self, herramienta: Herramienta, imagen: Optional[ImagenProducto] = None) -> Herramienta:
         """Crea la herramienta si id es None; si no, la actualiza.
-        Lanza CodigoDuplicadoError si la base rechaza el código."""
+        Lanza CodigoDuplicadoError si la base rechaza el código. Con
+        `imagen`, además la guarda como foto; la anterior, si había, se
+        borra del almacén cuando la transacción se confirma. Sin `imagen`,
+        la foto no cambia."""
         ...
 
     @abstractmethod

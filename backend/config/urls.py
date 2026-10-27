@@ -5,6 +5,8 @@ dueña de sus propias rutas (interfaces/api/urls.py); acá no se define
 ninguna vista, solo se incluyen.
 """
 
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -29,3 +31,7 @@ urlpatterns = [
     path("api/indicadores/", include("apps.indicadores.interfaces.api.urls")),
     path("api/auditoria/", include("apps.auditoria.interfaces.api.urls")),
 ]
+
+# Fotos de productos: en desarrollo las sirve Django; en producción, el
+# servidor web (static() no agrega nada si DEBUG es False).
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

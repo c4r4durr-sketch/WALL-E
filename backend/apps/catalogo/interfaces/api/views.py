@@ -21,7 +21,7 @@ from ...domain.exceptions import (
 )
 from ...infrastructure.repositories import HerramientaRepositoryDjango, HistorialCostoRepositoryDjango
 from ...use_cases import gestionar_herramientas as casos
-from .serializers import CambioCostoSerializer, HerramientaSerializer
+from .serializers import CambioCostoSerializer, HerramientaAltaSerializer, HerramientaSerializer
 
 
 class HerramientaViewSet(viewsets.ViewSet):
@@ -51,7 +51,8 @@ class HerramientaViewSet(viewsets.ViewSet):
         return Actor(usuario_id=usuario.id, rol=usuario.rol, sucursal_id=usuario.sucursal_id)
 
     def _responder(self, herramienta, codigo_http=status.HTTP_200_OK):
-        return Response(HerramientaSerializer(herramienta).data, status=codigo_http)
+        # request en el contexto: la foto se devuelve como URL absoluta.
+        return Response(HerramientaSerializer(herramienta, context={"request": self.request}).data, status=codigo_http)
 
     def _ejecutar(self, caso, *args, **kwargs):
         """Corre el use_case y convierte sus errores de negocio en la
@@ -69,19 +70,24 @@ class HerramientaViewSet(viewsets.ViewSet):
 
     def list(self, request):
         herramientas = self._ejecutar(casos.listar_herramientas)
-        return Response(HerramientaSerializer(herramientas, many=True).data)
+        return Response(HerramientaSerializer(herramientas, many=True, context={"request": request}).data)
 
     def retrieve(self, request, pk=None):
         return self._responder(self._ejecutar(casos.obtener_herramienta, int(pk)))
 
+    @extend_schema(request=HerramientaAltaSerializer)
     def create(self, request):
-        serializer = HerramientaSerializer(data=request.data)
+        # Acepta JSON o multipart; la foto es obligatoria (HerramientaAltaSerializer).
+        serializer = HerramientaAltaSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # La herramienta y su fila de historial de costos, juntas o ninguna.
+        datos = dict(serializer.validated_data)
+        imagen = datos.pop("imagen")
+        # La herramienta, su foto y su fila de historial de costos, juntas o ninguna.
         with transaction.atomic():
             herramienta = self._ejecutar(
-                casos.registrar_herramienta, serializer.validated_data,
+                casos.registrar_herramienta, datos,
                 actor=self._actor(request), historial=self.historial, proveedores=self.proveedores,
+                imagen=imagen,
             )
         return self._responder(herramienta, status.HTTP_201_CREATED)
 
@@ -96,10 +102,14 @@ class HerramientaViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         # En un PATCH solo se aplican los campos que llegaron de verdad:
         # validated_data de un serializer parcial no incluye los defaults.
+        # La foto solo cambia si llegó un archivo nuevo.
+        datos = dict(serializer.validated_data)
+        imagen = datos.pop("imagen", None)
         with transaction.atomic():
             herramienta = self._ejecutar(
-                casos.actualizar_herramienta, int(pk), serializer.validated_data,
+                casos.actualizar_herramienta, int(pk), datos,
                 actor=self._actor(request), historial=self.historial, proveedores=self.proveedores,
+                imagen=imagen,
             )
         return self._responder(herramienta)
 

@@ -137,6 +137,11 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+# Archivos subidos por los usuarios (fotos de productos). En desarrollo los
+# sirve Django (ver config/urls.py); media/ no se versiona.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 

@@ -14,6 +14,7 @@ from django.test import SimpleTestCase
 from rest_framework.test import APITestCase
 
 from apps.catalogo.infrastructure.models import Herramienta as HerramientaModel
+from apps.catalogo.tests import MediaTemporal, imagen_de_prueba
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.domain.value_objects import Rol
 from apps.usuarios.infrastructure.models import Sucursal, Usuario
@@ -205,7 +206,7 @@ class ProveedorApiTests(APITestCase):
         self.assertEqual((fila.accion, fila.usuario_username), ("INSERT", "admin_test"))
 
 
-class ProveedorEnCatalogoApiTests(APITestCase):
+class ProveedorEnCatalogoApiTests(MediaTemporal, APITestCase):
     def setUp(self):
         self.admin = Usuario.objects.create_user("admin_test", password="x", rol="ADMINISTRADOR")
         self.client.force_authenticate(self.admin)
@@ -213,7 +214,8 @@ class ProveedorEnCatalogoApiTests(APITestCase):
         self.inactivo = ProveedorModel.objects.create(nombre="Cerrada", telefono="77712346", activo=False)
 
     def _crear(self, **datos):
-        return self.client.post(URL_CATALOGO, {"codigo": "T-1", "nombre": "Taladro", **datos}, format="json")
+        datos = {"codigo": "T-1", "nombre": "Taladro", "imagen": imagen_de_prueba(), **datos}
+        return self.client.post(URL_CATALOGO, datos, format="multipart")
 
     def test_herramienta_con_proveedor_activo(self):
         respuesta = self._crear(proveedor=self.activo.id)
