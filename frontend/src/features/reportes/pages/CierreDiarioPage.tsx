@@ -29,6 +29,7 @@ import { useFotos } from '../../catalogo/hooks/useFotos'
 import { ETIQUETA, cajas } from '../../movimientos/formato'
 import { useSucursales } from '../../usuarios/hooks/useSucursales'
 import { useCierreDiario } from '../hooks/useCierreDiario'
+import { ExportarExcel } from '../components/ExportarExcel'
 import type { CierreDiario, LineaCierre } from '../api/reportesApi'
 import type { TipoMovimiento } from '../../movimientos/api/movimientosApi'
 
@@ -67,6 +68,14 @@ export function CierreDiarioPage() {
         migas={['Inventario', 'Cierre diario']}
         titulo="Cierre diario"
         subtitulo="Movimientos del día por sucursal, en hora de La Paz."
+        acciones={
+          <ExportarExcel
+            url="/indicadores/cierre-diario/excel/"
+            params={{ sucursal: esAdmin ? Number(sucursal) : undefined, fecha }}
+            nombre={`cierre-diario-${fecha}`}
+            deshabilitado={!listo || !cierre}
+          />
+        }
       />
 
       <Card className="flex flex-wrap items-start gap-5">

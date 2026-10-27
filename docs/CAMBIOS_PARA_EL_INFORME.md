@@ -183,3 +183,13 @@
       precio, como el costo de HU7); **todos los roles** la ven;
     - vive en `indicadores` (reglas) + `catalogo` (tabla): `indicadores`
       sigue sin tablas propias (punto 5).
+
+20. **HU25, exportar a Excel.** **Base de datos:** sin cambios. Endpoints
+    `GET /api/indicadores/cierre-diario/excel/`, `.../antiguedad/excel/` y
+    `.../abc/excel/` (.xlsx con título, filtros, fecha de generación y
+    totales). Decisiones: se exportan los tres reportes con tabla, con los
+    mismos filtros y permisos que su pantalla (cierre y antigüedad:
+    Administrador y Supervisor de su sucursal; ABC: todos). Si la HU pide
+    exportar otro listado (por ejemplo, el catálogo o los movimientos), se
+    agrega con el mismo módulo `indicadores/interfaces/excel.py`.
+    Dependencia nueva: `openpyxl` 3.1.5.

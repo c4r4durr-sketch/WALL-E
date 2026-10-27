@@ -35,6 +35,8 @@ Base de datos de desarrollo: `eoq_db`, usuario `eoq_user` (con permiso
 | django-cors-headers | **4.9.0** | CORS frontend (5173) ↔ backend (8000) |
 | django-environ | **0.14.0** | Lee `backend/.env` |
 | psycopg | **3.3.5** | Driver PostgreSQL (v3, no psycopg2) |
+| openpyxl | **3.1.5** | Reportes en Excel (HU25, sprint 4) |
+| et_xmlfile | 2.0.0 | (dependencia de openpyxl) |
 | psycopg-binary | 3.3.5 | |
 | asgiref | 3.12.1 | (dependencia de Django) |
 | sqlparse | 0.6.0 | (dependencia de Django) |

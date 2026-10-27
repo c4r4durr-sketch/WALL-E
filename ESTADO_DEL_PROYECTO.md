@@ -27,7 +27,7 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | — | EOQ / ROP / ABC (HU17–HU21) | ✅ adelantado |
 | 8–9 | Deuda: zona horaria, usuarios en 4 capas, HU3, HU7 | ✅ (bloque a-d) |
 | 9–10 | HU8 proveedores, HU14 cierre diario, HU13 pantalla de historial | ✅ adelantado (bloque e-g) |
-| — | Adelanto Sprint 4: HU22, HU23, HU25 | HU22 y HU23 ✅; HU25 en curso (rama `sprint4`) |
+| — | Adelanto Sprint 4: HU22, HU23, HU25 | ✅ (rama `sprint4`) |
 | — | Adelanto Sprint 5: HU21 | ✅ (rama `sprint4`) |
 
 ## Entorno real de esta máquina (verificado 22/09/2026)
@@ -89,6 +89,7 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | **Cierre diario** (HU14) | `GET /api/indicadores/cierre-diario/?sucursal=&fecha=`: movimientos del día en hora de La Paz, totales por tipo, salidas destacadas. Admin cualquier sucursal, Supervisor la suya, Empleado 403; fecha futura 400 | `/cierre-diario` (Admin y Supervisor): fecha y sucursal, tarjetas de totales, tabla y aviso si no hubo salidas |
 | **Antigüedad del stock** (HU22) | `GET /api/indicadores/antiguedad/?sucursal=&dias_minimos=`: por herramienta y sucursal con stock, días sin venta, tramo (0–30, 31–40, 41–90, más de 90), estancada (> 40 días) y valor inmovilizado (stock × costo unitario). Admin todas o una sucursal, Supervisor la suya, Empleado 403. Misma regla que el panel (`domain/antiguedad.py`) | `/antiguedad` (Admin y Supervisor, grupo Análisis): sucursal, rango de días, tarjetas y tabla por tramo |
 | **Promociones** (HU23) | Tabla `promociones` (catalogo, `0007`); reglas en `indicadores/use_cases/promociones.py`. `GET /api/indicadores/promociones/?vigentes=` (todos), `POST` (solo Admin; solo herramientas estancadas en esa sucursal; descuento 1–90 %; desde hoy hasta `fecha_fin`; una vigente por herramienta y sucursal → 409), `POST .../<id>/terminar/` (solo Admin). Sin editar ni borrar; auditadas | `/promociones` (todos; Admin puede terminar) y botón "Promocionar" en `/antiguedad` (Admin) |
+| **Excel** (HU25) | `GET .../cierre-diario/excel/`, `.../antiguedad/excel/` y `.../abc/excel/`: el mismo caso de uso, filtros y permisos que la versión JSON; el .xlsx lo arma `indicadores/interfaces/excel.py` (openpyxl) | Botón "Exportar a Excel" en Cierre diario, Antigüedad del stock y Clasificación ABC |
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
 
 Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **211 pruebas OK**.
@@ -104,8 +105,7 @@ Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores
 Sprint 4).
 
 ## Pendiente (en orden)
-1. Bloque h-j: HU25 (Excel).
-3. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
+1. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
    el entorno real; ya no tiene credenciales escritas).
 
 ## Decisiones tomadas (para no volver a discutirlas)
@@ -147,6 +147,9 @@ Sprint 4).
 - Promociones (HU23): descuento en % (no hay precio de venta), solo
   sobre estancadas, solo el Admin las gestiona, todos las ven; se
   terminan, no se borran. Una herramienta con promociones no se elimina.
+- Excel (HU25): solo los reportes con tabla (cierre diario, antigüedad,
+  ABC), con los mismos permisos que su pantalla; sin plantillas ni
+  gráficos. Fechas en hora de La Paz.
 - Estancamiento: más de 40 días sin una SALIDA real (los ajustes no son
   ventas); si nunca se vendió, se cuenta desde su primer movimiento en esa
   sucursal (el SQL original la marcaba estancada desde el primer día).
@@ -163,7 +166,7 @@ Después de cada `git pull`: correr `migrate` y, si cambió
 `requirements.txt` o `package.json`, `pip install -r requirements.txt` y
 `npm install`. Sprint 4 suma `catalogo.0007_promociones` (tabla nueva, no
 toca datos). Fase 1 suma `catalogo.0006` (columna de la foto, nula) y
-las dependencias Pillow, motion, @radix-ui/react-dialog y
+la dependencia openpyxl (sprint 4) y Pillow, motion, @radix-ui/react-dialog y
 @fontsource-variable/inter. (Al 20/10 la base local tiene
 pendientes las 5 migraciones de nombres del 14/10, `catalogo.0004` y
 `0005`, `proveedores.0001`, `movimientos.0008` y `auditoria.0003`: solo

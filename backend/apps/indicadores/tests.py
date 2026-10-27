@@ -962,3 +962,73 @@ class PromocionesApiTests(APITestCase):
         self.assertEqual(sin_stock.status_code, 409)
         self.assertIn("detail", sin_stock.json())
         self.assertEqual(self.client.post(f"{self.URL}999/terminar/").status_code, 404)
+
+
+# --- Exportar reportes a Excel (HU25) ---
+
+from io import BytesIO as _BytesIO
+
+from openpyxl import load_workbook
+
+
+def _hoja(respuesta):
+    return load_workbook(_BytesIO(respuesta.content)).active
+
+
+def _filas(hoja):
+    return [list(f) for f in hoja.iter_rows(values_only=True)]
+
+
+class ExcelApiTests(APITestCase):
+    _mov = CierreDiarioApiTests._mov
+
+    def setUp(self):
+        CierreDiarioApiTests.setUp(self)
+        from django.utils import timezone
+        self.h.costo_unitario = Decimal("10")
+        self.h.save()
+        ahora = timezone.now()
+        self._mov("ENTRADA", 20, ahora - timedelta(days=80))
+        self._mov("SALIDA", 5, ahora - timedelta(days=50))
+        self._mov("SALIDA", 3, ahora)
+
+    def test_cierre_diario_en_excel_igual_que_la_pantalla(self):
+        self.client.force_authenticate(self.sup)
+        respuesta = self.client.get("/api/indicadores/cierre-diario/excel/")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta["Content-Type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        self.assertIn('attachment; filename="cierre-diario-central-', respuesta["Content-Disposition"])
+        filas = _filas(_hoja(respuesta))
+        self.assertEqual(filas[0][0], "Cierre diario")
+        self.assertEqual(filas[3][:4], ["Hora", "Tipo", "Código", "Herramienta"])
+        self.assertEqual(filas[4][1:4], ["Salida", "T-1", "Taladro"])
+        self.assertEqual(filas[-1][0], "Total de salidas del día")
+        self.assertEqual(filas[-1][6], 3)
+
+    def test_antiguedad_en_excel(self):
+        self.client.force_authenticate(self.admin)
+        hoja = _hoja(self.client.get("/api/indicadores/antiguedad/excel/"))
+        filas = _filas(hoja)
+        self.assertIn("Todas las sucursales", filas[1][0])
+        self.assertEqual(filas[4][:4], ["T-1", "Taladro", "Central", 12])
+        self.assertEqual((filas[4][7], filas[4][9]), ("No", 120.0))  # se vendió hoy
+        self.assertEqual(hoja.cell(row=5, column=10).number_format, "#,##0.00")
+
+    def test_abc_en_excel_para_todos(self):
+        self.client.force_authenticate(self.emp)
+        filas = _filas(_hoja(self.client.get("/api/indicadores/abc/excel/")))
+        self.assertEqual(filas[4][:4], ["A", "T-1", "Taladro", 8])
+        self.assertEqual(filas[-1][:4], ["Total", None, None, 8])
+
+    def test_mismos_permisos_que_el_reporte(self):
+        self.client.force_authenticate(self.emp)
+        self.assertEqual(self.client.get("/api/indicadores/cierre-diario/excel/").status_code, 403)
+        self.assertEqual(self.client.get("/api/indicadores/antiguedad/excel/").status_code, 403)
+        self.client.force_authenticate(self.sup)
+        otra = {"sucursal": self.norte.id}
+        self.assertEqual(self.client.get("/api/indicadores/cierre-diario/excel/", otra).status_code, 403)
+        self.assertEqual(self.client.get("/api/indicadores/antiguedad/excel/", otra).status_code, 403)
+        self.client.force_authenticate(self.admin)
+        self.assertIn("sucursal", self.client.get("/api/indicadores/cierre-diario/excel/").json())
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get("/api/indicadores/abc/excel/").status_code, 401)

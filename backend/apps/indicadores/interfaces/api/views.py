@@ -1,4 +1,5 @@
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -11,7 +12,7 @@ from apps.movimientos.infrastructure.repositories import MovimientoRepositoryDja
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.infrastructure.repositories import SucursalRepositoryDjango
 
-from ...domain.entities import PromocionListada
+from ...domain.entities import CierreDiario, PromocionListada, ReporteAntiguedad
 from ...domain.exceptions import (
     ActualizacionNoPermitidaError,
     DatosPromocionInvalidosError,
@@ -31,6 +32,7 @@ from ...use_cases.clasificar_abc import clasificar_abc
 from ...use_cases.panel_auditoria import construir_panel
 from ...use_cases.promociones import crear_promocion, estado_promocion, listar_promociones, terminar_promocion
 from ...use_cases.reporte_antiguedad import construir_reporte_antiguedad
+from ..excel import TIPO_XLSX, excel_abc, excel_antiguedad, excel_cierre_diario, respuesta_excel
 from .serializers import (
     CierreDiarioSerializer,
     ClasificacionABCSerializer,
@@ -121,6 +123,10 @@ class PuntoReordenPorHerramientaView(APIView):
         return Response(ResultadoROPSerializer(resultado).data)
 
 
+def _clasificacion_abc():
+    return clasificar_abc(HerramientaRepositoryDjango(), MovimientoRepositoryDjango(), ahora=timezone.now())
+
+
 class ClasificacionABCView(APIView):
     """GET /api/indicadores/abc/
     Clasificación ABC de todo el catálogo por unidades vendidas en los
@@ -130,10 +136,17 @@ class ClasificacionABCView(APIView):
 
     @extend_schema(responses=ClasificacionABCSerializer(many=True))
     def get(self, request):
-        resultado = clasificar_abc(
-            HerramientaRepositoryDjango(), MovimientoRepositoryDjango(), ahora=timezone.now()
-        )
-        return Response(ClasificacionABCSerializer(resultado, many=True).data)
+        return Response(ClasificacionABCSerializer(_clasificacion_abc(), many=True).data)
+
+
+class ClasificacionABCExcelView(APIView):
+    """GET /api/indicadores/abc/excel/  (HU25, todos los roles)"""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses={(200, TIPO_XLSX): OpenApiTypes.BINARY})
+    def get(self, request):
+        return respuesta_excel(*excel_abc(_clasificacion_abc(), timezone.localdate()))
 
 
 class PanelAuditoriaView(APIView):
@@ -154,6 +167,31 @@ class PanelAuditoriaView(APIView):
         return Response(PanelAuditoriaSerializer(panel).data)
 
 
+def _cierre_diario(request) -> CierreDiario:
+    filtro = FiltroCierreDiarioSerializer(data=request.query_params)
+    filtro.is_valid(raise_exception=True)
+    sucursal_id = filtro.validated_data.get("sucursal", request.user.sucursal_id)
+    if sucursal_id is None:
+        raise ValidationError({"sucursal": ["Indica la sucursal."]})
+    hoy = timezone.localdate()
+    try:
+        return construir_cierre(
+            MovimientoRepositoryDjango(),
+            HerramientaRepositoryDjango(),
+            SucursalRepositoryDjango(),
+            _actor(request),
+            sucursal_id,
+            fecha=filtro.validated_data.get("fecha", hoy),
+            hoy=hoy,
+        )
+    except ReporteNoPermitidoError:
+        raise PermissionDenied("Solo el Administrador o el Supervisor de esa sucursal pueden ver su cierre diario.")
+    except FechaFuturaError:
+        raise ValidationError({"fecha": ["La fecha no puede ser posterior a hoy."]})
+    except SucursalInexistenteError:
+        raise ValidationError({"sucursal": ["No existe esa sucursal."]})
+
+
 class CierreDiarioView(APIView):
     """GET /api/indicadores/cierre-diario/?sucursal=<id>&fecha=AAAA-MM-DD
     Cierre y resumen diario (HU14): movimientos del día de una sucursal, en
@@ -164,31 +202,37 @@ class CierreDiarioView(APIView):
 
     @extend_schema(parameters=[FiltroCierreDiarioSerializer], responses=CierreDiarioSerializer)
     def get(self, request):
-        filtro = FiltroCierreDiarioSerializer(data=request.query_params)
-        filtro.is_valid(raise_exception=True)
-        usuario = request.user
-        actor = _actor(request)
-        sucursal_id = filtro.validated_data.get("sucursal", usuario.sucursal_id)
-        if sucursal_id is None:
-            raise ValidationError({"sucursal": ["Indica la sucursal."]})
-        hoy = timezone.localdate()
-        try:
-            cierre = construir_cierre(
-                MovimientoRepositoryDjango(),
-                HerramientaRepositoryDjango(),
-                SucursalRepositoryDjango(),
-                actor,
-                sucursal_id,
-                fecha=filtro.validated_data.get("fecha", hoy),
-                hoy=hoy,
-            )
-        except ReporteNoPermitidoError:
-            raise PermissionDenied("Solo el Administrador o el Supervisor de esa sucursal pueden ver su cierre diario.")
-        except FechaFuturaError:
-            raise ValidationError({"fecha": ["La fecha no puede ser posterior a hoy."]})
-        except SucursalInexistenteError:
-            raise ValidationError({"sucursal": ["No existe esa sucursal."]})
-        return Response(CierreDiarioSerializer(cierre).data)
+        return Response(CierreDiarioSerializer(_cierre_diario(request)).data)
+
+
+class CierreDiarioExcelView(APIView):
+    """GET /api/indicadores/cierre-diario/excel/?sucursal=&fecha=
+    HU25: el mismo cierre, como .xlsx. Mismos permisos."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(parameters=[FiltroCierreDiarioSerializer], responses={(200, TIPO_XLSX): OpenApiTypes.BINARY})
+    def get(self, request):
+        return respuesta_excel(*excel_cierre_diario(_cierre_diario(request)))
+
+
+def _reporte_antiguedad(request) -> ReporteAntiguedad:
+    filtro = FiltroAntiguedadSerializer(data=request.query_params)
+    filtro.is_valid(raise_exception=True)
+    try:
+        return construir_reporte_antiguedad(
+            MovimientoRepositoryDjango(),
+            HerramientaRepositoryDjango(),
+            SucursalRepositoryDjango(),
+            _actor(request),
+            filtro.validated_data.get("sucursal"),
+            hoy=timezone.localdate(),
+            dias_minimos=filtro.validated_data["dias_minimos"],
+        )
+    except ReporteNoPermitidoError:
+        raise PermissionDenied("Solo el Administrador o el Supervisor de esa sucursal pueden ver este reporte.")
+    except SucursalInexistenteError:
+        raise ValidationError({"sucursal": ["No existe esa sucursal."]})
 
 
 class ReporteAntiguedadView(APIView):
@@ -201,23 +245,20 @@ class ReporteAntiguedadView(APIView):
 
     @extend_schema(parameters=[FiltroAntiguedadSerializer], responses=ReporteAntiguedadSerializer)
     def get(self, request):
-        filtro = FiltroAntiguedadSerializer(data=request.query_params)
-        filtro.is_valid(raise_exception=True)
-        try:
-            reporte = construir_reporte_antiguedad(
-                MovimientoRepositoryDjango(),
-                HerramientaRepositoryDjango(),
-                SucursalRepositoryDjango(),
-                _actor(request),
-                filtro.validated_data.get("sucursal"),
-                hoy=timezone.localdate(),
-                dias_minimos=filtro.validated_data["dias_minimos"],
-            )
-        except ReporteNoPermitidoError:
-            raise PermissionDenied("Solo el Administrador o el Supervisor de esa sucursal pueden ver este reporte.")
-        except SucursalInexistenteError:
-            raise ValidationError({"sucursal": ["No existe esa sucursal."]})
-        return Response(ReporteAntiguedadSerializer(reporte).data)
+        return Response(ReporteAntiguedadSerializer(_reporte_antiguedad(request)).data)
+
+
+class ReporteAntiguedadExcelView(APIView):
+    """GET /api/indicadores/antiguedad/excel/?sucursal=&dias_minimos=
+    HU25: el mismo reporte, como .xlsx. Mismos permisos."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(parameters=[FiltroAntiguedadSerializer], responses={(200, TIPO_XLSX): OpenApiTypes.BINARY})
+    def get(self, request):
+        reporte = _reporte_antiguedad(request)
+        sucursal = SucursalRepositoryDjango().obtener_por_id(reporte.sucursal_id) if reporte.sucursal_id else None
+        return respuesta_excel(*excel_antiguedad(reporte, sucursal.nombre if sucursal else None))
 
 
 SOLO_ADMIN_PROMOCIONES = "Solo el Administrador puede crear o terminar promociones."

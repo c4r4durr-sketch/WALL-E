@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { Aviso, Button, Card, PageHeader, SkeletonFilas } from '../../../components/ui'
 import { useClasificacionABC } from '../hooks/useIndicadores'
 import { TablaABC } from '../components/TablaABC'
+import { ExportarExcel } from '../../reportes/components/ExportarExcel'
 
 // Clasificación ABC del catálogo (HU19/HU20). Al elegir una herramienta se
 // abre Indicadores con su EOQ y su punto de reorden.
@@ -15,6 +16,7 @@ export function ClasificacionABCPage() {
         migas={['Análisis', 'Clasificación ABC']}
         titulo="Clasificación ABC"
         subtitulo="Elige una herramienta para ver cuánto y cuándo pedir."
+        acciones={<ExportarExcel url="/indicadores/abc/excel/" nombre="clasificacion-abc" deshabilitado={!abc} />}
       />
       {isError && (
         <Aviso tono="error" accion={<Button tamano="sm" onClick={() => refetch()}>Reintentar</Button>}>

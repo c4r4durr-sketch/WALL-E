@@ -30,6 +30,7 @@ import { CeldaHerramienta } from '../../catalogo/components/CeldaHerramienta'
 import { useFotos } from '../../catalogo/hooks/useFotos'
 import { useSucursales } from '../../usuarios/hooks/useSucursales'
 import { useAntiguedad } from '../hooks/useAntiguedad'
+import { ExportarExcel } from '../components/ExportarExcel'
 import { PromocionForm } from '../../promociones/components/PromocionForm'
 import { usePromociones } from '../../promociones/hooks/usePromociones'
 import { puedeGestionarPromociones } from '../../promociones/permisos'
@@ -66,10 +67,8 @@ export function AntiguedadPage() {
   const [rango, setRango] = useState<Rango>('0')
   const { data: sucursales } = useSucursales()
   const foto = useFotos()
-  const { data: reporte, isLoading, isError, error, refetch } = useAntiguedad({
-    sucursal: esAdmin && sucursal !== '' ? Number(sucursal) : undefined,
-    dias_minimos: Number(rango),
-  })
+  const filtro = { sucursal: esAdmin && sucursal !== '' ? Number(sucursal) : undefined, dias_minimos: Number(rango) }
+  const { data: reporte, isLoading, isError, error, refetch } = useAntiguedad(filtro)
   const todas = reporte?.sucursal_id === null
   const masDe90 = reporte?.tramos.at(-1)
   const descuento = (l: LineaAntiguedad) =>
@@ -81,6 +80,7 @@ export function AntiguedadPage() {
         migas={['Análisis', 'Antigüedad del stock']}
         titulo="Antigüedad del stock"
         subtitulo="Días sin venta de cada herramienta con stock, por sucursal."
+        acciones={<ExportarExcel url="/indicadores/antiguedad/excel/" params={filtro} nombre="antiguedad" deshabilitado={!reporte} />}
       />
 
       <Card className="flex flex-wrap items-end gap-5">
