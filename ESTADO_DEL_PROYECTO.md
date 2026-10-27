@@ -104,6 +104,9 @@ Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores ni
 avisos. Cada página se carga por ruta (`React.lazy` en `app/router.tsx`,
 skeleton mientras llega): el archivo más grande es el de librerías
 compartidas (400 kB, 133 kB gzip); antes era uno solo de 621 kB.
+`npm audit`: 0 vulnerabilidades (27/10: `npm audit fix` sin `--force`
+subió vite 8.2.2 → 8.3.5, follow-redirects 1.16.0 → 1.16.2 y
+source-map-js 1.2.1 → 1.2.2; ninguna versión mayor).
 
 ## Pendiente (en orden)
 1. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja

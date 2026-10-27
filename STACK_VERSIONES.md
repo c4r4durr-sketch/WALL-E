@@ -62,7 +62,7 @@ Instalado = versión fijada en `package-lock.json` para todos los paquetes.
 | react-router-dom | **7.18.3** | ^7.18.3 |
 | @tanstack/react-query | **5.102.8** | ^5.102.8 |
 | axios | **1.20.0** | ^1.20.0 |
-| vite | **8.2.2** | ^8.2.2 |
+| vite | **8.3.5** | ^8.2.2 (8.3.5 por `npm audit fix`, 27/10/2026) |
 | @vitejs/plugin-react | 6.1.1 | ^6.1.0 |
 | typescript | **6.0.3** | ~6.0.2 |
 | tailwindcss | **4.3.3** | ^4.3.3 (plugin `@tailwindcss/vite`, sin tailwind.config.js) |
