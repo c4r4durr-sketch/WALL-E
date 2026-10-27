@@ -4,9 +4,10 @@
 > nuevo, leer esto primero. Se actualiza en el mismo commit que cambia algo
 > importante. Versiones exactas del stack: ver `STACK_VERSIONES.md`.
 >
-> **Última actualización: 23/10/2026, fase 1 de diseño** (semana 8 del
-> cronograma). Rama de trabajo: `fase1-diseno`, salida de `sprint3-cierre`
-> (todo solo en local, sin push). Reglas visuales: `docs/DISENO.md`.
+> **Última actualización: 27/10/2026, fase 1 cerrada** (semana 9 del
+> cronograma). `fase1-diseno` quedó fusionada en `sprint3-cierre` (merge
+> sin fast-forward, todo solo en local, sin push). Reglas visuales:
+> `docs/DISENO.md`.
 
 ## Equipo y materia
 Proyecto académico (Programación III y Análisis y Diseño II) para una
@@ -90,13 +91,15 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 
 Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **211 pruebas OK**.
 
-**Fase 1 de diseño** (`fase1-diseno`): todas las pantallas sobre el sistema
+**Fase 1 de diseño** (cerrada y fusionada en `sprint3-cierre` el 27/10): todas las pantallas sobre el sistema
 de `docs/DISENO.md` (componentes en `frontend/src/components/ui/`, barra
 lateral en `frontend/src/app/layout/`), modo claro y oscuro, y **foto
 obligatoria** al dar de alta una herramienta (`herramientas.imagen_herramienta`,
 archivos en `backend/media/productos/`, fuera del repo). Para tener fotos de
 muestra: `manage.py cargar_fotos_demo` (solo completa las que no tienen).
-Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores ni avisos.
+Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores
+(el build avisa que el paquete JS pesa 621 kB: se divide por rutas en el
+Sprint 4).
 
 ## Pendiente (en orden)
 1. Bloque h-j: HU22 (reporte de antigüedad), HU23 (promoción), HU25 (Excel).

@@ -31,3 +31,6 @@ media/
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# Configuración local de Claude Code
+.claude/settings.local.json
