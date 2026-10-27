@@ -656,3 +656,130 @@ class ActualizarDemandaApiTests(APITestCase):
         self.assertEqual(self.client.post(self._url(999)).status_code, 404)
         self.client.force_authenticate(None)
         self.assertEqual(self.client.post(self._url(self.tal.id)).status_code, 401)
+
+
+# --- Reporte de antigüedad (HU22) ---
+
+from decimal import Decimal
+
+from .domain.antiguedad import dias_sin_venta, tramo
+from .use_cases.reporte_antiguedad import construir_reporte_antiguedad
+
+
+class _SucursalesConId(_Repo):
+    def obtener_por_id(self, sucursal_id):
+        return next((s for s in self.datos if s.id == sucursal_id), None)
+
+
+class AntiguedadDominioTests(SimpleTestCase):
+    def test_tramos_con_corte_en_40_dias(self):
+        self.assertEqual(
+            [tramo(d) for d in (0, 30, 31, 40, 41, 90, 91, 500)],
+            ["0–30 días", "0–30 días", "31–40 días", "31–40 días", "41–90 días", "41–90 días",
+             "Más de 90 días", "Más de 90 días"],
+        )
+
+    def test_dias_desde_la_ultima_venta_o_el_primer_movimiento(self):
+        self.assertEqual(dias_sin_venta(hace(5), hace(100), HOY), 5)
+        self.assertEqual(dias_sin_venta(None, hace(100), HOY), 100)
+
+
+class ReporteAntiguedadUseCaseTests(SimpleTestCase):
+    sucursales = _SucursalesConId([Sucursal(1, "Central", ""), Sucursal(2, "Norte", "")])
+
+    def setUp(self):
+        con_costo = _replace(herramienta(1), costo_unitario=Decimal("12.50"))
+        self.catalogo = _Repo([con_costo, herramienta(2), herramienta(3)])
+        self.filas = _Repo([
+            resumen(1, 1, entradas=10, salidas=2, ultima_salida=60),   # estancada, con costo
+            resumen(1, 2, entradas=5, ultima_salida=None, primero=10),  # nunca vendida, reciente
+            resumen(2, 1, entradas=4, salidas=1, ultima_salida=35),
+            resumen(3, 1, entradas=3, salidas=3, ultima_salida=200),   # sin stock: no aparece
+            resumen(2, 2, entradas=7, salidas=1, ultima_salida=95),    # estancada, sin costo
+        ])
+
+    def _reporte(self, actor, sucursal=None, dias_minimos=0):
+        return construir_reporte_antiguedad(self.filas, self.catalogo, self.sucursales, actor, sucursal,
+                                            hoy=HOY, dias_minimos=dias_minimos)
+
+    def test_admin_ve_todas_las_sucursales_ordenadas_por_dias(self):
+        r = self._reporte(ADMIN)
+        self.assertEqual(
+            [(l.herramienta_id, l.sucursal_nombre, l.stock, l.dias_sin_venta, l.estancada) for l in r.lineas],
+            [(2, "Norte", 6, 95, True), (1, "Central", 8, 60, True), (2, "Central", 3, 35, False),
+             (1, "Norte", 5, 10, False)],
+        )
+        self.assertEqual((r.total_unidades, r.total_estancadas, r.lineas_sin_costo), (22, 2, 2))
+        # Solo la estancada con costo: 8 x 12.50 (la de Norte no tiene costo).
+        self.assertEqual(r.valor_inmovilizado_estancado, Decimal("100.00"))
+        self.assertEqual([(t.tramo, t.lineas, t.unidades) for t in r.tramos],
+                         [("0–30 días", 1, 5), ("31–40 días", 1, 3), ("41–90 días", 1, 8), ("Más de 90 días", 1, 6)])
+        self.assertTrue(r.lineas[3].nunca_vendida)
+
+    def test_filtro_por_sucursal_y_dias_minimos(self):
+        r = self._reporte(ADMIN, sucursal=1, dias_minimos=41)
+        self.assertEqual([(l.herramienta_id, l.sucursal_id) for l in r.lineas], [(1, 1)])
+        self.assertEqual(r.sucursal_id, 1)
+
+    def test_supervisor_ve_solo_la_suya(self):
+        r = self._reporte(SUPERVISOR)
+        self.assertEqual({l.sucursal_id for l in r.lineas}, {1})
+        self.assertEqual(r.sucursal_id, 1)
+        with self.assertRaises(ReporteNoPermitidoError):
+            self._reporte(SUPERVISOR, sucursal=2)
+
+    def test_empleado_no_ve_el_reporte(self):
+        with self.assertRaises(ReporteNoPermitidoError):
+            self._reporte(EMPLEADO, sucursal=1)
+
+    def test_sucursal_inexistente(self):
+        with self.assertRaises(SucursalInexistenteError):
+            self._reporte(ADMIN, sucursal=9)
+
+    def test_el_panel_cuenta_las_mismas_estancadas(self):
+        panel = construir_panel(self.filas, self.catalogo, self.sucursales, hoy=HOY)
+        reporte = self._reporte(ADMIN)
+        self.assertEqual(
+            {(e.herramienta_id, e.sucursal_id, e.dias_sin_venta) for e in panel.estancadas},
+            {(l.herramienta_id, l.sucursal_id, l.dias_sin_venta) for l in reporte.lineas if l.estancada},
+        )
+
+
+class ReporteAntiguedadApiTests(APITestCase):
+    URL = "/api/indicadores/antiguedad/"
+
+    def setUp(self):
+        CierreDiarioApiTests.setUp(self)
+        self.h.costo_unitario = Decimal("10")
+        self.h.save()
+        from django.utils import timezone
+        ahora = timezone.now()
+        self._mov("ENTRADA", 20, ahora - timedelta(days=80))
+        self._mov("SALIDA", 5, ahora - timedelta(days=50))
+        self._mov("ENTRADA", 4, ahora - timedelta(days=3), sucursal=self.norte)
+
+    _mov = CierreDiarioApiTests._mov
+
+    def test_admin_todas_y_filtradas(self):
+        self.client.force_authenticate(self.admin)
+        datos = self.client.get(self.URL).json()
+        self.assertEqual([(l["sucursal_nombre"], l["stock"], l["estancada"]) for l in datos["lineas"]],
+                         [("Central", 15, True), ("Norte", 4, False)])
+        self.assertEqual((datos["sucursal_id"], datos["valor_inmovilizado_estancado"]), (None, "150.00"))
+        filtrado = self.client.get(self.URL, {"sucursal": self.norte.id}).json()
+        self.assertEqual([l["sucursal_nombre"] for l in filtrado["lineas"]], ["Norte"])
+        self.assertEqual(len(self.client.get(self.URL, {"dias_minimos": 41}).json()["lineas"]), 1)
+
+    def test_permisos_por_rol(self):
+        self.client.force_authenticate(self.sup)
+        self.assertEqual([l["sucursal_nombre"] for l in self.client.get(self.URL).json()["lineas"]], ["Central"])
+        self.assertEqual(self.client.get(self.URL, {"sucursal": self.norte.id}).status_code, 403)
+        self.client.force_authenticate(self.emp)
+        self.assertEqual(self.client.get(self.URL).status_code, 403)
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get(self.URL).status_code, 401)
+
+    def test_validaciones(self):
+        self.client.force_authenticate(self.admin)
+        self.assertIn("sucursal", self.client.get(self.URL, {"sucursal": 999}).json())
+        self.assertIn("dias_minimos", self.client.get(self.URL, {"dias_minimos": -1}).json())

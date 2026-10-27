@@ -39,3 +39,53 @@ export async function obtenerCierreDiario(filtro: { sucursal?: number; fecha: st
   const { data } = await httpClient.get<CierreDiario>('/indicadores/cierre-diario/', { params: filtro })
   return data
 }
+
+// --- Antigüedad del stock (HU22): GET /api/indicadores/antiguedad/ ---
+// Espeja ReporteAntiguedadSerializer. Los montos llegan como texto
+// (DecimalField de DRF), igual que el costo unitario del catálogo.
+
+export interface LineaAntiguedad {
+  herramienta_id: number
+  codigo: string
+  nombre: string
+  sucursal_id: number
+  sucursal_nombre: string
+  stock: number
+  ultima_venta: string | null
+  dias_sin_venta: number
+  nunca_vendida: boolean
+  tramo: string
+  estancada: boolean
+  costo_unitario: string | null
+  valor_inmovilizado: string | null
+}
+
+export interface TotalTramo {
+  tramo: string
+  lineas: number
+  unidades: number
+}
+
+export interface ReporteAntiguedad {
+  fecha: string
+  sucursal_id: number | null
+  dias_minimos: number
+  dias_para_estancamiento: number
+  lineas: LineaAntiguedad[]
+  tramos: TotalTramo[]
+  total_unidades: number
+  total_estancadas: number
+  valor_inmovilizado_estancado: string
+  lineas_sin_costo: number
+}
+
+// Sin `sucursal`: el Administrador ve todas; el Supervisor, la suya.
+export interface FiltroAntiguedad {
+  sucursal?: number
+  dias_minimos: number
+}
+
+export async function obtenerAntiguedad(filtro: FiltroAntiguedad): Promise<ReporteAntiguedad> {
+  const { data } = await httpClient.get<ReporteAntiguedad>('/indicadores/antiguedad/', { params: filtro })
+  return data
+}

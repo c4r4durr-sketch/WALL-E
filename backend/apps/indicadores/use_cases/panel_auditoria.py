@@ -23,6 +23,7 @@ from apps.movimientos.domain.repositories import MovimientoRepository
 from apps.movimientos.domain.stock import stock_desde_totales
 from apps.usuarios.domain.repositories import SucursalRepository
 
+from ..domain.antiguedad import dias_sin_venta
 from ..domain.entities import (
     DIAS_PARA_ESTANCAMIENTO,
     AlertaReorden,
@@ -51,8 +52,7 @@ def construir_panel(
         stock_total[fila.herramienta_id] += stock
         if stock <= 0:
             continue
-        referencia = fila.ultima_salida or fila.primer_movimiento
-        dias = (hoy - referencia.date()).days
+        dias = dias_sin_venta(fila.ultima_salida, fila.primer_movimiento, hoy)
         if dias > dias_para_estancamiento:
             herramienta = catalogo[fila.herramienta_id]
             sucursal = todas_las_sucursales.get(fila.sucursal_id)

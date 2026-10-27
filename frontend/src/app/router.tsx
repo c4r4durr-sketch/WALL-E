@@ -13,6 +13,7 @@ import { CrearUsuarioPage } from '../features/usuarios/pages/CrearUsuarioPage'
 import { UsuariosPage } from '../features/usuarios/pages/UsuariosPage'
 import { ProveedoresPage } from '../features/proveedores/pages/ProveedoresPage'
 import { CierreDiarioPage } from '../features/reportes/pages/CierreDiarioPage'
+import { AntiguedadPage } from '../features/reportes/pages/AntiguedadPage'
 import { HistorialPage } from '../features/auditoria/pages/HistorialPage'
 import { Rol } from '../shared/types/roles'
 import { AppLayout } from './layout/AppLayout'
@@ -23,8 +24,8 @@ import { AppLayout } from './layout/AppLayout'
 //
 // Todas las rutas salvo /login viven bajo ProtectedRoute (exige sesión
 // JWT válida) y dentro de AppLayout (barra lateral); /usuarios y
-// /usuarios/nuevo además exigen rol ADMINISTRADOR, y /cierre-diario e
-// /historial ADMINISTRADOR o SUPERVISOR, vía RequireRol (el backend aplica
+// /usuarios/nuevo además exigen rol ADMINISTRADOR, y /cierre-diario,
+// /antiguedad e /historial ADMINISTRADOR o SUPERVISOR, vía RequireRol (el backend aplica
 // la misma regla). La barra lateral (layout/navegacion.ts) oculta lo que
 // cada rol no puede abrir.
 export const router = createBrowserRouter([
@@ -47,6 +48,7 @@ export const router = createBrowserRouter([
             element: <RequireRol roles={[Rol.ADMINISTRADOR, Rol.SUPERVISOR]} />,
             children: [
               { path: '/cierre-diario', element: <CierreDiarioPage /> },
+              { path: '/antiguedad', element: <AntiguedadPage /> },
               { path: '/historial', element: <HistorialPage /> },
             ],
           },

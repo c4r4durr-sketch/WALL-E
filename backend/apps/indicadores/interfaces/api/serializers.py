@@ -112,3 +112,47 @@ class CierreDiarioSerializer(serializers.Serializer):
     totales = TotalPorTipoSerializer(many=True)
     total_salidas_unidades = serializers.IntegerField()
     cantidad_salidas = serializers.IntegerField()
+
+
+# --- Reporte de antigüedad (HU22) ---
+
+
+class FiltroAntiguedadSerializer(serializers.Serializer):
+    # Sin sucursal: el Administrador ve todas; el Supervisor, la suya.
+    sucursal = serializers.IntegerField(min_value=1, required=False)
+    dias_minimos = serializers.IntegerField(min_value=0, required=False, default=0)
+
+
+class LineaAntiguedadSerializer(serializers.Serializer):
+    herramienta_id = serializers.IntegerField()
+    codigo = serializers.CharField()
+    nombre = serializers.CharField()
+    sucursal_id = serializers.IntegerField()
+    sucursal_nombre = serializers.CharField()
+    stock = serializers.IntegerField()
+    ultima_venta = serializers.DateTimeField(allow_null=True)
+    dias_sin_venta = serializers.IntegerField()
+    nunca_vendida = serializers.BooleanField()
+    tramo = serializers.CharField()
+    estancada = serializers.BooleanField()
+    costo_unitario = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    valor_inmovilizado = serializers.DecimalField(max_digits=14, decimal_places=2, allow_null=True)
+
+
+class TotalTramoSerializer(serializers.Serializer):
+    tramo = serializers.CharField()
+    lineas = serializers.IntegerField()
+    unidades = serializers.IntegerField()
+
+
+class ReporteAntiguedadSerializer(serializers.Serializer):
+    fecha = serializers.DateField()
+    sucursal_id = serializers.IntegerField(allow_null=True)
+    dias_minimos = serializers.IntegerField()
+    dias_para_estancamiento = serializers.IntegerField()
+    lineas = LineaAntiguedadSerializer(many=True)
+    tramos = TotalTramoSerializer(many=True)
+    total_unidades = serializers.IntegerField()
+    total_estancadas = serializers.IntegerField()
+    valor_inmovilizado_estancado = serializers.DecimalField(max_digits=14, decimal_places=2)
+    lineas_sin_costo = serializers.IntegerField()

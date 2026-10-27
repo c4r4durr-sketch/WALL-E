@@ -34,7 +34,7 @@
    | `POST /api/usuarios/` | `POST /api/usuarios/usuarios/` |
    | `POST /api/herramientas/` | `POST /api/catalogo/herramientas/` |
    | `POST /api/indicadores/eoq` | `GET /api/indicadores/eoq/<id>/` (y `GET .../rop/<id>/`): son consultas, no crean nada |
-   | `GET /api/reportes/estancadas` | se define con HU22 (ver punto 2) |
+   | `GET /api/reportes/estancadas` | `GET /api/indicadores/antiguedad/` (HU22, ver punto 18) |
 
 5. **Cuatro capas "en cada módulo".** `indicadores` no tiene capa
    `infrastructure` porque no tiene tablas propias: usa los repositorios de
@@ -146,3 +146,13 @@
     dejaría el EOQ en 0); se toma el total de 12 meses sin anualizar. Si
     el criterio de la HU pide recalcular automáticamente, documentar que
     es una acción explícita del usuario.
+
+18. **HU22, reporte de antigüedad.** `GET /api/indicadores/antiguedad/`
+    y pantalla `/antiguedad`. **Base de datos:** sin cambios (se calcula
+    con los movimientos y el catálogo). Decisiones: tramos 0–30, 31–40,
+    41–90 y más de 90 días (el corte de 40 es el de estancamiento); días
+    desde la última **salida** real, o desde el primer movimiento si nunca
+    se vendió; valor inmovilizado = stock × costo unitario (HU7), sin
+    sumar las herramientas que no tienen costo. Permisos como el cierre
+    diario: Administrador todas o una sucursal, Supervisor la suya,
+    Empleado no. El panel (HU24) sigue mostrando las estancadas a todos.

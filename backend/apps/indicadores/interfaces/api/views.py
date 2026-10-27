@@ -24,11 +24,14 @@ from ...use_cases.cierre_diario import construir_cierre
 from ...use_cases.calcular_punto_reorden import calcular_punto_reorden
 from ...use_cases.clasificar_abc import clasificar_abc
 from ...use_cases.panel_auditoria import construir_panel
+from ...use_cases.reporte_antiguedad import construir_reporte_antiguedad
 from .serializers import (
     CierreDiarioSerializer,
     ClasificacionABCSerializer,
+    FiltroAntiguedadSerializer,
     FiltroCierreDiarioSerializer,
     PanelAuditoriaSerializer,
+    ReporteAntiguedadSerializer,
     ResultadoEOQSerializer,
     ResultadoROPSerializer,
 )
@@ -177,3 +180,32 @@ class CierreDiarioView(APIView):
         except SucursalInexistenteError:
             raise ValidationError({"sucursal": ["No existe esa sucursal."]})
         return Response(CierreDiarioSerializer(cierre).data)
+
+
+class ReporteAntiguedadView(APIView):
+    """GET /api/indicadores/antiguedad/?sucursal=<id>&dias_minimos=<n>
+    Reporte de antigüedad del stock (HU22): días sin venta por herramienta
+    y sucursal, tramos y valor inmovilizado. Administrador: una sucursal o
+    todas (sin `sucursal`); Supervisor: la suya; Empleado: 403."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(parameters=[FiltroAntiguedadSerializer], responses=ReporteAntiguedadSerializer)
+    def get(self, request):
+        filtro = FiltroAntiguedadSerializer(data=request.query_params)
+        filtro.is_valid(raise_exception=True)
+        try:
+            reporte = construir_reporte_antiguedad(
+                MovimientoRepositoryDjango(),
+                HerramientaRepositoryDjango(),
+                SucursalRepositoryDjango(),
+                _actor(request),
+                filtro.validated_data.get("sucursal"),
+                hoy=timezone.localdate(),
+                dias_minimos=filtro.validated_data["dias_minimos"],
+            )
+        except ReporteNoPermitidoError:
+            raise PermissionDenied("Solo el Administrador o el Supervisor de esa sucursal pueden ver este reporte.")
+        except SucursalInexistenteError:
+            raise ValidationError({"sucursal": ["No existe esa sucursal."]})
+        return Response(ReporteAntiguedadSerializer(reporte).data)

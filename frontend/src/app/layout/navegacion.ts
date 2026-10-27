@@ -5,6 +5,7 @@ import {
   CalendarCheck,
   ClipboardList,
   Gauge,
+  Hourglass,
   LayoutDashboard,
   PackagePlus,
   ShieldCheck,
@@ -54,6 +55,7 @@ export const GRUPOS: GrupoNav[] = [
       { ruta: '/indicadores', texto: 'Indicadores', icono: Gauge },
       { ruta: '/reposicion', texto: 'Reposición EOQ', icono: PackagePlus },
       { ruta: '/abc', texto: 'Clasificación ABC', icono: BarChart3 },
+      { ruta: '/antiguedad', texto: 'Antigüedad del stock', icono: Hourglass, roles: ADMIN_Y_SUPERVISOR },
     ],
   },
   {

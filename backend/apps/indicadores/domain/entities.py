@@ -6,6 +6,7 @@ puro de un cálculo, devuelto por los use_cases de esta app.
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional
 
 
@@ -161,3 +162,50 @@ class CierreDiario:
     totales: tuple[TotalPorTipo, ...]  # uno por cada tipo, aunque sea 0
     total_salidas_unidades: int
     cantidad_salidas: int
+
+
+# --- Reporte de antigüedad del stock (HU22) ---
+
+
+@dataclass(frozen=True)
+class LineaAntiguedad:
+    """Stock de una herramienta en una sucursal y cuánto lleva sin
+    venderse. valor_inmovilizado = stock x costo unitario (None si la
+    herramienta no tiene costo cargado)."""
+
+    herramienta_id: int
+    codigo: str
+    nombre: str
+    sucursal_id: int
+    sucursal_nombre: str
+    stock: int
+    ultima_venta: Optional[datetime]
+    dias_sin_venta: int
+    nunca_vendida: bool
+    tramo: str
+    estancada: bool
+    costo_unitario: Optional[Decimal]
+    valor_inmovilizado: Optional[Decimal]
+
+
+@dataclass(frozen=True)
+class TotalTramo:
+    tramo: str
+    lineas: int
+    unidades: int
+
+
+@dataclass(frozen=True)
+class ReporteAntiguedad:
+    fecha: date
+    # None = todas las sucursales (solo el Administrador).
+    sucursal_id: Optional[int]
+    dias_minimos: int
+    dias_para_estancamiento: int
+    lineas: tuple[LineaAntiguedad, ...]
+    tramos: tuple[TotalTramo, ...]  # uno por cada tramo, aunque sea 0
+    total_unidades: int
+    total_estancadas: int
+    # Solo de las líneas con costo; lineas_sin_costo dice cuántas faltan.
+    valor_inmovilizado_estancado: Decimal
+    lineas_sin_costo: int

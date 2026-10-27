@@ -27,7 +27,7 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | — | EOQ / ROP / ABC (HU17–HU21) | ✅ adelantado |
 | 8–9 | Deuda: zona horaria, usuarios en 4 capas, HU3, HU7 | ✅ (bloque a-d) |
 | 9–10 | HU8 proveedores, HU14 cierre diario, HU13 pantalla de historial | ✅ adelantado (bloque e-g) |
-| — | Adelanto Sprint 4: HU22, HU23, HU25 | pendiente (bloque h-j) |
+| — | Adelanto Sprint 4: HU22, HU23, HU25 | HU22 ✅; HU23 y HU25 en curso (rama `sprint4`) |
 | — | Adelanto Sprint 5: HU21 | ✅ (rama `sprint4`) |
 
 ## Entorno real de esta máquina (verificado 22/09/2026)
@@ -87,6 +87,7 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | **Transferencias** (HU12) | Solicitar (cualquier rol; Empleado solo desde su sucursal) → PENDIENTE sin mover stock. Admin/Supervisor COMPLETAN (salida en origen + entrada en destino, misma validación y bloqueo de stock; si ya no alcanza → 409) o RECHAZAN con motivo. No se completa dos veces (bloqueo). Sin editar ni borrar | `/transferencias`: solicitud, pendientes/todas, completar y rechazar en la fila |
 | **Indicadores** (HU17–HU21) | `GET /api/indicadores/eoq/<id>/` (EOQ con D/S/H del catálogo, ajustado a cajas, + demanda observada de 12 meses), `rop/<id>/` (ROP vs stock total, `requiere_reorden`), `abc/` (por unidades vendidas en 12 meses: A < 80 % acumulado previo, B < 95 %, C resto y sin ventas). Si faltan datos: 200 con `null` + `datos_faltantes`. **HU21**: `POST .../eoq/<id>/actualizar-demanda/` (Admin y Supervisor; Empleado 403; sin ventas en 12 meses 409) pasa lo vendido a `demanda_anual` del catálogo | `/indicadores`: tabla ABC; al elegir una herramienta, "cuánto pedir" (EOQ) y "cuándo pedir" (ROP); si lo vendido no coincide con la demanda estimada, botón "Usar lo vendido" (Admin y Supervisor) |
 | **Cierre diario** (HU14) | `GET /api/indicadores/cierre-diario/?sucursal=&fecha=`: movimientos del día en hora de La Paz, totales por tipo, salidas destacadas. Admin cualquier sucursal, Supervisor la suya, Empleado 403; fecha futura 400 | `/cierre-diario` (Admin y Supervisor): fecha y sucursal, tarjetas de totales, tabla y aviso si no hubo salidas |
+| **Antigüedad del stock** (HU22) | `GET /api/indicadores/antiguedad/?sucursal=&dias_minimos=`: por herramienta y sucursal con stock, días sin venta, tramo (0–30, 31–40, 41–90, más de 90), estancada (> 40 días) y valor inmovilizado (stock × costo unitario). Admin todas o una sucursal, Supervisor la suya, Empleado 403. Misma regla que el panel (`domain/antiguedad.py`) | `/antiguedad` (Admin y Supervisor, grupo Análisis): sucursal, rango de días, tarjetas y tabla por tramo |
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
 
 Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **211 pruebas OK**.
@@ -102,7 +103,7 @@ Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores
 Sprint 4).
 
 ## Pendiente (en orden)
-1. Bloque h-j: HU22 (reporte de antigüedad), HU23 (promoción), HU25 (Excel).
+1. Bloque h-j: HU23 (promoción), HU25 (Excel).
 3. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
    el entorno real; ya no tiene credenciales escritas).
 
@@ -140,6 +141,8 @@ Sprint 4).
   quedan con su nombre de Django. Las PK siguen siendo enteros.
 - La auditoría guarda la etiqueta del modelo (`catalogo.Herramienta`) y los
   nombres de campo de Python, no los nombres físicos: no cambia con el renombre.
+- Antigüedad (HU22): permisos como el cierre diario; el valor inmovilizado
+  usa el costo unitario de HU7 y las líneas sin costo se cuentan aparte.
 - Estancamiento: más de 40 días sin una SALIDA real (los ajustes no son
   ventas); si nunca se vendió, se cuenta desde su primer movimiento en esa
   sucursal (el SQL original la marcaba estancada desde el primer día).
