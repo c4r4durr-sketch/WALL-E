@@ -134,3 +134,15 @@
     con grupos (Inventario, Análisis, Compras, Administración) y catálogo
     en tarjetas con foto. Las reglas están en `docs/DISENO.md`. Si el
     informe trae capturas de pantalla, hay que rehacerlas.
+
+### Sprint 4
+17. **HU21, actualizar la demanda anual.** Nueva acción
+    `POST /api/indicadores/eoq/<id>/actualizar-demanda/`. **Base de datos:**
+    no cambia el esquema; escribe `herramientas.demanda_anual_herramienta`
+    (= salidas reales de los últimos 12 meses, sin ajustes ni
+    transferencias) y el cambio queda en `historial_modificaciones`.
+    Decisiones: solo Administrador y Supervisor (los que editan el
+    catálogo); sin ventas en el período no se actualiza (409, D = 0
+    dejaría el EOQ en 0); se toma el total de 12 meses sin anualizar. Si
+    el criterio de la HU pide recalcular automáticamente, documentar que
+    es una acción explícita del usuario.

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { Aviso, Card, Cargando, Skeleton, cx } from '../../../components/ui'
 import { useEOQ, useROP } from '../hooks/useIndicadores'
+import { ActualizarDemanda } from './ActualizarDemanda'
 
 // Detalle de una herramienta: cuánto pedir (EOQ, ajustado a cajas) y cuándo
 // pedir (punto de reorden vs stock total). Si faltan datos en el catálogo,
@@ -99,6 +100,7 @@ export function DetalleEOQROP({ herramientaId }: { herramientaId: number }) {
           <Dato etiqueta="Costo por pedido (S)" valor={num(e.costo_pedido)} />
           <Dato etiqueta="Costo de almacenamiento (H)" valor={num(e.costo_almacenamiento_unitario)} />
         </dl>
+        <ActualizarDemanda key={e.herramienta_id} eoq={e} />
       </Tarjeta>
 
       <Tarjeta titulo="Cuándo pedir (punto de reorden)" alerta={r.requiere_reorden}>

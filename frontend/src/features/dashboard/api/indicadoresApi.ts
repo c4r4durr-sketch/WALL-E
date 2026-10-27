@@ -100,3 +100,11 @@ export async function obtenerPanel(): Promise<PanelAuditoria> {
   const { data } = await httpClient.get<PanelAuditoria>('/indicadores/panel/')
   return data
 }
+
+// HU21: la demanda anual del catálogo pasa a ser lo vendido en los últimos
+// 12 meses; devuelve el EOQ recalculado. Administrador y Supervisor (403
+// para el Empleado); 409 si no hubo ventas en el período.
+export async function actualizarDemanda(herramientaId: number): Promise<ResultadoEOQ> {
+  const { data } = await httpClient.post<ResultadoEOQ>(`/indicadores/eoq/${herramientaId}/actualizar-demanda/`)
+  return data
+}

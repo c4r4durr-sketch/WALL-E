@@ -1,6 +1,6 @@
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
-from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
+from rest_framework.exceptions import APIException, NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,7 +11,14 @@ from apps.movimientos.infrastructure.repositories import MovimientoRepositoryDja
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.infrastructure.repositories import SucursalRepositoryDjango
 
-from ...domain.exceptions import FechaFuturaError, ReporteNoPermitidoError, SucursalInexistenteError
+from ...domain.exceptions import (
+    ActualizacionNoPermitidaError,
+    FechaFuturaError,
+    ReporteNoPermitidoError,
+    SinVentasObservadasError,
+    SucursalInexistenteError,
+)
+from ...use_cases.actualizar_demanda import actualizar_demanda_anual
 from ...use_cases.calcular_eoq import calcular_eoq
 from ...use_cases.cierre_diario import construir_cierre
 from ...use_cases.calcular_punto_reorden import calcular_punto_reorden
@@ -48,6 +55,40 @@ class EOQPorHerramientaView(APIView):
             )
         except HerramientaNoEncontradaError:
             raise NotFound("No existe esa herramienta.")
+        return Response(ResultadoEOQSerializer(resultado).data)
+
+
+class Conflicto(APIException):
+    status_code = 409
+    default_detail = "La operación no se puede realizar en el estado actual."
+
+
+def _actor(request) -> Actor:
+    usuario = request.user
+    return Actor(usuario_id=usuario.id, rol=usuario.rol, sucursal_id=usuario.sucursal_id)
+
+
+class ActualizarDemandaView(APIView):
+    """POST /api/indicadores/eoq/<herramienta_id>/actualizar-demanda/
+    HU21: reemplaza la demanda anual estimada del catálogo por la observada
+    (ventas de los últimos 12 meses) y devuelve el EOQ recalculado.
+    Administrador y Supervisor; Empleado 403; sin ventas en el período 409."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=None, responses=ResultadoEOQSerializer)
+    def post(self, request, herramienta_id: int):
+        try:
+            resultado = actualizar_demanda_anual(
+                HerramientaRepositoryDjango(), MovimientoRepositoryDjango(), _actor(request),
+                herramienta_id, ahora=timezone.now(),
+            )
+        except ActualizacionNoPermitidaError:
+            raise PermissionDenied("Solo el Administrador o el Supervisor pueden actualizar la demanda anual.")
+        except HerramientaNoEncontradaError:
+            raise NotFound("No existe esa herramienta.")
+        except SinVentasObservadasError:
+            raise Conflicto("No hay ventas en los últimos 12 meses: la demanda anual no se actualiza.")
         return Response(ResultadoEOQSerializer(resultado).data)
 
 
@@ -114,7 +155,7 @@ class CierreDiarioView(APIView):
         filtro = FiltroCierreDiarioSerializer(data=request.query_params)
         filtro.is_valid(raise_exception=True)
         usuario = request.user
-        actor = Actor(usuario_id=usuario.id, rol=usuario.rol, sucursal_id=usuario.sucursal_id)
+        actor = _actor(request)
         sucursal_id = filtro.validated_data.get("sucursal", usuario.sucursal_id)
         if sucursal_id is None:
             raise ValidationError({"sucursal": ["Indica la sucursal."]})

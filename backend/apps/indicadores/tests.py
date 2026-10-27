@@ -527,3 +527,132 @@ class CierreDiarioApiTests(APITestCase):
         # sucursal + movimientos del día (con usuario) + catálogo
         with self.assertNumQueries(3):
             self.client.get(self.URL)
+
+
+# --- Actualizar la demanda anual con la observada (HU21) ---
+
+from dataclasses import replace as _replace
+
+from apps.catalogo.domain.exceptions import HerramientaNoEncontradaError as _NoEncontrada
+
+from .domain.exceptions import ActualizacionNoPermitidaError, SinVentasObservadasError
+from .use_cases.actualizar_demanda import actualizar_demanda_anual
+
+
+class _CatalogoEditable:
+    def __init__(self, *herramientas):
+        self.datos = {h.id: h for h in herramientas}
+        self.guardadas = []
+
+    def obtener_por_id(self, herramienta_id):
+        return self.datos.get(herramienta_id)
+
+    def guardar(self, h, imagen=None):
+        self.guardadas.append(h)
+        self.datos[h.id] = h
+        return h
+
+
+class _Ventas:
+    def __init__(self, por_herramienta):
+        self.por_herramienta = por_herramienta
+        self.desde = None
+
+    def unidades_por_herramienta(self, tipos, desde):
+        self.tipos, self.desde = set(tipos), desde
+        return self.por_herramienta
+
+
+AHORA = _datetime(2026, 10, 27, 12, tzinfo=dt_timezone.utc)
+ADMIN = _Actor(usuario_id=1, rol=_Rol.ADMINISTRADOR, sucursal_id=None)
+SUPERVISOR = _Actor(usuario_id=2, rol=_Rol.SUPERVISOR, sucursal_id=1)
+EMPLEADO = _Actor(usuario_id=3, rol=_Rol.EMPLEADO, sucursal_id=1)
+
+
+class ActualizarDemandaUseCaseTests(SimpleTestCase):
+    def _herramienta(self):
+        return herramienta(1, demanda=100, entrega=10, costo_pedido=50, costo_alm=2, caja=12)
+
+    def test_reemplaza_la_demanda_y_recalcula_el_eoq(self):
+        catalogo, ventas = _CatalogoEditable(self._herramienta()), _Ventas({1: 1000})
+        r = actualizar_demanda_anual(catalogo, ventas, ADMIN, 1, AHORA)
+        self.assertEqual(catalogo.datos[1].demanda_anual, 1000)
+        # raiz(2 * 1000 * 50 / 2) = 223.61 -> 228 en cajas de 12
+        self.assertEqual((r.demanda_anual, r.demanda_observada, r.eoq, r.eoq_ajustado_cajas), (1000, 1000, 223.61, 228))
+
+    def test_usa_las_ventas_de_los_ultimos_12_meses(self):
+        ventas = _Ventas({1: 10})
+        actualizar_demanda_anual(_CatalogoEditable(self._herramienta()), ventas, SUPERVISOR, 1, AHORA)
+        self.assertEqual(ventas.desde, AHORA - timedelta(days=365))
+        self.assertEqual(ventas.tipos, {T.SALIDA})
+
+    def test_sin_ventas_no_actualiza(self):
+        catalogo = _CatalogoEditable(self._herramienta())
+        with self.assertRaises(SinVentasObservadasError):
+            actualizar_demanda_anual(catalogo, _Ventas({}), ADMIN, 1, AHORA)
+        self.assertEqual(catalogo.guardadas, [])
+
+    def test_si_ya_coincide_no_guarda(self):
+        catalogo = _CatalogoEditable(self._herramienta())
+        actualizar_demanda_anual(catalogo, _Ventas({1: 100}), ADMIN, 1, AHORA)
+        self.assertEqual(catalogo.guardadas, [])
+
+    def test_empleado_no_puede(self):
+        catalogo = _CatalogoEditable(self._herramienta())
+        with self.assertRaises(ActualizacionNoPermitidaError):
+            actualizar_demanda_anual(catalogo, _Ventas({1: 10}), EMPLEADO, 1, AHORA)
+        self.assertEqual(catalogo.guardadas, [])
+
+    def test_herramienta_inexistente(self):
+        with self.assertRaises(_NoEncontrada):
+            actualizar_demanda_anual(_CatalogoEditable(), _Ventas({}), ADMIN, 9, AHORA)
+
+
+class ActualizarDemandaApiTests(APITestCase):
+    """Mismos datos que IndicadoresApiTests (Taladro con D = 730)."""
+
+    _mov = IndicadoresApiTests._mov
+
+    def setUp(self):
+        IndicadoresApiTests.setUp(self)
+        from apps.usuarios.infrastructure.models import Usuario
+        self.admin = Usuario.objects.create_user("adm", password="x", rol="ADMINISTRADOR")
+        self.sup = Usuario.objects.create_user("sup", password="x", rol="SUPERVISOR", sucursal=self.central)
+
+    def _url(self, h):
+        return f"/api/indicadores/eoq/{h}/actualizar-demanda/"
+
+    def test_supervisor_actualiza_y_el_rop_usa_la_nueva_demanda(self):
+        self._mov(self.tal, "ENTRADA", 500, dias_atras=200)
+        self._mov(self.tal, "SALIDA", 365, dias_atras=20)
+        self._mov(self.tal, "AJUSTE_NEGATIVO", 50, dias_atras=5)  # no es venta
+        self.client.force_authenticate(self.sup)
+        respuesta = self.client.post(self._url(self.tal.id))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["demanda_anual"], 365)
+        self.tal.refresh_from_db()
+        self.assertEqual(self.tal.demanda_anual, 365)
+        # ROP = 365 / 365 * 15 días = 15
+        self.assertEqual(self.client.get(f"/api/indicadores/rop/{self.tal.id}/").json()["punto_reorden"], 15.0)
+
+    def test_queda_en_el_historial_de_modificaciones(self):
+        from apps.auditoria.infrastructure.models import HistorialModificacion
+        self._mov(self.tal, "ENTRADA", 50, dias_atras=30)
+        self._mov(self.tal, "SALIDA", 20, dias_atras=3)
+        self.client.force_authenticate(self.admin)
+        self.client.post(self._url(self.tal.id))
+        ultimo = HistorialModificacion.objects.filter(accion="UPDATE").latest("id")
+        self.assertEqual(ultimo.datos_nuevos["demanda_anual"], 20)
+
+    def test_permisos_y_errores(self):
+        self._mov(self.tal, "ENTRADA", 50, dias_atras=30)
+        self._mov(self.tal, "SALIDA", 20, dias_atras=3)
+        self.client.force_authenticate(self.u)  # Empleado
+        self.assertEqual(self.client.post(self._url(self.tal.id)).status_code, 403)
+        self.client.force_authenticate(self.admin)
+        sin_ventas = self.client.post(self._url(self.amo.id))
+        self.assertEqual(sin_ventas.status_code, 409)
+        self.assertIn("detail", sin_ventas.json())
+        self.assertEqual(self.client.post(self._url(999)).status_code, 404)
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.post(self._url(self.tal.id)).status_code, 401)

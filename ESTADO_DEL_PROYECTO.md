@@ -4,10 +4,10 @@
 > nuevo, leer esto primero. Se actualiza en el mismo commit que cambia algo
 > importante. Versiones exactas del stack: ver `STACK_VERSIONES.md`.
 >
-> **Última actualización: 27/10/2026, fase 1 cerrada** (semana 9 del
-> cronograma). `fase1-diseno` quedó fusionada en `sprint3-cierre` (merge
-> sin fast-forward, todo solo en local, sin push). Reglas visuales:
-> `docs/DISENO.md`.
+> **Última actualización: 27/10/2026, Sprint 4** (semana 9 del
+> cronograma). Rama de trabajo: `sprint4`, salida de `sprint3-cierre`
+> (donde quedó fusionada la fase 1 de diseño). Todo solo en local, sin
+> push. Reglas visuales: `docs/DISENO.md`.
 
 ## Equipo y materia
 Proyecto académico (Programación III y Análisis y Diseño II) para una
@@ -28,7 +28,7 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | 8–9 | Deuda: zona horaria, usuarios en 4 capas, HU3, HU7 | ✅ (bloque a-d) |
 | 9–10 | HU8 proveedores, HU14 cierre diario, HU13 pantalla de historial | ✅ adelantado (bloque e-g) |
 | — | Adelanto Sprint 4: HU22, HU23, HU25 | pendiente (bloque h-j) |
-| — | Adelanto Sprint 5: HU21 | pendiente (bloque k) |
+| — | Adelanto Sprint 5: HU21 | ✅ (rama `sprint4`) |
 
 ## Entorno real de esta máquina (verificado 22/09/2026)
 - **PostgreSQL 18.6 nativo** (servicio de Windows `postgresql-x64-18`) en
@@ -73,7 +73,7 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
   Iconos con `lucide-react` (sin emojis); solo escritorio. TypeScript
   `strict`, sin `any`. Fechas en hora de La Paz con `shared/formato`.
 
-## Qué funciona hoy (en `sprint3-cierre`)
+## Qué funciona hoy (en `sprint4`)
 
 | Módulo | Backend | Frontend |
 |---|---|---|
@@ -85,7 +85,7 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | **Movimientos** (HU9/HU11) | Entrada, salida, **ajuste** (+/−, motivo obligatorio, solo Admin/Supervisor). Conversión caja→unidad. **Nunca stock negativo** (bloqueo `select_for_update`). Stock derivado de los movimientos. Inmutables para todos (405, `/admin/` solo lectura). Empleado solo opera en su sucursal | `/movimientos`: registro, sección de ajuste aparte, stock por sucursal e historial con motivo |
 | **Fórmulas** | `indicadores/domain/formulas.py`: EOQ, ROP, ajuste a cajas, cajas↔unidades (probadas) | — |
 | **Transferencias** (HU12) | Solicitar (cualquier rol; Empleado solo desde su sucursal) → PENDIENTE sin mover stock. Admin/Supervisor COMPLETAN (salida en origen + entrada en destino, misma validación y bloqueo de stock; si ya no alcanza → 409) o RECHAZAN con motivo. No se completa dos veces (bloqueo). Sin editar ni borrar | `/transferencias`: solicitud, pendientes/todas, completar y rechazar en la fila |
-| **Indicadores** (HU17–HU21) | `GET /api/indicadores/eoq/<id>/` (EOQ con D/S/H del catálogo, ajustado a cajas, + demanda observada de 12 meses), `rop/<id>/` (ROP vs stock total, `requiere_reorden`), `abc/` (por unidades vendidas en 12 meses: A < 80 % acumulado previo, B < 95 %, C resto y sin ventas). Si faltan datos: 200 con `null` + `datos_faltantes` | `/indicadores`: tabla ABC; al elegir una herramienta, "cuánto pedir" (EOQ) y "cuándo pedir" (ROP) |
+| **Indicadores** (HU17–HU21) | `GET /api/indicadores/eoq/<id>/` (EOQ con D/S/H del catálogo, ajustado a cajas, + demanda observada de 12 meses), `rop/<id>/` (ROP vs stock total, `requiere_reorden`), `abc/` (por unidades vendidas en 12 meses: A < 80 % acumulado previo, B < 95 %, C resto y sin ventas). Si faltan datos: 200 con `null` + `datos_faltantes`. **HU21**: `POST .../eoq/<id>/actualizar-demanda/` (Admin y Supervisor; Empleado 403; sin ventas en 12 meses 409) pasa lo vendido a `demanda_anual` del catálogo | `/indicadores`: tabla ABC; al elegir una herramienta, "cuánto pedir" (EOQ) y "cuándo pedir" (ROP); si lo vendido no coincide con la demanda estimada, botón "Usar lo vendido" (Admin y Supervisor) |
 | **Cierre diario** (HU14) | `GET /api/indicadores/cierre-diario/?sucursal=&fecha=`: movimientos del día en hora de La Paz, totales por tipo, salidas destacadas. Admin cualquier sucursal, Supervisor la suya, Empleado 403; fecha futura 400 | `/cierre-diario` (Admin y Supervisor): fecha y sucursal, tarjetas de totales, tabla y aviso si no hubo salidas |
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
 
@@ -103,7 +103,6 @@ Sprint 4).
 
 ## Pendiente (en orden)
 1. Bloque h-j: HU22 (reporte de antigüedad), HU23 (promoción), HU25 (Excel).
-2. Bloque k: HU21 (actualizar la demanda anual con la observada).
 3. `docker-compose.yml`: decidir si se borra o se actualiza (hoy no refleja
    el entorno real; ya no tiene credenciales escritas).
 
@@ -124,6 +123,10 @@ Sprint 4).
 - Los ajustes y las transferencias no cuentan como demanda para EOQ/ABC.
 - EOQ/ROP usan la demanda anual **estimada** del catálogo (la misma del panel);
   la demanda observada (ventas de 12 meses) se muestra al lado para comparar.
+- HU21: "actualizar la demanda" reemplaza `demanda_anual` por las ventas
+  de los últimos 12 meses **sin anualizar** (con menos de un año de
+  historia, la pantalla avisa y decide el usuario). Sin ventas no se
+  actualiza (409). Admin y Supervisor, como el resto del catálogo.
 - ABC por **unidades vendidas** (se decidió antes de HU7; pasar a valor está
   anotado en `docs/CAMBIOS_PARA_EL_INFORME.md`). Una
   herramienta es A si el acumulado *anterior* a ella es < 80 % (la más
