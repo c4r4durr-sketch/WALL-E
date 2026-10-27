@@ -1,7 +1,7 @@
 """Entidad pura de dominio para el catálogo. Sin dependencias de Django."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
 
@@ -72,3 +72,30 @@ class CambioCosto:
     # Solo lectura, para mostrar; lo completa el repositorio.
     usuario_username: str = ""
     fecha: Optional[datetime] = None
+
+
+@dataclass(frozen=True)
+class Promocion:
+    """HU23: descuento para sacar el stock estancado de una herramienta en
+    una sucursal. Empieza el día que se crea y dura hasta fecha_fin
+    (inclusive). No se edita ni se borra: se termina antes (activa=False)
+    y todo queda en el historial de modificaciones."""
+
+    id: Optional[int]
+    herramienta_id: int
+    sucursal_id: int
+    descuento_porcentaje: int
+    fecha_inicio: date
+    fecha_fin: date
+    usuario_id: int
+    motivo: str = ""
+    activa: bool = True
+    creado_en: Optional[datetime] = None
+    # Solo lectura, para mostrar; los completa el repositorio.
+    herramienta_codigo: str = ""
+    herramienta_nombre: str = ""
+    sucursal_nombre: str = ""
+    usuario_username: str = ""
+
+    def vigente(self, hoy: date) -> bool:
+        return self.activa and self.fecha_inicio <= hoy <= self.fecha_fin

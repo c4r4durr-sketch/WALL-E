@@ -156,3 +156,34 @@ class ReporteAntiguedadSerializer(serializers.Serializer):
     total_estancadas = serializers.IntegerField()
     valor_inmovilizado_estancado = serializers.DecimalField(max_digits=14, decimal_places=2)
     lineas_sin_costo = serializers.IntegerField()
+
+
+# --- Promociones (HU23) ---
+
+
+class CrearPromocionSerializer(serializers.Serializer):
+    herramienta_id = serializers.IntegerField(min_value=1)
+    sucursal_id = serializers.IntegerField(min_value=1)
+    descuento_porcentaje = serializers.IntegerField()
+    fecha_fin = serializers.DateField()
+    motivo = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+
+
+class FiltroPromocionesSerializer(serializers.Serializer):
+    vigentes = serializers.BooleanField(required=False, default=False)
+
+
+class PromocionSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="promocion.id")
+    herramienta_id = serializers.IntegerField(source="promocion.herramienta_id")
+    herramienta_codigo = serializers.CharField(source="promocion.herramienta_codigo")
+    herramienta_nombre = serializers.CharField(source="promocion.herramienta_nombre")
+    sucursal_id = serializers.IntegerField(source="promocion.sucursal_id")
+    sucursal_nombre = serializers.CharField(source="promocion.sucursal_nombre")
+    descuento_porcentaje = serializers.IntegerField(source="promocion.descuento_porcentaje")
+    fecha_inicio = serializers.DateField(source="promocion.fecha_inicio")
+    fecha_fin = serializers.DateField(source="promocion.fecha_fin")
+    motivo = serializers.CharField(source="promocion.motivo")
+    usuario = serializers.CharField(source="promocion.usuario_username")
+    creado_en = serializers.DateTimeField(source="promocion.creado_en")
+    estado = serializers.CharField()

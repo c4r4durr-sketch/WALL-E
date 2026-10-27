@@ -6,8 +6,10 @@ from .views import (
     ClasificacionABCView,
     EOQPorHerramientaView,
     PanelAuditoriaView,
+    PromocionesView,
     PuntoReordenPorHerramientaView,
     ReporteAntiguedadView,
+    TerminarPromocionView,
 )
 
 urlpatterns = [
@@ -18,5 +20,7 @@ urlpatterns = [
     path("abc/", ClasificacionABCView.as_view(), name="indicador-abc"),
     path("panel/", PanelAuditoriaView.as_view(), name="panel-auditoria"),
     path("antiguedad/", ReporteAntiguedadView.as_view(), name="reporte-antiguedad"),
+    path("promociones/", PromocionesView.as_view(), name="promociones"),
+    path("promociones/<int:promocion_id>/terminar/", TerminarPromocionView.as_view(), name="terminar-promocion"),
     path("cierre-diario/", CierreDiarioView.as_view(), name="cierre-diario"),
 ]

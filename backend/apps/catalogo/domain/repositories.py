@@ -4,7 +4,7 @@ apps/usuarios/domain/repositories.py."""
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from .entities import CambioCosto, Herramienta, ImagenProducto
+from .entities import CambioCosto, Herramienta, ImagenProducto, Promocion
 
 
 class HerramientaRepository(ABC):
@@ -44,4 +44,24 @@ class HistorialCostoRepository(ABC):
     @abstractmethod
     def listar_por_herramienta(self, herramienta_id: int) -> list[CambioCosto]:
         """Del cambio más reciente al más antiguo."""
+        ...
+
+
+class PromocionRepository(ABC):
+    @abstractmethod
+    def obtener_por_id(self, promocion_id: int) -> Optional[Promocion]:
+        ...
+
+    @abstractmethod
+    def listar(self) -> list[Promocion]:
+        """De la más reciente a la más antigua."""
+        ...
+
+    @abstractmethod
+    def de_herramienta_en_sucursal(self, herramienta_id: int, sucursal_id: int) -> list[Promocion]:
+        ...
+
+    @abstractmethod
+    def guardar(self, promocion: Promocion) -> Promocion:
+        """Crea la promoción si id es None; si no, la actualiza."""
         ...

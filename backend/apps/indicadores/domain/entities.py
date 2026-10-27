@@ -9,6 +9,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
+from apps.catalogo.domain.entities import Promocion
+
 
 # Período con el que se mide la demanda REAL (ventas registradas): los
 # últimos 12 meses. Lo usan la demanda observada de EOQ y la clasificación ABC.
@@ -209,3 +211,15 @@ class ReporteAntiguedad:
     # Solo de las líneas con costo; lineas_sin_costo dice cuántas faltan.
     valor_inmovilizado_estancado: Decimal
     lineas_sin_costo: int
+
+
+# --- Promociones (HU23) ---
+
+
+@dataclass(frozen=True)
+class PromocionListada:
+    """Una promoción con su estado a la fecha: VIGENTE, VENCIDA (pasó su
+    fecha de fin) o TERMINADA (el Administrador la cortó antes)."""
+
+    promocion: Promocion
+    estado: str

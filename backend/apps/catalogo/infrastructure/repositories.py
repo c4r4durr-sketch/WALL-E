@@ -11,11 +11,12 @@ from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from django.utils.text import slugify
 
-from ..domain.entities import CambioCosto, Herramienta, ImagenProducto
+from ..domain.entities import CambioCosto, Herramienta, ImagenProducto, Promocion
 from ..domain.exceptions import CodigoDuplicadoError, HerramientaEnUsoError
-from ..domain.repositories import HerramientaRepository, HistorialCostoRepository
+from ..domain.repositories import HerramientaRepository, HistorialCostoRepository, PromocionRepository
 from .models import Herramienta as HerramientaModel
 from .models import HistorialCosto as HistorialCostoModel
+from .models import Promocion as PromocionModel
 
 # Los que asigna la base, más la foto (cambia solo si guardar() recibe una
 # ImagenProducto); nunca se copian de la entidad al modelo.
@@ -138,3 +139,53 @@ class HistorialCostoRepositoryDjango(HistorialCostoRepository):
             .order_by("-fecha", "-id")
         )
         return [_cambio_a_entidad(m) for m in filas]
+
+
+def _promocion_a_entidad(modelo: PromocionModel) -> Promocion:
+    return Promocion(
+        id=modelo.id,
+        herramienta_id=modelo.herramienta_id,
+        sucursal_id=modelo.sucursal_id,
+        descuento_porcentaje=modelo.descuento_porcentaje,
+        fecha_inicio=modelo.fecha_inicio,
+        fecha_fin=modelo.fecha_fin,
+        usuario_id=modelo.usuario_id,
+        motivo=modelo.motivo,
+        activa=modelo.activa,
+        creado_en=modelo.creado_en,
+        herramienta_codigo=modelo.herramienta.codigo,
+        herramienta_nombre=modelo.herramienta.nombre,
+        sucursal_nombre=modelo.sucursal.nombre,
+        usuario_username=modelo.usuario.username,
+    )
+
+
+class PromocionRepositoryDjango(PromocionRepository):
+    def _consulta(self):
+        # select_related: los nombres para mostrar salen en la misma consulta.
+        return PromocionModel.objects.select_related("herramienta", "sucursal", "usuario").order_by("-creado_en", "-id")
+
+    def obtener_por_id(self, promocion_id: int) -> Optional[Promocion]:
+        modelo = self._consulta().filter(pk=promocion_id).first()
+        return _promocion_a_entidad(modelo) if modelo else None
+
+    def listar(self) -> list[Promocion]:
+        return [_promocion_a_entidad(m) for m in self._consulta()]
+
+    def de_herramienta_en_sucursal(self, herramienta_id: int, sucursal_id: int) -> list[Promocion]:
+        filas = self._consulta().filter(herramienta_id=herramienta_id, sucursal_id=sucursal_id)
+        return [_promocion_a_entidad(m) for m in filas]
+
+    def guardar(self, promocion: Promocion) -> Promocion:
+        # .save() por instancia: así la auditoría (signals) registra el cambio.
+        modelo = PromocionModel.objects.get(pk=promocion.id) if promocion.id else PromocionModel()
+        modelo.herramienta_id = promocion.herramienta_id
+        modelo.sucursal_id = promocion.sucursal_id
+        modelo.descuento_porcentaje = promocion.descuento_porcentaje
+        modelo.fecha_inicio = promocion.fecha_inicio
+        modelo.fecha_fin = promocion.fecha_fin
+        modelo.motivo = promocion.motivo
+        modelo.activa = promocion.activa
+        modelo.usuario_id = promocion.usuario_id
+        modelo.save()
+        return self.obtener_por_id(modelo.pk)

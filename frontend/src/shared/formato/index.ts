@@ -42,6 +42,20 @@ export function fechaLarga(isoFecha: string): string {
   return fechaLargaFmt.format(new Date(`${isoFecha}T00:00:00Z`))
 }
 
+const fechaCortaFmt = new Intl.DateTimeFormat('es', { dateStyle: 'medium', timeZone: 'UTC' })
+
+// "AAAA-MM-DD" -> "27 oct 2026" (en UTC, por lo mismo que fechaLarga).
+export function fechaCorta(isoFecha: string): string {
+  return fechaCortaFmt.format(new Date(`${isoFecha}T00:00:00Z`))
+}
+
+// "AAAA-MM-DD" + n días -> "AAAA-MM-DD" (en UTC: sin saltos por horario).
+export function sumarDias(isoFecha: string, dias: number): string {
+  const fecha = new Date(`${isoFecha}T00:00:00Z`)
+  fecha.setUTCDate(fecha.getUTCDate() + dias)
+  return fecha.toISOString().slice(0, 10)
+}
+
 export function monto(valor: number): string {
   return montoFmt.format(valor)
 }

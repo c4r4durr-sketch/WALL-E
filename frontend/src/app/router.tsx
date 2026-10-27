@@ -14,6 +14,7 @@ import { UsuariosPage } from '../features/usuarios/pages/UsuariosPage'
 import { ProveedoresPage } from '../features/proveedores/pages/ProveedoresPage'
 import { CierreDiarioPage } from '../features/reportes/pages/CierreDiarioPage'
 import { AntiguedadPage } from '../features/reportes/pages/AntiguedadPage'
+import { PromocionesPage } from '../features/promociones/pages/PromocionesPage'
 import { HistorialPage } from '../features/auditoria/pages/HistorialPage'
 import { Rol } from '../shared/types/roles'
 import { AppLayout } from './layout/AppLayout'
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
           { path: '/proveedores', element: <ProveedoresPage /> },
           { path: '/movimientos', element: <MovimientosPage /> },
           { path: '/transferencias', element: <TransferenciasPage /> },
+          { path: '/promociones', element: <PromocionesPage /> },
           { path: '/indicadores', element: <IndicadoresPage /> },
           { path: '/reposicion', element: <ReposicionPage /> },
           { path: '/abc', element: <ClasificacionABCPage /> },

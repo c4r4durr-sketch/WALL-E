@@ -114,3 +114,46 @@ class HistorialCosto(models.Model):
 
     def __str__(self) -> str:
         return f"{self.herramienta_id}: {self.costo_anterior} -> {self.costo_nuevo}"
+
+
+class Promocion(models.Model):
+    """HU23: descuento sobre una herramienta estancada en una sucursal. Las
+    reglas (solo estancadas, una vigente a la vez, descuento 1-90 %) las
+    aplica el caso de uso. No se borra: se termina con activa=False."""
+
+    id = models.BigAutoField(primary_key=True, db_column="cod_promocion")
+    herramienta = models.ForeignKey(
+        Herramienta, on_delete=models.PROTECT, related_name="promociones", db_column="cod_herramienta"
+    )
+    sucursal = models.ForeignKey(
+        "usuarios.Sucursal", on_delete=models.PROTECT, related_name="promociones", db_column="cod_sucursal"
+    )
+    descuento_porcentaje = models.PositiveSmallIntegerField(db_column="descuento_promocion")
+    fecha_inicio = models.DateField(db_column="fecha_inicio_promocion")
+    fecha_fin = models.DateField(db_column="fecha_fin_promocion")
+    motivo = models.CharField(max_length=255, blank=True, db_column="motivo_promocion")
+    activa = models.BooleanField(default=True, db_column="activa_promocion")
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+", db_column="cod_usuario"
+    )
+    creado_en = models.DateTimeField(auto_now_add=True, db_column="fecha_registro_promocion")
+
+    class Meta:
+        app_label = "catalogo"
+        db_table = "promociones"
+        verbose_name = "Promoción"
+        verbose_name_plural = "Promociones"
+        indexes = [models.Index(fields=["herramienta", "sucursal"], name="promocion_herr_suc_idx")]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(descuento_porcentaje__gte=1, descuento_porcentaje__lte=90),
+                name="promocion_descuento_1_a_90",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(fecha_fin__gte=models.F("fecha_inicio")),
+                name="promocion_fin_no_antes_de_inicio",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.herramienta_id}@{self.sucursal_id}: -{self.descuento_porcentaje}%"

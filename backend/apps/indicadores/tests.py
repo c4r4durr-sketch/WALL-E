@@ -783,3 +783,182 @@ class ReporteAntiguedadApiTests(APITestCase):
         self.client.force_authenticate(self.admin)
         self.assertIn("sucursal", self.client.get(self.URL, {"sucursal": 999}).json())
         self.assertIn("dias_minimos", self.client.get(self.URL, {"dias_minimos": -1}).json())
+
+
+# --- Promociones (HU23) ---
+
+from apps.catalogo.domain.entities import Promocion as _Promocion
+
+from .domain.exceptions import (
+    DatosPromocionInvalidosError,
+    PromocionNoAplicableError,
+    PromocionNoEncontradaError,
+    PromocionNoPermitidaError,
+)
+from .use_cases.promociones import crear_promocion, listar_promociones, terminar_promocion
+
+
+class _Promociones:
+    def __init__(self, *existentes):
+        self.datos = {p.id: p for p in existentes}
+
+    def obtener_por_id(self, promocion_id):
+        return self.datos.get(promocion_id)
+
+    def listar(self):
+        return sorted(self.datos.values(), key=lambda p: -p.id)
+
+    def de_herramienta_en_sucursal(self, herramienta_id, sucursal_id):
+        return [p for p in self.datos.values() if (p.herramienta_id, p.sucursal_id) == (herramienta_id, sucursal_id)]
+
+    def guardar(self, p):
+        if p.id is None:
+            p = _replace(p, id=max(self.datos, default=0) + 1)
+        self.datos[p.id] = p
+        return p
+
+
+class _CatalogoConId(_Repo):
+    def obtener_por_id(self, herramienta_id):
+        return next((h for h in self.datos if h.id == herramienta_id), None)
+
+
+def _promo(id, herramienta=1, sucursal=1, inicio=10, fin=-5, activa=True):
+    """inicio/fin en días antes de HOY (negativo = después de HOY)."""
+    return _Promocion(id=id, herramienta_id=herramienta, sucursal_id=sucursal, descuento_porcentaje=20,
+                      fecha_inicio=HOY - timedelta(days=inicio), fecha_fin=HOY - timedelta(days=fin),
+                      usuario_id=1, activa=activa)
+
+
+class PromocionesUseCaseTests(SimpleTestCase):
+    sucursales = _SucursalesConId([Sucursal(1, "Central", ""), Sucursal(2, "Norte", "")])
+
+    def setUp(self):
+        self.catalogo = _CatalogoConId([herramienta(1), herramienta(2)])
+        self.filas = _Repo([
+            resumen(1, 1, entradas=10, salidas=2, ultima_salida=60),  # estancada en Central
+            resumen(1, 2, entradas=5, salidas=1, ultima_salida=3),    # se vende en Norte
+            resumen(2, 1, entradas=4, salidas=4, ultima_salida=90),   # sin stock
+        ])
+
+    def _crear(self, promociones=None, actor=ADMIN, **datos):
+        datos = {"herramienta_id": 1, "sucursal_id": 1, "descuento_porcentaje": 25,
+                 "fecha_fin": HOY + timedelta(days=15), "motivo": "  liquidar  ", **datos}
+        return crear_promocion(promociones or _Promociones(), self.filas, self.catalogo, self.sucursales,
+                               actor, datos, hoy=HOY)
+
+    def test_crea_sobre_una_estancada_desde_hoy(self):
+        p = self._crear()
+        self.assertEqual((p.id, p.fecha_inicio, p.descuento_porcentaje, p.motivo, p.usuario_id, p.activa),
+                         (1, HOY, 25, "liquidar", ADMIN.usuario_id, True))
+
+    def test_solo_estancadas_con_stock_en_esa_sucursal(self):
+        for herramienta_id, sucursal_id in [(1, 2), (2, 1)]:  # se vende, sin stock
+            with self.assertRaises(PromocionNoAplicableError):
+                self._crear(herramienta_id=herramienta_id, sucursal_id=sucursal_id)
+
+    def test_una_sola_vigente_por_herramienta_y_sucursal(self):
+        with self.assertRaises(PromocionNoAplicableError):
+            self._crear(_Promociones(_promo(7)))
+        # Una vencida o terminada no impide crear otra.
+        self.assertIsNotNone(self._crear(_Promociones(_promo(7, fin=1), _promo(8, activa=False))))
+
+    def test_descuento_y_fecha_de_fin(self):
+        for datos, campo in [({"descuento_porcentaje": 0}, "descuento_porcentaje"),
+                             ({"descuento_porcentaje": 91}, "descuento_porcentaje"),
+                             ({"fecha_fin": HOY - timedelta(days=1)}, "fecha_fin")]:
+            with self.assertRaises(DatosPromocionInvalidosError) as ctx:
+                self._crear(**datos)
+            self.assertIn(campo, ctx.exception.errores)
+        self.assertEqual(self._crear(descuento_porcentaje=90, fecha_fin=HOY).fecha_fin, HOY)
+
+    def test_herramienta_o_sucursal_inexistente(self):
+        with self.assertRaises(DatosPromocionInvalidosError):
+            self._crear(herramienta_id=99)
+        with self.assertRaises(DatosPromocionInvalidosError):
+            self._crear(sucursal_id=99)
+
+    def test_solo_el_administrador_crea_y_termina(self):
+        repo = _Promociones(_promo(1))
+        for actor in (SUPERVISOR, EMPLEADO):
+            with self.assertRaises(PromocionNoPermitidaError):
+                self._crear(actor=actor)
+            with self.assertRaises(PromocionNoPermitidaError):
+                terminar_promocion(repo, actor, 1, HOY)
+        self.assertTrue(repo.datos[1].activa)
+
+    def test_terminar(self):
+        repo = _Promociones(_promo(1), _promo(2, fin=1))
+        self.assertFalse(terminar_promocion(repo, ADMIN, 1, HOY).activa)
+        with self.assertRaises(PromocionNoAplicableError):
+            terminar_promocion(repo, ADMIN, 1, HOY)  # ya terminada
+        with self.assertRaises(PromocionNoAplicableError):
+            terminar_promocion(repo, ADMIN, 2, HOY)  # vencida
+        with self.assertRaises(PromocionNoEncontradaError):
+            terminar_promocion(repo, ADMIN, 9, HOY)
+
+    def test_listar_con_estado(self):
+        repo = _Promociones(_promo(1), _promo(2, fin=1), _promo(3, activa=False))
+        self.assertEqual([(l.promocion.id, l.estado) for l in listar_promociones(repo, HOY)],
+                         [(3, "TERMINADA"), (2, "VENCIDA"), (1, "VIGENTE")])
+        self.assertEqual([l.promocion.id for l in listar_promociones(repo, HOY, solo_vigentes=True)], [1])
+
+
+class PromocionesApiTests(APITestCase):
+    URL = "/api/indicadores/promociones/"
+
+    _mov = CierreDiarioApiTests._mov
+
+    def setUp(self):
+        CierreDiarioApiTests.setUp(self)
+        from django.utils import timezone
+        self.hoy = timezone.localdate()
+        self._mov("ENTRADA", 20, timezone.now() - timedelta(days=80))  # estancada en Central
+
+    def _datos(self, **extra):
+        return {"herramienta_id": self.h.id, "sucursal_id": self.central.id, "descuento_porcentaje": 30,
+                "fecha_fin": (self.hoy + timedelta(days=10)).isoformat(), **extra}
+
+    def test_admin_crea_lista_y_termina(self):
+        self.client.force_authenticate(self.admin)
+        creada = self.client.post(self.URL, self._datos(), format="json")
+        self.assertEqual(creada.status_code, 201)
+        self.assertEqual((creada.json()["estado"], creada.json()["fecha_inicio"], creada.json()["usuario"]),
+                         ("VIGENTE", self.hoy.isoformat(), "adm"))
+        self.assertEqual(self.client.post(self.URL, self._datos(), format="json").status_code, 409)
+
+        self.client.force_authenticate(self.emp)  # todos ven las promociones
+        vigentes = self.client.get(self.URL, {"vigentes": "true"}).json()
+        self.assertEqual([p["descuento_porcentaje"] for p in vigentes], [30])
+
+        self.client.force_authenticate(self.admin)
+        terminar = f"{self.URL}{creada.json()['id']}/terminar/"
+        self.assertEqual(self.client.post(terminar).json()["estado"], "TERMINADA")
+        self.assertEqual(self.client.post(terminar).status_code, 409)
+        self.assertEqual(self.client.get(self.URL, {"vigentes": "true"}).json(), [])
+
+    def test_queda_en_el_historial(self):
+        from apps.auditoria.infrastructure.models import HistorialModificacion
+        self.client.force_authenticate(self.admin)
+        self.client.post(self.URL, self._datos(), format="json")
+        self.assertTrue(
+            HistorialModificacion.objects.filter(tabla_afectada="catalogo.Promocion", accion="INSERT").exists()
+        )
+
+    def test_permisos_por_rol(self):
+        for usuario in (self.sup, self.emp):
+            self.client.force_authenticate(usuario)
+            self.assertEqual(self.client.post(self.URL, self._datos(), format="json").status_code, 403)
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get(self.URL).status_code, 401)
+
+    def test_validaciones_y_no_estancada(self):
+        self.client.force_authenticate(self.admin)
+        self.assertIn("descuento_porcentaje",
+                      self.client.post(self.URL, self._datos(descuento_porcentaje=95), format="json").json())
+        ayer = (self.hoy - timedelta(days=1)).isoformat()
+        self.assertIn("fecha_fin", self.client.post(self.URL, self._datos(fecha_fin=ayer), format="json").json())
+        sin_stock = self.client.post(self.URL, self._datos(sucursal_id=self.norte.id), format="json")
+        self.assertEqual(sin_stock.status_code, 409)
+        self.assertIn("detail", sin_stock.json())
+        self.assertEqual(self.client.post(f"{self.URL}999/terminar/").status_code, 404)

@@ -6,13 +6,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.catalogo.domain.exceptions import HerramientaNoEncontradaError
-from apps.catalogo.infrastructure.repositories import HerramientaRepositoryDjango
+from apps.catalogo.infrastructure.repositories import HerramientaRepositoryDjango, PromocionRepositoryDjango
 from apps.movimientos.infrastructure.repositories import MovimientoRepositoryDjango
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.infrastructure.repositories import SucursalRepositoryDjango
 
+from ...domain.entities import PromocionListada
 from ...domain.exceptions import (
     ActualizacionNoPermitidaError,
+    DatosPromocionInvalidosError,
+    PromocionNoAplicableError,
+    PromocionNoEncontradaError,
+    PromocionNoPermitidaError,
     FechaFuturaError,
     ReporteNoPermitidoError,
     SinVentasObservadasError,
@@ -24,13 +29,17 @@ from ...use_cases.cierre_diario import construir_cierre
 from ...use_cases.calcular_punto_reorden import calcular_punto_reorden
 from ...use_cases.clasificar_abc import clasificar_abc
 from ...use_cases.panel_auditoria import construir_panel
+from ...use_cases.promociones import crear_promocion, estado_promocion, listar_promociones, terminar_promocion
 from ...use_cases.reporte_antiguedad import construir_reporte_antiguedad
 from .serializers import (
     CierreDiarioSerializer,
     ClasificacionABCSerializer,
+    CrearPromocionSerializer,
     FiltroAntiguedadSerializer,
     FiltroCierreDiarioSerializer,
+    FiltroPromocionesSerializer,
     PanelAuditoriaSerializer,
+    PromocionSerializer,
     ReporteAntiguedadSerializer,
     ResultadoEOQSerializer,
     ResultadoROPSerializer,
@@ -209,3 +218,69 @@ class ReporteAntiguedadView(APIView):
         except SucursalInexistenteError:
             raise ValidationError({"sucursal": ["No existe esa sucursal."]})
         return Response(ReporteAntiguedadSerializer(reporte).data)
+
+
+SOLO_ADMIN_PROMOCIONES = "Solo el Administrador puede crear o terminar promociones."
+
+
+class PromocionesView(APIView):
+    """GET  /api/indicadores/promociones/?vigentes=true  (todos los roles)
+    POST /api/indicadores/promociones/  (solo Administrador)
+    HU23: descuento sobre una herramienta estancada en una sucursal. 409 si
+    no está estancada ahí o ya tiene una promoción vigente."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(parameters=[FiltroPromocionesSerializer], responses=PromocionSerializer(many=True))
+    def get(self, request):
+        filtro = FiltroPromocionesSerializer(data=request.query_params)
+        filtro.is_valid(raise_exception=True)
+        listadas = listar_promociones(
+            PromocionRepositoryDjango(), hoy=timezone.localdate(), solo_vigentes=filtro.validated_data["vigentes"]
+        )
+        return Response(PromocionSerializer(listadas, many=True).data)
+
+    @extend_schema(request=CrearPromocionSerializer, responses={201: PromocionSerializer})
+    def post(self, request):
+        datos = CrearPromocionSerializer(data=request.data)
+        datos.is_valid(raise_exception=True)
+        hoy = timezone.localdate()
+        try:
+            promocion = crear_promocion(
+                PromocionRepositoryDjango(),
+                MovimientoRepositoryDjango(),
+                HerramientaRepositoryDjango(),
+                SucursalRepositoryDjango(),
+                _actor(request),
+                datos.validated_data,
+                hoy=hoy,
+            )
+        except PromocionNoPermitidaError:
+            raise PermissionDenied(SOLO_ADMIN_PROMOCIONES)
+        except DatosPromocionInvalidosError as error:
+            raise ValidationError({campo: [mensaje] for campo, mensaje in error.errores.items()})
+        except PromocionNoAplicableError as error:
+            raise Conflicto(str(error))
+        listada = PromocionListada(promocion, estado_promocion(promocion, hoy))
+        return Response(PromocionSerializer(listada).data, status=201)
+
+
+class TerminarPromocionView(APIView):
+    """POST /api/indicadores/promociones/<id>/terminar/
+    HU23: corta una promoción vigente antes de su fecha de fin. Solo el
+    Administrador; 409 si ya no estaba vigente."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=None, responses=PromocionSerializer)
+    def post(self, request, promocion_id: int):
+        hoy = timezone.localdate()
+        try:
+            promocion = terminar_promocion(PromocionRepositoryDjango(), _actor(request), promocion_id, hoy=hoy)
+        except PromocionNoPermitidaError:
+            raise PermissionDenied(SOLO_ADMIN_PROMOCIONES)
+        except PromocionNoEncontradaError:
+            raise NotFound("No existe esa promoción.")
+        except PromocionNoAplicableError as error:
+            raise Conflicto(str(error))
+        return Response(PromocionSerializer(PromocionListada(promocion, estado_promocion(promocion, hoy))).data)

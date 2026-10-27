@@ -23,3 +23,28 @@ class ActualizacionNoPermitidaError(Exception):
 class SinVentasObservadasError(Exception):
     """HU21: sin ventas en el período no hay demanda observada con la que
     reemplazar la estimada (con D = 0 el EOQ no tiene sentido)."""
+
+
+# --- Promociones (HU23) ---
+
+
+class PromocionNoPermitidaError(Exception):
+    """Solo el Administrador crea o termina promociones."""
+
+
+class PromocionNoEncontradaError(Exception):
+    """No existe una promoción con ese id."""
+
+
+class DatosPromocionInvalidosError(Exception):
+    """Algún dato de la promoción no cumple una regla. `errores` mapea
+    campo -> mensaje, para mostrarlo junto al campo."""
+
+    def __init__(self, errores: dict[str, str]):
+        super().__init__(errores)
+        self.errores = errores
+
+
+class PromocionNoAplicableError(Exception):
+    """La herramienta no está estancada en esa sucursal, ya tiene una
+    promoción vigente ahí, o la promoción ya no está vigente."""

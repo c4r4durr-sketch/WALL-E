@@ -9,8 +9,8 @@
 
 1. **Diccionario de datos de 16 tablas.** No está en el repo ni en el
    informe actual (los capítulos de diseño tienen marcadores "ACA PONES").
-   `docs/DICCIONARIO_DE_DATOS.md` documenta las tablas **reales** (hoy 8:
-   se sumó `proveedores`).
+   `docs/DICCIONARIO_DE_DATOS.md` documenta las tablas **reales** (hoy 9:
+   se sumaron `proveedores` y `promociones`).
    Al pasar el diccionario al informe, partir de ese archivo, no del script
    v7.
 
@@ -156,3 +156,30 @@
     sumar las herramientas que no tienen costo. Permisos como el cierre
     diario: Administrador todas o una sucursal, Supervisor la suya,
     Empleado no. El panel (HU24) sigue mostrando las estancadas a todos.
+
+19. **HU23, promociones. Base de datos: tabla nueva `promociones`**
+    (migración `catalogo.0007_promociones`): `cod_promocion`,
+    `cod_herramienta`, `cod_sucursal`, `descuento_promocion` (1–90, CHECK),
+    `fecha_inicio_promocion`, `fecha_fin_promocion` (CHECK fin ≥ inicio),
+    `motivo_promocion`, `activa_promocion`, `cod_usuario`,
+    `fecha_registro_promocion`. Agregarla al diccionario, al diagrama
+    entidad-relación (herramientas, sucursales y usuarios 1 ──< promociones)
+    y al diagrama de clases. Se audita en `historial_modificaciones`.
+    Una herramienta con promociones no se puede eliminar (409, igual que
+    con movimientos). API: `GET/POST /api/indicadores/promociones/` y
+    `POST .../promociones/<id>/terminar/`; pantalla `/promociones` y botón
+    "Promocionar" en Antigüedad del stock.
+    Decisiones (no está el texto exacto de la HU en el repo; se eligió lo
+    más simple):
+    - es un **descuento en %** por herramienta y sucursal; el sistema no
+      tiene precio de venta, así que solo informa el descuento que aplica
+      el mostrador;
+    - solo sobre herramientas **estancadas** en esa sucursal (> 40 días,
+      la regla de HU22);
+    - empieza el día en que se crea y dura hasta una fecha de fin elegida;
+      una sola vigente por herramienta y sucursal; no se edita ni se
+      borra, se **termina**;
+    - **solo el Administrador** la crea o termina (es una decisión de
+      precio, como el costo de HU7); **todos los roles** la ven;
+    - vive en `indicadores` (reglas) + `catalogo` (tabla): `indicadores`
+      sigue sin tablas propias (punto 5).
