@@ -64,15 +64,6 @@ def _verificar_sucursal(actor: Actor, sucursal_id: int) -> None:
         raise PromocionNoPermitidaError()
 
 
-def puede_gestionar(actor: Actor, sucursal_id: int) -> bool:
-    try:
-        _verificar_rol(actor)
-        _verificar_sucursal(actor, sucursal_id)
-    except PromocionNoPermitidaError:
-        return False
-    return True
-
-
 def _validar(datos: dict[str, Any], hoy: date) -> None:
     errores: dict[str, str] = {}
     descuento = datos.get("descuento_porcentaje")

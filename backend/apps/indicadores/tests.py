@@ -1014,6 +1014,24 @@ class ExcelApiTests(APITestCase):
         self.assertEqual(filas[4][:4], ["A", "T-1", "Taladro", 8])
         self.assertEqual(filas[-1][:4], ["Total", None, None, 8])
 
+    def test_reporte_vacio_no_genera_archivo(self):
+        # HU25 CA3: 409 con aviso, sin .xlsx.
+        self.client.force_authenticate(self.sup)
+        ayer = (self.hoy_la_paz() - timedelta(days=1)).isoformat()
+        for url, params in [("/api/indicadores/cierre-diario/excel/", {"fecha": ayer}),
+                            ("/api/indicadores/antiguedad/excel/", {"dias_minimos": 91})]:
+            respuesta = self.client.get(url, params)
+            self.assertEqual(respuesta.status_code, 409, url)
+            self.assertIn("vacío", respuesta.json()["detail"])
+        self.Movimiento.objects.all().delete()
+        self.h.delete()
+        self.assertEqual(self.client.get("/api/indicadores/abc/excel/").status_code, 409)
+
+    @staticmethod
+    def hoy_la_paz():
+        from django.utils import timezone
+        return timezone.localdate()
+
     def test_mismos_permisos_que_el_reporte(self):
         self.client.force_authenticate(self.emp)
         self.assertEqual(self.client.get("/api/indicadores/cierre-diario/excel/").status_code, 403)

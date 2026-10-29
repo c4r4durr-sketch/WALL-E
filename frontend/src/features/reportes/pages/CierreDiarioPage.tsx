@@ -74,6 +74,7 @@ export function CierreDiarioPage() {
             params={{ sucursal: esAdmin ? Number(sucursal) : undefined, fecha }}
             nombre={`cierre-diario-${fecha}`}
             deshabilitado={!listo || !cierre}
+            vacio={cierre?.lineas.length === 0}
           />
         }
       />

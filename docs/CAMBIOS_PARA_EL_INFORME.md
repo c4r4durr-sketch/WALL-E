@@ -202,6 +202,10 @@
     exportar otro listado (por ejemplo, el catálogo o los movimientos), se
     agrega con el mismo módulo `indicadores/interfaces/excel.py`.
     Dependencia nueva: `openpyxl` 3.1.5.
+    Comparado con el backlog: CA1 (botón en cada reporte) y CA2 (columnas
+    y totales) ya se cumplían; se agregó CA3: un reporte vacío no genera
+    archivo (el endpoint responde 409 con el aviso y el botón lo muestra
+    sin descargar).
 21. **Datos de ejemplo (`manage.py cargar_demo`).** **Base de datos:** sin
     cambios de estructura; solo carga datos. Con `--reiniciar` borra las
     filas de `herramientas` (y sus fotos), `movimientos`, `transferencias`,

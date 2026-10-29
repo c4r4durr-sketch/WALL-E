@@ -80,7 +80,7 @@ export function AntiguedadPage() {
         migas={['Análisis', 'Antigüedad del stock']}
         titulo="Antigüedad del stock"
         subtitulo="Días sin venta de cada herramienta con stock, por sucursal."
-        acciones={<ExportarExcel url="/indicadores/antiguedad/excel/" params={filtro} nombre="antiguedad" deshabilitado={!reporte} />}
+        acciones={<ExportarExcel url="/indicadores/antiguedad/excel/" params={filtro} nombre="antiguedad" deshabilitado={!reporte} vacio={reporte?.lineas.length === 0} />}
       />
 
       <Card className="flex flex-wrap items-end gap-5">

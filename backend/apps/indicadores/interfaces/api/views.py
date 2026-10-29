@@ -50,6 +50,11 @@ from .serializers import (
 # puede inferirla de un serializer_class como en un ModelViewSet normal.
 
 
+class Conflicto(APIException):
+    status_code = 409
+    default_detail = "La operación no se puede realizar en el estado actual."
+
+
 class EOQPorHerramientaView(APIView):
     """GET /api/indicadores/eoq/<herramienta_id>/
     EOQ (HU17), ajustado a cajas (HU20), calculado con la demanda observada
@@ -68,11 +73,6 @@ class EOQPorHerramientaView(APIView):
         except HerramientaNoEncontradaError:
             raise NotFound("No existe esa herramienta.")
         return Response(ResultadoEOQSerializer(resultado).data)
-
-
-class Conflicto(APIException):
-    status_code = 409
-    default_detail = "La operación no se puede realizar en el estado actual."
 
 
 def _actor(request) -> Actor:
@@ -113,14 +113,26 @@ class ClasificacionABCView(APIView):
         return Response(ClasificacionABCSerializer(_clasificacion_abc(), many=True).data)
 
 
+REPORTE_VACIO = "El reporte está vacío: no hay nada que exportar."
+
+
+def _no_vacio(filas) -> None:
+    """HU25 CA3: un reporte vacío no genera archivo (409 con aviso)."""
+    if not filas:
+        raise Conflicto(REPORTE_VACIO)
+
+
 class ClasificacionABCExcelView(APIView):
-    """GET /api/indicadores/abc/excel/  (HU25, todos los roles)"""
+    """GET /api/indicadores/abc/excel/  (HU25, todos los roles; 409 si no
+    hay herramientas)"""
 
     permission_classes = [IsAuthenticated]
 
     @extend_schema(responses={(200, TIPO_XLSX): OpenApiTypes.BINARY})
     def get(self, request):
-        return respuesta_excel(*excel_abc(_clasificacion_abc(), timezone.localdate()))
+        clasificacion = _clasificacion_abc()
+        _no_vacio(clasificacion)
+        return respuesta_excel(*excel_abc(clasificacion, timezone.localdate()))
 
 
 class PanelAuditoriaView(APIView):
@@ -182,13 +194,16 @@ class CierreDiarioView(APIView):
 
 class CierreDiarioExcelView(APIView):
     """GET /api/indicadores/cierre-diario/excel/?sucursal=&fecha=
-    HU25: el mismo cierre, como .xlsx. Mismos permisos."""
+    HU25: el mismo cierre, como .xlsx. Mismos permisos; 409 si ese día no
+    hubo movimientos."""
 
     permission_classes = [IsAuthenticated]
 
     @extend_schema(parameters=[FiltroCierreDiarioSerializer], responses={(200, TIPO_XLSX): OpenApiTypes.BINARY})
     def get(self, request):
-        return respuesta_excel(*excel_cierre_diario(_cierre_diario(request)))
+        cierre = _cierre_diario(request)
+        _no_vacio(cierre.lineas)
+        return respuesta_excel(*excel_cierre_diario(cierre))
 
 
 def _reporte_antiguedad(request) -> ReporteAntiguedad:
@@ -225,13 +240,15 @@ class ReporteAntiguedadView(APIView):
 
 class ReporteAntiguedadExcelView(APIView):
     """GET /api/indicadores/antiguedad/excel/?sucursal=&dias_minimos=
-    HU25: el mismo reporte, como .xlsx. Mismos permisos."""
+    HU25: el mismo reporte, como .xlsx. Mismos permisos; 409 si no hay
+    líneas en ese rango."""
 
     permission_classes = [IsAuthenticated]
 
     @extend_schema(parameters=[FiltroAntiguedadSerializer], responses={(200, TIPO_XLSX): OpenApiTypes.BINARY})
     def get(self, request):
         reporte = _reporte_antiguedad(request)
+        _no_vacio(reporte.lineas)
         sucursal = SucursalRepositoryDjango().obtener_por_id(reporte.sucursal_id) if reporte.sucursal_id else None
         return respuesta_excel(*excel_antiguedad(reporte, sucursal.nombre if sucursal else None))
 

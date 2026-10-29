@@ -16,7 +16,7 @@ export function ClasificacionABCPage() {
         migas={['Análisis', 'Clasificación ABC']}
         titulo="Clasificación ABC"
         subtitulo="Elige una herramienta para ver cuánto y cuándo pedir."
-        acciones={<ExportarExcel url="/indicadores/abc/excel/" nombre="clasificacion-abc" deshabilitado={!abc} />}
+        acciones={<ExportarExcel url="/indicadores/abc/excel/" nombre="clasificacion-abc" deshabilitado={!abc} vacio={abc?.length === 0} />}
       />
       {isError && (
         <Aviso tono="error" accion={<Button tamano="sm" onClick={() => refetch()}>Reintentar</Button>}>
