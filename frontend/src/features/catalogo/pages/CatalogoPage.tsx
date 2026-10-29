@@ -29,6 +29,8 @@ import { usePreferencia } from '../../../shared/hooks/usePreferencia'
 import { CeldaHerramienta } from '../components/CeldaHerramienta'
 import { HerramientaForm } from '../components/HerramientaForm'
 import { HistorialCostos } from '../components/HistorialCostos'
+import { EtiquetaPromocion } from '../../promociones/components/EtiquetaPromocion'
+import { usePromocionesVigentes } from '../../promociones/hooks/usePromociones'
 import { useHerramientas } from '../hooks/useHerramientas'
 import { useEliminarHerramienta } from '../hooks/useEliminarHerramienta'
 import { puedeCambiarCosto, puedeEditarCatalogo } from '../permisos'
@@ -100,6 +102,8 @@ export function CatalogoPage() {
   const session = getSession()
   const puedeEditar = session ? puedeEditarCatalogo(session.rol) : false
   const { data: herramientas, isLoading, isError, refetch } = useHerramientas()
+  // HU23: la etiqueta de promoción también se ve en el catálogo.
+  const vigentes = usePromocionesVigentes()
   const eliminar = useEliminarHerramienta()
   const [buscar, setBuscar] = useState('')
   const [filtro, setFiltro] = useState<Filtro>('todas')
@@ -241,6 +245,13 @@ export function CatalogoPage() {
                       </span>
                       <span className="text-xs text-muted tabular-nums">· caja de {h.unidades_por_caja}</span>
                     </div>
+                    {vigentes(h.id).length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {vigentes(h.id).map((p) => (
+                          <EtiquetaPromocion key={p.id} descuento={p.descuento_porcentaje} sucursal={p.sucursal_nombre} />
+                        ))}
+                      </div>
+                    )}
                     <div className="mt-auto flex items-center justify-between gap-2 pt-3">
                       {faltanDatosEOQ(h) ? <Badge tono="warn">Faltan datos EOQ</Badge> : <Badge tono="ok">Datos EOQ</Badge>}
                       <Acciones herramienta={h} puedeEditar={puedeEditar} onAbrir={abrir} onEliminar={pedirBorrado} />
@@ -266,6 +277,7 @@ export function CatalogoPage() {
                 <Th numerico>Costo pedido</Th>
                 <Th numerico>Costo almac.</Th>
                 <Th numerico>Entrega (días)</Th>
+                <Th>Promoción</Th>
                 <Th><span className="sr-only">Acciones</span></Th>
               </tr>
             </THead>
@@ -280,6 +292,15 @@ export function CatalogoPage() {
                   <Td numerico>{h.costo_pedido ?? vacio}</Td>
                   <Td numerico>{h.costo_almacenamiento_unitario ?? vacio}</Td>
                   <Td numerico>{h.tiempo_entrega_dias ?? vacio}</Td>
+                  <Td>
+                    {vigentes(h.id).length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {vigentes(h.id).map((p) => (
+                          <EtiquetaPromocion key={p.id} descuento={p.descuento_porcentaje} sucursal={p.sucursal_nombre} />
+                        ))}
+                      </div>
+                    ) : vacio}
+                  </Td>
                   <Td><Acciones herramienta={h} puedeEditar={puedeEditar} onAbrir={abrir} onEliminar={pedirBorrado} /></Td>
                 </Tr>
               ))}

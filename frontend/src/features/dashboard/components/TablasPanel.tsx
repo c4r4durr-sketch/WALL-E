@@ -4,6 +4,8 @@ import { CheckCircle2, Clock, type LucideIcon } from 'lucide-react'
 import { Card, CardHeader, EmptyState, Table, THead, Td, Th, Tr, cx } from '../../../components/ui'
 import { CeldaHerramienta } from '../../catalogo/components/CeldaHerramienta'
 import { useFotos } from '../../catalogo/hooks/useFotos'
+import { EtiquetaPromocion } from '../../promociones/components/EtiquetaPromocion'
+import { usePromocionesVigentes } from '../../promociones/hooks/usePromociones'
 import type { AlertaReorden, HerramientaEstancada } from '../api/indicadoresApi'
 
 // Detalle de las alertas del panel y de la pantalla de reposición. Tablas
@@ -101,6 +103,7 @@ export function TablaAlertasReorden({ alertas, sinDatos, limite }: PropsAlertas)
 
 export function TablaEstancadas({ estancadas, dias }: { estancadas: HerramientaEstancada[]; dias: number }) {
   const foto = useFotos()
+  const vigentes = usePromocionesVigentes()
   return (
     <Seccion
       titulo={`Sin ventas hace más de ${dias} días`}
@@ -116,6 +119,7 @@ export function TablaEstancadas({ estancadas, dias }: { estancadas: HerramientaE
               <Th>Sucursal</Th>
               <Th numerico>Stock</Th>
               <Th numerico>Días sin venta</Th>
+              <Th>Promoción</Th>
             </tr>
           </THead>
           <tbody>
@@ -127,6 +131,11 @@ export function TablaEstancadas({ estancadas, dias }: { estancadas: HerramientaE
                 <Td numerico>
                   <span className="font-semibold">{e.dias_sin_venta}</span>
                   {e.nunca_vendida && <span className="block text-xs text-muted">nunca vendida</span>}
+                </Td>
+                <Td>
+                  {vigentes(e.herramienta_id, e.sucursal_id).map((p) => (
+                    <EtiquetaPromocion key={p.id} descuento={p.descuento_porcentaje} />
+                  ))}
                 </Td>
               </Tr>
             ))}

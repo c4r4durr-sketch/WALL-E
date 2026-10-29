@@ -3,8 +3,8 @@ import { httpClient } from '../../../shared/api/httpClient'
 // Espeja PromocionSerializer
 // (backend/apps/indicadores/interfaces/api/serializers.py). HU23:
 //   GET  /api/indicadores/promociones/?vigentes=true   (todos los roles)
-//   POST /api/indicadores/promociones/                 (solo Administrador)
-//   POST /api/indicadores/promociones/<id>/terminar/   (solo Administrador)
+//   POST /api/indicadores/promociones/                 (Administrador; Supervisor en su sucursal)
+//   POST /api/indicadores/promociones/<id>/terminar/   (quitarla; los mismos)
 
 export type EstadoPromocion = 'VIGENTE' | 'VENCIDA' | 'TERMINADA'
 
@@ -15,7 +15,8 @@ export interface Promocion {
   herramienta_nombre: string
   sucursal_id: number
   sucursal_nombre: string
-  descuento_porcentaje: number
+  // Opcional: null es la etiqueta de promoción sin descuento.
+  descuento_porcentaje: number | null
   fecha_inicio: string
   fecha_fin: string
   motivo: string
@@ -27,7 +28,7 @@ export interface Promocion {
 export interface NuevaPromocion {
   herramienta_id: number
   sucursal_id: number
-  descuento_porcentaje: number
+  descuento_porcentaje: number | null
   fecha_fin: string
   motivo: string
 }

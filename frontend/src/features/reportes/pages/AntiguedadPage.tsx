@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Hourglass, Tag } from 'lucide-react'
+import { Hourglass } from 'lucide-react'
 import {
   Aviso,
   Badge,
@@ -32,16 +32,18 @@ import { useSucursales } from '../../usuarios/hooks/useSucursales'
 import { useAntiguedad } from '../hooks/useAntiguedad'
 import { ExportarExcel } from '../components/ExportarExcel'
 import { PromocionForm } from '../../promociones/components/PromocionForm'
-import { usePromociones } from '../../promociones/hooks/usePromociones'
-import { puedeGestionarPromociones } from '../../promociones/permisos'
+import { EtiquetaPromocion } from '../../promociones/components/EtiquetaPromocion'
+import { usePromocionesVigentes } from '../../promociones/hooks/usePromociones'
+import { puedeGestionarEn } from '../../promociones/permisos'
 import type { LineaAntiguedad } from '../api/reportesApi'
 
 // Antigüedad del stock (HU22): cuántos días lleva cada herramienta sin
 // venderse en cada sucursal, por tramos, y cuánto dinero inmoviliza lo
 // estancado. El Administrador ve todas las sucursales o una; el
 // Supervisor, solo la suya (el backend responde 403 a cualquier otra).
-// HU23: la columna Promoción muestra el descuento vigente y, al
-// Administrador, el botón para promocionar una estancada.
+// HU23: la columna Promoción muestra la etiqueta vigente y, al
+// Administrador o al Supervisor de esa sucursal, el botón para ponérsela a
+// una estancada.
 
 type Rango = '0' | '31' | '41' | '91'
 
@@ -60,9 +62,8 @@ function tonoTramo(l: LineaAntiguedad): TonoBadge {
 export function AntiguedadPage() {
   const session = getSession()
   const esAdmin = session?.rol === Rol.ADMINISTRADOR
-  const gestionaPromociones = session ? puedeGestionarPromociones(session.rol) : false
   const [aPromocionar, setAPromocionar] = useState<LineaAntiguedad | null>(null)
-  const { data: vigentes } = usePromociones(true)
+  const vigentes = usePromocionesVigentes()
   const [sucursal, setSucursal] = useState('')
   const [rango, setRango] = useState<Rango>('0')
   const { data: sucursales } = useSucursales()
@@ -71,8 +72,7 @@ export function AntiguedadPage() {
   const { data: reporte, isLoading, isError, error, refetch } = useAntiguedad(filtro)
   const todas = reporte?.sucursal_id === null
   const masDe90 = reporte?.tramos.at(-1)
-  const descuento = (l: LineaAntiguedad) =>
-    vigentes?.find((p) => p.herramienta_id === l.herramienta_id && p.sucursal_id === l.sucursal_id)?.descuento_porcentaje
+  const promocion = (l: LineaAntiguedad) => vigentes(l.herramienta_id, l.sucursal_id).at(0)
 
   return (
     <>
@@ -173,9 +173,9 @@ export function AntiguedadPage() {
                       <Td><Badge tono={tonoTramo(l)}>{l.tramo}</Badge></Td>
                       <Td numerico>{l.valor_inmovilizado === null ? '—' : monto(Number(l.valor_inmovilizado))}</Td>
                       <Td>
-                        {descuento(l) !== undefined ? (
-                          <Badge tono="acc" icono={<Tag size={12} aria-hidden />}>−{descuento(l)} %</Badge>
-                        ) : gestionaPromociones && l.estancada ? (
+                        {promocion(l) ? (
+                          <EtiquetaPromocion descuento={promocion(l)!.descuento_porcentaje} />
+                        ) : session && puedeGestionarEn(session, l.sucursal_id) && l.estancada ? (
                           <Button tamano="sm" onClick={() => setAPromocionar(l)}>Promocionar</Button>
                         ) : (
                           <span className="text-muted">—</span>
@@ -193,7 +193,7 @@ export function AntiguedadPage() {
       <Modal
         abierto={aPromocionar !== null}
         onCerrar={() => setAPromocionar(null)}
-        titulo="Nueva promoción"
+        titulo="Poner en promoción"
         descripcion="Empieza hoy. El mostrador la ve en Promociones."
       >
         {aPromocionar && <PromocionForm key={`${aPromocionar.herramienta_id}-${aPromocionar.sucursal_id}`} linea={aPromocionar} onTerminar={() => setAPromocionar(null)} />}

@@ -171,18 +171,25 @@
     con movimientos). API: `GET/POST /api/indicadores/promociones/` y
     `POST .../promociones/<id>/terminar/`; pantalla `/promociones` y botón
     "Promocionar" en Antigüedad del stock.
-    Decisiones (no está el texto exacto de la HU en el repo; se eligió lo
-    más simple):
-    - es un **descuento en %** por herramienta y sucursal; el sistema no
-      tiene precio de venta, así que solo informa el descuento que aplica
-      el mostrador;
+    Ajustado al backlog («Como supervisor, quiero marcar las herramientas
+    estancadas con una etiqueta de promoción»; CA1 solo estancadas, CA2
+    visible en las listas y se puede quitar):
+    - es una **etiqueta** por herramienta y sucursal con un **descuento
+      opcional en %** (el sistema no tiene precio de venta; solo informa
+      el descuento que aplica el mostrador). **Base de datos:**
+      `descuento_promocion` pasa a admitir NULL (migración
+      `catalogo.0008_descuento_opcional`, `ALTER COLUMN ... DROP NOT
+      NULL`; el CHECK 1–90 se mantiene y deja pasar NULL);
     - solo sobre herramientas **estancadas** en esa sucursal (> 40 días,
       la regla de HU22);
     - empieza el día en que se crea y dura hasta una fecha de fin elegida;
       una sola vigente por herramienta y sucursal; no se edita ni se
-      borra, se **termina**;
-    - **solo el Administrador** la crea o termina (es una decisión de
-      precio, como el costo de HU7); **todos los roles** la ven;
+      borra, se **quita** (activa = false);
+    - la pone y la quita el **Supervisor en su sucursal** y el
+      **Administrador en cualquiera**; el Empleado no (403); **todos los
+      roles** la ven;
+    - la etiqueta se ve en las listas: catálogo (tarjetas y tabla, con la
+      sucursal), tabla de estancadas del panel, Antigüedad y Promociones;
     - vive en `indicadores` (reglas) + `catalogo` (tabla): `indicadores`
       sigue sin tablas propias (punto 5).
 

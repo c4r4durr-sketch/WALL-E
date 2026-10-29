@@ -76,15 +76,16 @@ class CambioCosto:
 
 @dataclass(frozen=True)
 class Promocion:
-    """HU23: descuento para sacar el stock estancado de una herramienta en
-    una sucursal. Empieza el día que se crea y dura hasta fecha_fin
-    (inclusive). No se edita ni se borra: se termina antes (activa=False)
-    y todo queda en el historial de modificaciones."""
+    """HU23: etiqueta de promoción para sacar el stock estancado de una
+    herramienta en una sucursal, con un descuento opcional. Empieza el día
+    que se crea y dura hasta fecha_fin (inclusive). No se edita ni se
+    borra: se quita antes (activa=False) y todo queda en el historial de
+    modificaciones."""
 
     id: Optional[int]
     herramienta_id: int
     sucursal_id: int
-    descuento_porcentaje: int
+    descuento_porcentaje: Optional[int]  # None: etiqueta sin descuento
     fecha_inicio: date
     fecha_fin: date
     usuario_id: int

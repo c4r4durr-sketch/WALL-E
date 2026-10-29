@@ -117,9 +117,10 @@ class HistorialCosto(models.Model):
 
 
 class Promocion(models.Model):
-    """HU23: descuento sobre una herramienta estancada en una sucursal. Las
-    reglas (solo estancadas, una vigente a la vez, descuento 1-90 %) las
-    aplica el caso de uso. No se borra: se termina con activa=False."""
+    """HU23: etiqueta de promoción sobre una herramienta estancada en una
+    sucursal, con descuento opcional. Las reglas (solo estancadas, una
+    vigente a la vez, descuento 1-90 % si se indica, quién la pone) las
+    aplica el caso de uso. No se borra: se quita con activa=False."""
 
     id = models.BigAutoField(primary_key=True, db_column="cod_promocion")
     herramienta = models.ForeignKey(
@@ -128,7 +129,9 @@ class Promocion(models.Model):
     sucursal = models.ForeignKey(
         "usuarios.Sucursal", on_delete=models.PROTECT, related_name="promociones", db_column="cod_sucursal"
     )
-    descuento_porcentaje = models.PositiveSmallIntegerField(db_column="descuento_promocion")
+    # Opcional (NULL = etiqueta sin descuento). El CHECK de 1 a 90 deja
+    # pasar NULL, como cualquier CHECK de SQL.
+    descuento_porcentaje = models.PositiveSmallIntegerField(null=True, blank=True, db_column="descuento_promocion")
     fecha_inicio = models.DateField(db_column="fecha_inicio_promocion")
     fecha_fin = models.DateField(db_column="fecha_fin_promocion")
     motivo = models.CharField(max_length=255, blank=True, db_column="motivo_promocion")
@@ -156,4 +159,5 @@ class Promocion(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"{self.herramienta_id}@{self.sucursal_id}: -{self.descuento_porcentaje}%"
+        descuento = f"-{self.descuento_porcentaje}%" if self.descuento_porcentaje else "sin descuento"
+        return f"{self.herramienta_id}@{self.sucursal_id}: {descuento}"

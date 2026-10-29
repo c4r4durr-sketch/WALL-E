@@ -88,7 +88,7 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | **Indicadores** (HU17–HU21) | `GET /api/indicadores/eoq/<id>/` (EOQ con D/S/H del catálogo, ajustado a cajas, + demanda observada de 12 meses), `rop/<id>/` (ROP vs stock total, `requiere_reorden`), `abc/` (por unidades vendidas en 12 meses: A < 80 % acumulado previo, B < 95 %, C resto y sin ventas). Si faltan datos: 200 con `null` + `datos_faltantes`. **HU21**: EOQ, ROP y panel usan automáticamente lo vendido en 12 meses (`fuente_demanda` = OBSERVADA); sin ventas, la demanda estimada del catálogo (ESTIMADA) | `/indicadores`: tabla ABC; al elegir una herramienta, "cuánto pedir" (EOQ) y "cuándo pedir" (ROP), con la demanda usada |
 | **Cierre diario** (HU14) | `GET /api/indicadores/cierre-diario/?sucursal=&fecha=`: movimientos del día en hora de La Paz, totales por tipo, salidas destacadas. Admin cualquier sucursal, Supervisor la suya, Empleado 403; fecha futura 400 | `/cierre-diario` (Admin y Supervisor): fecha y sucursal, tarjetas de totales, tabla y aviso si no hubo salidas |
 | **Antigüedad del stock** (HU22) | `GET /api/indicadores/antiguedad/?sucursal=&dias_minimos=`: por herramienta y sucursal con stock, días sin venta, tramo (0–30, 31–40, 41–90, más de 90), estancada (> 40 días) y valor inmovilizado (stock × costo unitario). Admin todas o una sucursal, Supervisor la suya, Empleado 403. Misma regla que el panel (`domain/antiguedad.py`) | `/antiguedad` (Admin y Supervisor, grupo Análisis): sucursal, rango de días, tarjetas y tabla por tramo |
-| **Promociones** (HU23) | Tabla `promociones` (catalogo, `0007`); reglas en `indicadores/use_cases/promociones.py`. `GET /api/indicadores/promociones/?vigentes=` (todos), `POST` (solo Admin; solo herramientas estancadas en esa sucursal; descuento 1–90 %; desde hoy hasta `fecha_fin`; una vigente por herramienta y sucursal → 409), `POST .../<id>/terminar/` (solo Admin). Sin editar ni borrar; auditadas | `/promociones` (todos; Admin puede terminar) y botón "Promocionar" en `/antiguedad` (Admin) |
+| **Promociones** (HU23) | Tabla `promociones` (catalogo, `0007`); reglas en `indicadores/use_cases/promociones.py`. `GET /api/indicadores/promociones/?vigentes=` (todos), `POST` (Admin en cualquier sucursal, Supervisor en la suya; solo herramientas estancadas en esa sucursal; descuento opcional 1–90 %, `0008`; desde hoy hasta `fecha_fin`; una vigente por herramienta y sucursal → 409), `POST .../<id>/terminar/` (quitarla; mismos permisos). Sin editar ni borrar; auditadas | `/promociones` (todos; quitar: Admin y Supervisor de esa sucursal), botón "Promocionar" en `/antiguedad` y etiqueta en catálogo y panel |
 | **Excel** (HU25) | `GET .../cierre-diario/excel/`, `.../antiguedad/excel/` y `.../abc/excel/`: el mismo caso de uso, filtros y permisos que la versión JSON; el .xlsx lo arma `indicadores/interfaces/excel.py` (openpyxl) | Botón "Exportar a Excel" en Cierre diario, Antigüedad del stock y Clasificación ABC |
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
 
@@ -155,9 +155,9 @@ source-map-js 1.2.1 → 1.2.2; ninguna versión mayor).
   nombres de campo de Python, no los nombres físicos: no cambia con el renombre.
 - Antigüedad (HU22): permisos como el cierre diario; el valor inmovilizado
   usa el costo unitario de HU7 y las líneas sin costo se cuentan aparte.
-- Promociones (HU23): descuento en % (no hay precio de venta), solo
-  sobre estancadas, solo el Admin las gestiona, todos las ven; se
-  terminan, no se borran. Una herramienta con promociones no se elimina.
+- Promociones (HU23): etiqueta con descuento opcional en % (no hay precio
+  de venta), solo sobre estancadas; la ponen y la quitan el Supervisor en
+  su sucursal y el Admin en todas; todos las ven; se quitan, no se borran. Una herramienta con promociones no se elimina.
 - Excel (HU25): solo los reportes con tabla (cierre diario, antigüedad,
   ABC), con los mismos permisos que su pantalla; sin plantillas ni
   gráficos. Fechas en hora de La Paz.

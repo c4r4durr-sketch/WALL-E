@@ -236,14 +236,15 @@ class ReporteAntiguedadExcelView(APIView):
         return respuesta_excel(*excel_antiguedad(reporte, sucursal.nombre if sucursal else None))
 
 
-SOLO_ADMIN_PROMOCIONES = "Solo el Administrador puede crear o terminar promociones."
+SIN_PERMISO_PROMOCIONES = "Solo el Administrador, o el Supervisor en su sucursal, puede poner o quitar promociones."
 
 
 class PromocionesView(APIView):
     """GET  /api/indicadores/promociones/?vigentes=true  (todos los roles)
-    POST /api/indicadores/promociones/  (solo Administrador)
-    HU23: descuento sobre una herramienta estancada en una sucursal. 409 si
-    no está estancada ahí o ya tiene una promoción vigente."""
+    POST /api/indicadores/promociones/  (Administrador; Supervisor en su sucursal)
+    HU23: etiqueta de promoción (descuento opcional) sobre una herramienta
+    estancada en una sucursal. 409 si no está estancada ahí o ya tiene una
+    promoción vigente."""
 
     permission_classes = [IsAuthenticated]
 
@@ -272,7 +273,7 @@ class PromocionesView(APIView):
                 hoy=hoy,
             )
         except PromocionNoPermitidaError:
-            raise PermissionDenied(SOLO_ADMIN_PROMOCIONES)
+            raise PermissionDenied(SIN_PERMISO_PROMOCIONES)
         except DatosPromocionInvalidosError as error:
             raise ValidationError({campo: [mensaje] for campo, mensaje in error.errores.items()})
         except PromocionNoAplicableError as error:
@@ -283,8 +284,9 @@ class PromocionesView(APIView):
 
 class TerminarPromocionView(APIView):
     """POST /api/indicadores/promociones/<id>/terminar/
-    HU23: corta una promoción vigente antes de su fecha de fin. Solo el
-    Administrador; 409 si ya no estaba vigente."""
+    HU23: quita la etiqueta de una promoción vigente antes de su fecha de
+    fin. Administrador; Supervisor en su sucursal; 409 si ya no estaba
+    vigente."""
 
     permission_classes = [IsAuthenticated]
 
@@ -294,7 +296,7 @@ class TerminarPromocionView(APIView):
         try:
             promocion = terminar_promocion(PromocionRepositoryDjango(), _actor(request), promocion_id, hoy=hoy)
         except PromocionNoPermitidaError:
-            raise PermissionDenied(SOLO_ADMIN_PROMOCIONES)
+            raise PermissionDenied(SIN_PERMISO_PROMOCIONES)
         except PromocionNoEncontradaError:
             raise NotFound("No existe esa promoción.")
         except PromocionNoAplicableError as error:

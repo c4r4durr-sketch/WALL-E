@@ -5,11 +5,11 @@ import { erroresPorCampo, mensajeDeError } from '../../../shared/api/errores'
 import { hoyEnLaPaz, sumarDias } from '../../../shared/formato'
 import { useCrearPromocion } from '../hooks/usePromociones'
 
-// Alta de una promoción (HU23) sobre una herramienta estancada en una
-// sucursal, dentro de un modal. Empieza hoy; se elige el descuento y hasta
-// cuándo dura. Las mismas reglas que el backend se revisan antes de
-// enviar; si el backend la rechaza (ya no está estancada, ya hay una
-// vigente) se muestra su mensaje.
+// Etiqueta de promoción (HU23) sobre una herramienta estancada en una
+// sucursal, dentro de un modal. Empieza hoy; se elige hasta cuándo dura y,
+// si se quiere, un descuento. Las mismas reglas que el backend se revisan
+// antes de enviar; si el backend la rechaza (ya no está estancada, ya hay
+// una vigente) se muestra su mensaje.
 
 export interface Promocionable {
   herramienta_id: number
@@ -31,7 +31,7 @@ type Errores = Partial<Record<'descuento_porcentaje' | 'fecha_fin', string>>
 function validar(form: FormState, hoy: string): Errores {
   const errores: Errores = {}
   const descuento = Number(form.descuento)
-  if (!Number.isInteger(descuento) || descuento < 1 || descuento > 90) {
+  if (form.descuento.trim() !== '' && (!Number.isInteger(descuento) || descuento < 1 || descuento > 90)) {
     errores.descuento_porcentaje = 'Un número entero entre 1 y 90.'
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(form.fechaFin) || form.fechaFin < hoy) {
@@ -43,7 +43,7 @@ function validar(form: FormState, hoy: string): Errores {
 export function PromocionForm({ linea, onTerminar }: { linea: Promocionable; onTerminar: () => void }) {
   const hoy = hoyEnLaPaz()
   const crear = useCrearPromocion()
-  const [form, setForm] = useState<FormState>({ descuento: '20', fechaFin: sumarDias(hoy, 15), motivo: '' })
+  const [form, setForm] = useState<FormState>({ descuento: '', fechaFin: sumarDias(hoy, 15), motivo: '' })
   const [errores, setErrores] = useState<Errores>({})
   const erroresServidor = erroresPorCampo(crear.error) as Errores
   const visibles: Errores = { ...erroresServidor, ...errores }
@@ -66,7 +66,7 @@ export function PromocionForm({ linea, onTerminar }: { linea: Promocionable; onT
       {
         herramienta_id: linea.herramienta_id,
         sucursal_id: linea.sucursal_id,
-        descuento_porcentaje: Number(form.descuento),
+        descuento_porcentaje: form.descuento.trim() === '' ? null : Number(form.descuento),
         fecha_fin: form.fechaFin,
         motivo: form.motivo.trim(),
       },
@@ -83,12 +83,13 @@ export function PromocionForm({ linea, onTerminar }: { linea: Promocionable; onT
         </p>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <Field etiqueta="Descuento (%)" error={visibles.descuento_porcentaje}>
+        <Field etiqueta="Descuento (%)" opcional error={visibles.descuento_porcentaje}>
           <Input
             type="number"
             min={1}
             max={90}
             inputMode="numeric"
+            placeholder="Sin descuento"
             value={form.descuento}
             onChange={(e) => setCampo('descuento', e.target.value)}
             autoFocus
@@ -107,7 +108,7 @@ export function PromocionForm({ linea, onTerminar }: { linea: Promocionable; onT
       <div className="flex justify-end gap-2 pt-2">
         <Button variante="ghost" onClick={onTerminar}>Cancelar</Button>
         <Button type="submit" variante="primary" cargando={crear.isPending} icono={<Tag size={16} aria-hidden />}>
-          Crear promoción
+          Poner en promoción
         </Button>
       </div>
     </form>

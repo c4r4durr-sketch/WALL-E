@@ -20,7 +20,8 @@ class FechaFuturaError(Exception):
 
 
 class PromocionNoPermitidaError(Exception):
-    """Solo el Administrador crea o termina promociones."""
+    """Solo el Administrador, o el Supervisor en su sucursal, pone o quita
+    una promoción."""
 
 
 class PromocionNoEncontradaError(Exception):

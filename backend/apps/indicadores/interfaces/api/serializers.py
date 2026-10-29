@@ -169,7 +169,8 @@ class ReporteAntiguedadSerializer(serializers.Serializer):
 class CrearPromocionSerializer(serializers.Serializer):
     herramienta_id = serializers.IntegerField(min_value=1)
     sucursal_id = serializers.IntegerField(min_value=1)
-    descuento_porcentaje = serializers.IntegerField()
+    # Opcional: la etiqueta de promoción puede ir sin descuento.
+    descuento_porcentaje = serializers.IntegerField(required=False, allow_null=True, default=None)
     fecha_fin = serializers.DateField()
     motivo = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
 
@@ -185,7 +186,7 @@ class PromocionSerializer(serializers.Serializer):
     herramienta_nombre = serializers.CharField(source="promocion.herramienta_nombre")
     sucursal_id = serializers.IntegerField(source="promocion.sucursal_id")
     sucursal_nombre = serializers.CharField(source="promocion.sucursal_nombre")
-    descuento_porcentaje = serializers.IntegerField(source="promocion.descuento_porcentaje")
+    descuento_porcentaje = serializers.IntegerField(source="promocion.descuento_porcentaje", allow_null=True)
     fecha_inicio = serializers.DateField(source="promocion.fecha_inicio")
     fecha_fin = serializers.DateField(source="promocion.fecha_fin")
     motivo = serializers.CharField(source="promocion.motivo")

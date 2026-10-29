@@ -139,11 +139,12 @@ cambia el costo unitario de una herramienta. Solo se insertan filas.
 | `fecha_historial_costo` | `fecha` | timestamptz | no | se fija al crear |
 
 ## promociones
-Modelo `catalogo.Promocion` (HU23, sprint 4, migración `catalogo.0007`).
-Descuento sobre una herramienta **estancada** en una sucursal. No se edita
-ni se borra: se termina con `activa_promocion = false`. Reglas del caso de
-uso (`indicadores/use_cases/promociones.py`): solo el Administrador la crea
-o la termina; solo si la herramienta tiene stock y más de 40 días sin venta
+Modelo `catalogo.Promocion` (HU23, sprint 4, migraciones `catalogo.0007`
+y `0008`). Etiqueta de promoción, con descuento opcional, sobre una
+herramienta **estancada** en una sucursal. No se edita ni se borra: se
+quita con `activa_promocion = false`. Reglas del caso de uso
+(`indicadores/use_cases/promociones.py`): la pone o la quita el Supervisor
+en su sucursal o el Administrador en cualquiera; solo si la herramienta tiene stock y más de 40 días sin venta
 en esa sucursal; una sola vigente por herramienta y sucursal. Auditada en
 `historial_modificaciones`.
 
@@ -152,7 +153,7 @@ en esa sucursal; una sola vigente por herramienta y sucursal. Auditada en
 | `cod_promocion` | `id` | bigint (identity) | no | **PK** |
 | `cod_herramienta` | `herramienta` | bigint | no | **FK** → `herramientas.cod_herramienta`; índice `promocion_herr_suc_idx` (con la sucursal) |
 | `cod_sucursal` | `sucursal` | bigint | no | **FK** → `sucursales.cod_sucursal` |
-| `descuento_promocion` | `descuento_porcentaje` | smallint | no | CHECK `promocion_descuento_1_a_90` (1 a 90 %) |
+| `descuento_promocion` | `descuento_porcentaje` | smallint | sí | Opcional (NULL = etiqueta sin descuento). CHECK `promocion_descuento_1_a_90` (1 a 90 %) |
 | `fecha_inicio_promocion` | `fecha_inicio` | date | no | el día en que se crea (hora de La Paz) |
 | `fecha_fin_promocion` | `fecha_fin` | date | no | inclusive; CHECK `promocion_fin_no_antes_de_inicio` |
 | `motivo_promocion` | `motivo` | varchar(255) | no | puede ser vacío |

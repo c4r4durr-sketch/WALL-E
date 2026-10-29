@@ -834,14 +834,32 @@ class PromocionesUseCaseTests(SimpleTestCase):
         with self.assertRaises(DatosPromocionInvalidosError):
             self._crear(sucursal_id=99)
 
-    def test_solo_el_administrador_crea_y_termina(self):
+    def test_el_supervisor_pone_y_quita_solo_en_su_sucursal(self):
+        # SUPERVISOR es de la sucursal 1 (Central), donde está estancada.
+        self.assertEqual(self._crear(actor=SUPERVISOR).usuario_id, SUPERVISOR.usuario_id)
+        with self.assertRaises(PromocionNoPermitidaError):
+            self._crear(actor=SUPERVISOR, sucursal_id=2)
+        repo = _Promociones(_promo(1, sucursal=1), _promo(2, herramienta=2, sucursal=2))
+        with self.assertRaises(PromocionNoPermitidaError):
+            terminar_promocion(repo, SUPERVISOR, 2, HOY)
+        self.assertTrue(repo.datos[2].activa)
+        self.assertFalse(terminar_promocion(repo, SUPERVISOR, 1, HOY).activa)
+        # El Administrador, en cualquier sucursal.
+        self.assertFalse(terminar_promocion(repo, ADMIN, 2, HOY).activa)
+
+    def test_el_empleado_no_pone_ni_quita(self):
         repo = _Promociones(_promo(1))
-        for actor in (SUPERVISOR, EMPLEADO):
-            with self.assertRaises(PromocionNoPermitidaError):
-                self._crear(actor=actor)
-            with self.assertRaises(PromocionNoPermitidaError):
-                terminar_promocion(repo, actor, 1, HOY)
+        with self.assertRaises(PromocionNoPermitidaError):
+            self._crear(actor=EMPLEADO)
+        with self.assertRaises(PromocionNoPermitidaError):
+            terminar_promocion(repo, EMPLEADO, 1, HOY)
         self.assertTrue(repo.datos[1].activa)
+
+    def test_el_descuento_es_opcional(self):
+        self.assertIsNone(self._crear(descuento_porcentaje=None).descuento_porcentaje)
+        datos = {"herramienta_id": 1, "sucursal_id": 1, "fecha_fin": HOY}
+        sin_clave = crear_promocion(_Promociones(), self.filas, self.catalogo, self.sucursales, ADMIN, datos, hoy=HOY)
+        self.assertIsNone(sin_clave.descuento_porcentaje)
 
     def test_terminar(self):
         repo = _Promociones(_promo(1), _promo(2, fin=1))
@@ -902,11 +920,31 @@ class PromocionesApiTests(APITestCase):
         )
 
     def test_permisos_por_rol(self):
-        for usuario in (self.sup, self.emp):
-            self.client.force_authenticate(usuario)
-            self.assertEqual(self.client.post(self.URL, self._datos(), format="json").status_code, 403)
+        self.client.force_authenticate(self.emp)
+        self.assertEqual(self.client.post(self.URL, self._datos(), format="json").status_code, 403)
+        # El Supervisor de Central no toca otra sucursal (403 antes de mirar el stock)...
+        self.client.force_authenticate(self.sup)
+        otra = self.client.post(self.URL, self._datos(sucursal_id=self.norte.id), format="json")
+        self.assertEqual(otra.status_code, 403)
+        # ...pero en la suya pone la etiqueta (sin descuento) y la quita.
+        creada = self.client.post(self.URL, self._datos(descuento_porcentaje=None), format="json")
+        self.assertEqual(creada.status_code, 201, creada.content)
+        self.assertIsNone(creada.json()["descuento_porcentaje"])
+        terminar = f"{self.URL}{creada.json()['id']}/terminar/"
+        self.client.force_authenticate(self.emp)
+        self.assertEqual(self.client.post(terminar).status_code, 403)
+        self.client.force_authenticate(self.sup)
+        self.assertEqual(self.client.post(terminar).json()["estado"], "TERMINADA")
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get(self.URL).status_code, 401)
+
+    def test_sin_descuento_en_el_cuerpo(self):
+        self.client.force_authenticate(self.admin)
+        datos = self._datos()
+        del datos["descuento_porcentaje"]
+        creada = self.client.post(self.URL, datos, format="json")
+        self.assertEqual(creada.status_code, 201, creada.content)
+        self.assertIsNone(creada.json()["descuento_porcentaje"])
 
     def test_validaciones_y_no_estancada(self):
         self.client.force_authenticate(self.admin)
