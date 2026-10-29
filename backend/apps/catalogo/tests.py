@@ -4,7 +4,8 @@ Pruebas del catálogo:
     demuestran que las reglas de negocio no dependen de Django;
   - la API completa (CRUD, validaciones y permisos por rol);
   - HU7: costo unitario con historial (solo el Administrador lo cambia);
-  - foto del producto: obligatoria en el alta, JPG/PNG/WebP de hasta 5 MB.
+  - foto del producto: obligatoria en el alta, JPG/PNG/WebP de hasta 5 MB;
+  - comando cargar_demo (datos de ejemplo para la demo).
 
 Correr con: python manage.py test apps.catalogo
 """
@@ -16,17 +17,26 @@ from dataclasses import replace
 from typing import Optional
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.management import call_command
-from django.test import SimpleTestCase, override_settings
+from django.core.management import CommandError, call_command
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APITestCase
 
+from apps.auditoria.infrastructure.models import HistorialModificacion
+from apps.indicadores.use_cases.clasificar_abc import clasificar_abc
+from apps.indicadores.use_cases.panel_auditoria import construir_panel
+from apps.movimientos.domain.stock import stock_desde_totales
 from apps.movimientos.infrastructure.models import Movimiento
+from apps.movimientos.infrastructure.repositories import MovimientoRepositoryDjango
 from apps.proveedores.domain.entities import Proveedor
 from apps.proveedores.domain.repositories import ProveedorRepository
+from apps.proveedores.infrastructure.models import Proveedor as ProveedorModel
+from apps.transferencias.infrastructure.models import Transferencia
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.domain.value_objects import Rol
 from apps.usuarios.infrastructure.models import Sucursal, Usuario
+from apps.usuarios.infrastructure.repositories import SucursalRepositoryDjango
 
 from .domain.entities import Herramienta
 from .domain.exceptions import (
@@ -37,6 +47,8 @@ from .domain.exceptions import (
 )
 from .domain.repositories import HerramientaRepository, HistorialCostoRepository
 from .infrastructure.models import Herramienta as HerramientaModel
+from .infrastructure.models import HistorialCosto, Promocion
+from .infrastructure.repositories import HerramientaRepositoryDjango, PromocionRepositoryDjango
 from .use_cases import gestionar_herramientas as casos
 
 URL = "/api/catalogo/herramientas/"
@@ -565,3 +577,115 @@ class FotoApiTests(MediaTemporal, APITestCase):
         salida = io.StringIO()
         call_command("cargar_fotos_demo", stdout=salida)
         self.assertIn(": 0.", salida.getvalue())
+
+
+class CargarDemoTests(MediaTemporal, TestCase):
+    """Comando cargar_demo: reemplaza solo el inventario, se puede correr
+    dos veces y deja los casos que la demo necesita ver."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.central = Sucursal.objects.create(nombre="Central")
+        cls.norte = Sucursal.objects.create(nombre="Norte")
+        cls.admin = Usuario.objects.create_user("admin_demo", password="x", rol="ADMINISTRADOR")
+        Usuario.objects.create_user("emp_demo", password="x", rol="EMPLEADO", sucursal=cls.central)
+        Usuario.objects.create_user("sup_demo", password="x", rol="SUPERVISOR", sucursal=cls.norte)
+        # Inventario previo, que --reiniciar debe reemplazar.
+        vieja = HerramientaModel.objects.create(codigo="VIEJA", nombre="Herramienta previa")
+        Movimiento.objects.create(
+            herramienta=vieja, sucursal=cls.central, usuario=cls.admin, tipo_movimiento="ENTRADA",
+            tipo_unidad="UNIDAD", cantidad=5, cantidad_unidades=5,
+        )
+        cls.usuarios_antes = cls._usuarios()
+        cls.auditoria_antes = set(HistorialModificacion.objects.values_list("id", flat=True))
+        call_command("cargar_demo", "--reiniciar", stdout=io.StringIO())
+        cls.conteo_despues = cls._conteo()
+
+    @staticmethod
+    def _usuarios():
+        return list(
+            Usuario.objects.order_by("id").values_list("id", "username", "password", "rol", "sucursal_id", "is_active")
+        )
+
+    @staticmethod
+    def _conteo():
+        return {
+            "herramientas": HerramientaModel.objects.count(),
+            "proveedores": ProveedorModel.objects.count(),
+            "movimientos": Movimiento.objects.count(),
+            "transferencias": Transferencia.objects.count(),
+            "promociones": Promocion.objects.count(),
+            "costos": HistorialCosto.objects.count(),
+        }
+
+    def test_no_toca_usuarios_sucursales_ni_auditoria(self):
+        self.assertEqual(self._usuarios(), self.usuarios_antes)
+        self.assertEqual(list(Sucursal.objects.order_by("id").values_list("nombre", flat=True)), ["Central", "Norte"])
+        restantes = set(HistorialModificacion.objects.values_list("id", flat=True))
+        self.assertTrue(self.auditoria_antes <= restantes)
+        self.assertFalse(HerramientaModel.objects.filter(codigo="VIEJA").exists())
+
+    def test_catalogo_completo_con_foto_proveedor_y_datos_eoq(self):
+        self.assertEqual(self.conteo_despues["proveedores"], 4)
+        self.assertEqual(self.conteo_despues["herramientas"], 20)
+        fotos = set()
+        for h in HerramientaModel.objects.all():
+            for campo in ("modelo", "unidades_por_caja", "costo_unitario", "proveedor_id", "demanda_anual",
+                          "costo_pedido", "costo_almacenamiento_unitario", "tiempo_entrega_dias"):
+                self.assertTrue(getattr(h, campo), f"{h.codigo} sin {campo}")
+            with h.imagen.open("rb") as archivo:
+                fotos.add(archivo.read())
+        self.assertEqual(len(fotos), 20)
+        # Tres herramientas cambiaron de precio: alta + cambio en el historial.
+        self.assertEqual(self.conteo_despues["costos"], 23)
+
+    def test_doce_meses_de_entradas_salidas_y_transferencias(self):
+        hoy = timezone.localdate()
+        primera = timezone.localtime(Movimiento.objects.order_by("creado_en").first().creado_en).date()
+        self.assertTrue(355 <= (hoy - primera).days <= 366)
+        tipos = set(Movimiento.objects.values_list("tipo_movimiento", flat=True))
+        self.assertTrue({"ENTRADA", "SALIDA", "TRANSFERENCIA_SALIDA", "TRANSFERENCIA_ENTRADA"} <= tipos)
+        estados = set(Transferencia.objects.values_list("estado", flat=True))
+        self.assertEqual(estados, {"COMPLETADA", "PENDIENTE", "RECHAZADA"})
+        for fila in MovimientoRepositoryDjango().resumen_inventario():
+            self.assertGreaterEqual(stock_desde_totales(fila.unidades_por_tipo), 0)
+
+    def test_deja_alertas_estancadas_abc_y_una_promocion(self):
+        hoy = timezone.localdate()
+        movimientos, herramientas = MovimientoRepositoryDjango(), HerramientaRepositoryDjango()
+        panel = construir_panel(movimientos, herramientas, SucursalRepositoryDjango(), hoy)
+        self.assertTrue({"CIN-8M", "ALI-PUN6", "NIV-24", "TAL-13"} <= {a.codigo for a in panel.alertas})
+        estancadas = {e.codigo for e in panel.estancadas}
+        self.assertTrue({"LLA-TUBO", "NIV-LAS", "SIE-CIR", "ATO-12V"} <= estancadas)
+        dias = {(e.codigo, e.sucursal_id): e.dias_sin_venta for e in panel.estancadas}
+        self.assertEqual(dias[("LLA-TUBO", self.central.id)], 55)
+        self.assertEqual(dias[("NIV-LAS", self.norte.id)], 87)
+        self.assertEqual(dias[("ATO-12V", self.central.id)], 100)
+        clases = [c.clase for c in clasificar_abc(herramientas, movimientos, timezone.now())]
+        self.assertTrue(all(clases.count(clase) >= 3 for clase in "ABC"), clases)
+
+        vigentes = [p for p in PromocionRepositoryDjango().listar() if p.vigente(hoy)]
+        self.assertEqual([p.herramienta_codigo for p in vigentes], ["SIE-CIR"])
+        self.assertIn("SIE-CIR", estancadas)
+
+    def test_sin_reiniciar_no_hace_nada_si_ya_hay_herramientas(self):
+        salida = io.StringIO()
+        call_command("cargar_demo", stdout=salida)
+        self.assertIn("no se hizo nada", salida.getvalue())
+        self.assertEqual(self._conteo(), self.conteo_despues)
+
+    def test_reiniciar_dos_veces_deja_lo_mismo(self):
+        def detalle():
+            return sorted(Movimiento.objects.values_list("herramienta__codigo", "tipo_movimiento", "cantidad_unidades"))
+
+        antes = detalle()
+        call_command("cargar_demo", "--reiniciar", stdout=io.StringIO())
+        self.assertEqual(self._conteo(), self.conteo_despues)
+        self.assertEqual(detalle(), antes)
+        self.assertEqual(self._usuarios(), self.usuarios_antes)
+
+    def test_sin_administrador_activo_no_cambia_nada(self):
+        Usuario.objects.filter(rol="ADMINISTRADOR").update(is_active=False)
+        with self.assertRaises(CommandError):
+            call_command("cargar_demo", "--reiniciar", stdout=io.StringIO())
+        self.assertEqual(self._conteo(), self.conteo_despues)

@@ -193,3 +193,15 @@
     exportar otro listado (por ejemplo, el catálogo o los movimientos), se
     agrega con el mismo módulo `indicadores/interfaces/excel.py`.
     Dependencia nueva: `openpyxl` 3.1.5.
+21. **Datos de ejemplo (`manage.py cargar_demo`).** **Base de datos:** sin
+    cambios de estructura; solo carga datos. Con `--reiniciar` borra las
+    filas de `herramientas` (y sus fotos), `movimientos`, `transferencias`,
+    `promociones`, `historial_costos` y `proveedores`; nunca `usuarios`,
+    `sucursales` ni `historial_modificaciones`. Todo se registra con los
+    casos de uso, así que cada alta y cada borrado queda en el historial de
+    modificaciones (unas 1.400 filas nuevas por cada carga, y otras tantas
+    por cada borrado). Como los casos de uso fechan todo "ahora", el comando
+    corrige después las fechas (`fecha_movimiento`, fechas de transferencias,
+    de herramientas, de proveedores y del historial de costos) para simular
+    12 meses de historia. Sirve para las capturas del informe: panel con
+    alertas y estancadas, ABC con las tres clases y una promoción vigente.

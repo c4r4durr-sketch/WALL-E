@@ -34,3 +34,6 @@ media/
 
 # Configuración local de Claude Code
 .claude/settings.local.json
+
+# Respaldos locales de la base (dumpdata) y de las fotos
+backend/respaldos/

@@ -92,7 +92,7 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | **Excel** (HU25) | `GET .../cierre-diario/excel/`, `.../antiguedad/excel/` y `.../abc/excel/`: el mismo caso de uso, filtros y permisos que la versión JSON; el .xlsx lo arma `indicadores/interfaces/excel.py` (openpyxl) | Botón "Exportar a Excel" en Cierre diario, Antigüedad del stock y Clasificación ABC |
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
 
-Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **211 pruebas OK**.
+Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **254 pruebas OK**.
 
 **Fase 1 de diseño** (cerrada y fusionada en `sprint3-cierre` el 27/10): todas las pantallas sobre el sistema
 de `docs/DISENO.md` (componentes en `frontend/src/components/ui/`, barra
@@ -100,6 +100,13 @@ lateral en `frontend/src/app/layout/`), modo claro y oscuro, y **foto
 obligatoria** al dar de alta una herramienta (`herramientas.imagen_herramienta`,
 archivos en `backend/media/productos/`, fuera del repo). Para tener fotos de
 muestra: `manage.py cargar_fotos_demo` (solo completa las que no tienen).
+**Datos de demo:** `manage.py cargar_demo --reiniciar` reemplaza el
+inventario (no toca usuarios, sucursales ni auditoría) por 4 proveedores, 20
+herramientas con foto y datos EOQ, y 12 meses de entradas, salidas y
+transferencias, con 4 alertas de reorden, herramientas estancadas, clases A,
+B y C y una promoción vigente. Sin `--reiniciar` no hace nada si ya hay
+herramientas. Respaldar antes con `dumpdata` en `backend/respaldos/`
+(ignorada por git).
 Frontend: `npx tsc -b`, `npx vite build` y `npx oxlint src` sin errores ni
 avisos. Cada página se carga por ruta (`React.lazy` en `app/router.tsx`,
 skeleton mientras llega): el archivo más grande es el de librerías
