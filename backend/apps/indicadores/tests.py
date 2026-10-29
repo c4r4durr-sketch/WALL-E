@@ -99,6 +99,9 @@ class _Repo:
     def resumen_inventario(self):
         return self.datos
 
+    def unidades_por_herramienta(self, tipos, desde):
+        return getattr(self, "vendidas", {})
+
 
 def herramienta(id, demanda=None, entrega=None, costo_pedido=None, costo_alm=None, caja=1):
     return Herramienta(id=id, codigo=f"H-{id}", nombre=f"Herramienta {id}", modelo="",
@@ -115,7 +118,8 @@ class PanelAuditoriaUseCaseTests(SimpleTestCase):
     sucursales = _Repo([Sucursal(1, "Central", ""), Sucursal(2, "Norte", ""), Sucursal(3, "Cerrada", "", activa=False)])
 
     def _panel(self, herramientas, filas):
-        return construir_panel(_Repo(filas), _Repo(herramientas), self.sucursales, hoy=HOY)
+        return construir_panel(_Repo(filas), _Repo(herramientas), self.sucursales, hoy=HOY,
+                               ahora=hace(0))
 
     def test_alerta_de_reorden_con_stock_de_ambas_sucursales_y_pedido_en_cajas(self):
         # ROP = 730/365 * 10 = 20; stock total 10 + 5 = 15 <= 20 -> alerta.
@@ -190,17 +194,17 @@ class PanelAuditoriaApiTests(APITestCase):
         self.Movimiento.objects.filter(pk=m.pk).update(creado_en=timezone.now() - timedelta(days=dias_atras))
 
     def test_panel_con_datos_reales(self):
-        self._mov("ENTRADA", 30, dias_atras=100)
-        self._mov("SALIDA", 5, dias_atras=60)
+        self._mov("ENTRADA", 400, dias_atras=100)
+        self._mov("SALIDA", 365, dias_atras=60)
         # Un ajuste reciente NO es una venta: no reinicia los días sin venta.
-        self._mov("AJUSTE_NEGATIVO", 10, dias_atras=1)
+        self._mov("AJUSTE_NEGATIVO", 30, dias_atras=1)
         self.client.force_authenticate(self.emp)  # todos los roles ven el panel
         respuesta = self.client.get("/api/indicadores/panel/")
         self.assertEqual(respuesta.status_code, 200)
         datos = respuesta.json()
-        # stock = 30 - 5 - 10 = 15 <= ROP 20 -> alerta
+        # stock = 400 - 365 - 30 = 5 <= ROP 10 (D = 365 vendidas en 12 meses) -> alerta
         self.assertEqual(datos["total_alertas_stock"], 1)
-        self.assertEqual(datos["alertas"][0]["stock_total"], 15)
+        self.assertEqual((datos["alertas"][0]["stock_total"], datos["alertas"][0]["punto_reorden"]), (5, 10.0))
         self.assertEqual(datos["total_herramientas_estancadas"], 1)
         self.assertEqual(datos["estancadas"][0]["dias_sin_venta"], 60)
         self.assertEqual((datos["total_herramientas"], datos["total_sucursales_activas"]), (1, 1))
@@ -233,9 +237,9 @@ from .use_cases.clasificar_abc import clasificar
 
 class EOQUseCaseTests(SimpleTestCase):
     def test_eoq_completo_y_ajustado_a_cajas(self):
-        # raiz(2*730*120/8) = 147.99 -> cajas de 6: 25 cajas = 150
-        r = resultado_eoq(herramienta(1, demanda=730, costo_pedido=120, costo_alm=8, caja=6), demanda_observada=500)
-        self.assertEqual((r.eoq, r.eoq_ajustado_cajas, r.demanda_observada, r.datos_faltantes), (147.99, 150, 500, ()))
+        # Sin ventas usa la estimada: raiz(2*730*120/8) = 147.99 -> cajas de 6: 25 cajas = 150
+        r = resultado_eoq(herramienta(1, demanda=730, costo_pedido=120, costo_alm=8, caja=6))
+        self.assertEqual((r.eoq, r.eoq_ajustado_cajas, r.demanda_observada, r.datos_faltantes), (147.99, 150, 0, ()))
 
     def test_datos_faltantes(self):
         r = resultado_eoq(herramienta(1, demanda=730))
@@ -303,7 +307,8 @@ class IndicadoresApiTests(APITestCase):
         self._mov(self.tal, "AJUSTE_NEGATIVO", 5, dias_atras=3)     # no es venta
         self._mov(self.tal, "TRANSFERENCIA_SALIDA", 8, dias_atras=3)  # no es venta
         datos = self.client.get(f"/api/indicadores/eoq/{self.tal.id}/").json()
-        self.assertEqual((datos["eoq"], datos["eoq_ajustado_cajas"], datos["demanda_observada"]), (147.99, 150, 40))
+        # HU21: D = 40 vendidas -> raiz(2 * 40 * 120 / 8) = 34.64 -> 36 en cajas de 6.
+        self.assertEqual((datos["eoq"], datos["eoq_ajustado_cajas"], datos["demanda_observada"]), (34.64, 36, 40))
 
     def test_eoq_con_datos_faltantes_es_200(self):
         respuesta = self.client.get(f"/api/indicadores/eoq/{self.amo.id}/")
@@ -529,39 +534,11 @@ class CierreDiarioApiTests(APITestCase):
             self.client.get(self.URL)
 
 
-# --- Actualizar la demanda anual con la observada (HU21) ---
+# --- Las fórmulas usan la demanda observada (HU21) ---
 
 from dataclasses import replace as _replace
 
-from apps.catalogo.domain.exceptions import HerramientaNoEncontradaError as _NoEncontrada
-
-from .domain.exceptions import ActualizacionNoPermitidaError, SinVentasObservadasError
-from .use_cases.actualizar_demanda import actualizar_demanda_anual
-
-
-class _CatalogoEditable:
-    def __init__(self, *herramientas):
-        self.datos = {h.id: h for h in herramientas}
-        self.guardadas = []
-
-    def obtener_por_id(self, herramienta_id):
-        return self.datos.get(herramienta_id)
-
-    def guardar(self, h, imagen=None):
-        self.guardadas.append(h)
-        self.datos[h.id] = h
-        return h
-
-
-class _Ventas:
-    def __init__(self, por_herramienta):
-        self.por_herramienta = por_herramienta
-        self.desde = None
-
-    def unidades_por_herramienta(self, tipos, desde):
-        self.tipos, self.desde = set(tipos), desde
-        return self.por_herramienta
-
+from .domain.formulas import DEMANDA_ESTIMADA, DEMANDA_OBSERVADA, demanda_para_formulas
 
 AHORA = _datetime(2026, 10, 27, 12, tzinfo=dt_timezone.utc)
 ADMIN = _Actor(usuario_id=1, rol=_Rol.ADMINISTRADOR, sucursal_id=None)
@@ -569,93 +546,72 @@ SUPERVISOR = _Actor(usuario_id=2, rol=_Rol.SUPERVISOR, sucursal_id=1)
 EMPLEADO = _Actor(usuario_id=3, rol=_Rol.EMPLEADO, sucursal_id=1)
 
 
-class ActualizarDemandaUseCaseTests(SimpleTestCase):
-    def _herramienta(self):
-        return herramienta(1, demanda=100, entrega=10, costo_pedido=50, costo_alm=2, caja=12)
+class DemandaObservadaTests(SimpleTestCase):
+    def test_con_ventas_usa_lo_vendido_y_sin_ventas_la_estimada(self):
+        self.assertEqual(demanda_para_formulas(730, 500), (500, DEMANDA_OBSERVADA))
+        self.assertEqual(demanda_para_formulas(730, 0), (730, DEMANDA_ESTIMADA))
+        self.assertEqual(demanda_para_formulas(None, 0), (None, DEMANDA_ESTIMADA))
+        self.assertEqual(demanda_para_formulas(None, 12), (12, DEMANDA_OBSERVADA))
 
-    def test_reemplaza_la_demanda_y_recalcula_el_eoq(self):
-        catalogo, ventas = _CatalogoEditable(self._herramienta()), _Ventas({1: 1000})
-        r = actualizar_demanda_anual(catalogo, ventas, ADMIN, 1, AHORA)
-        self.assertEqual(catalogo.datos[1].demanda_anual, 1000)
-        # raiz(2 * 1000 * 50 / 2) = 223.61 -> 228 en cajas de 12
-        self.assertEqual((r.demanda_anual, r.demanda_observada, r.eoq, r.eoq_ajustado_cajas), (1000, 1000, 223.61, 228))
+    def test_eoq_y_rop_con_la_observada(self):
+        h = herramienta(1, demanda=730, entrega=15, costo_pedido=120, costo_alm=8, caja=6)
+        # raiz(2 * 500 * 120 / 8) = 122.47 -> 21 cajas de 6 = 126
+        eoq = resultado_eoq(h, demanda_observada=500)
+        self.assertEqual((eoq.eoq, eoq.eoq_ajustado_cajas, eoq.demanda_usada, eoq.fuente_demanda),
+                         (122.47, 126, 500, DEMANDA_OBSERVADA))
+        self.assertEqual(eoq.demanda_anual, 730)  # la estimada se informa igual
+        # ROP = 365 / 365 * 15 = 15: con 30 en stock no hay que pedir.
+        rop = resultado_rop(h, stock_total=30, demanda_observada=365)
+        self.assertEqual((rop.punto_reorden, rop.requiere_reorden, rop.fuente_demanda), (15.0, False, DEMANDA_OBSERVADA))
 
-    def test_usa_las_ventas_de_los_ultimos_12_meses(self):
-        ventas = _Ventas({1: 10})
-        actualizar_demanda_anual(_CatalogoEditable(self._herramienta()), ventas, SUPERVISOR, 1, AHORA)
-        self.assertEqual(ventas.desde, AHORA - timedelta(days=365))
-        self.assertEqual(ventas.tipos, {T.SALIDA})
-
-    def test_sin_ventas_no_actualiza(self):
-        catalogo = _CatalogoEditable(self._herramienta())
-        with self.assertRaises(SinVentasObservadasError):
-            actualizar_demanda_anual(catalogo, _Ventas({}), ADMIN, 1, AHORA)
-        self.assertEqual(catalogo.guardadas, [])
-
-    def test_si_ya_coincide_no_guarda(self):
-        catalogo = _CatalogoEditable(self._herramienta())
-        actualizar_demanda_anual(catalogo, _Ventas({1: 100}), ADMIN, 1, AHORA)
-        self.assertEqual(catalogo.guardadas, [])
-
-    def test_empleado_no_puede(self):
-        catalogo = _CatalogoEditable(self._herramienta())
-        with self.assertRaises(ActualizacionNoPermitidaError):
-            actualizar_demanda_anual(catalogo, _Ventas({1: 10}), EMPLEADO, 1, AHORA)
-        self.assertEqual(catalogo.guardadas, [])
-
-    def test_herramienta_inexistente(self):
-        with self.assertRaises(_NoEncontrada):
-            actualizar_demanda_anual(_CatalogoEditable(), _Ventas({}), ADMIN, 9, AHORA)
+    def test_sin_estimada_pero_con_ventas_ya_se_calcula(self):
+        h = herramienta(1, entrega=10, costo_pedido=50, costo_alm=2)
+        self.assertEqual(resultado_eoq(h, demanda_observada=100).datos_faltantes, ())
+        self.assertEqual(resultado_rop(h, stock_total=0, demanda_observada=365).punto_reorden, 10.0)
 
 
-class ActualizarDemandaApiTests(APITestCase):
-    """Mismos datos que IndicadoresApiTests (Taladro con D = 730)."""
+class PanelConDemandaObservadaTests(SimpleTestCase):
+    sucursales = PanelAuditoriaUseCaseTests.sucursales
+
+    def _panel(self, vendidas):
+        movimientos = _Repo([resumen(1, 1, entradas=15, ultima_salida=1)])
+        movimientos.vendidas = vendidas
+        h = herramienta(1, demanda=730, entrega=10, costo_pedido=50, costo_alm=2, caja=12)
+        return construir_panel(movimientos, _Repo([h]), self.sucursales, hoy=HOY, ahora=AHORA)
+
+    def test_la_alerta_sale_de_lo_vendido(self):
+        # Estimada 730 -> ROP 20 (alerta con 15); vendido 36 -> ROP 0.99 (no).
+        self.assertEqual(self._panel({}).total_alertas_stock, 1)
+        self.assertEqual(self._panel({1: 36}).total_alertas_stock, 0)
+        # Vendido 3650 -> ROP 100; pedido = raiz(2*3650*50/2) = 427.2 -> 432.
+        alerta = self._panel({1: 3650}).alertas[0]
+        self.assertEqual((alerta.punto_reorden, alerta.pedido_sugerido), (100.0, 432))
+
+
+class DemandaObservadaApiTests(APITestCase):
+    """Mismos datos que IndicadoresApiTests (Taladro con D estimada 730)."""
 
     _mov = IndicadoresApiTests._mov
 
     def setUp(self):
         IndicadoresApiTests.setUp(self)
-        from apps.usuarios.infrastructure.models import Usuario
-        self.admin = Usuario.objects.create_user("adm", password="x", rol="ADMINISTRADOR")
-        self.sup = Usuario.objects.create_user("sup", password="x", rol="SUPERVISOR", sucursal=self.central)
 
-    def _url(self, h):
-        return f"/api/indicadores/eoq/{h}/actualizar-demanda/"
-
-    def test_supervisor_actualiza_y_el_rop_usa_la_nueva_demanda(self):
-        self._mov(self.tal, "ENTRADA", 500, dias_atras=200)
+    def test_eoq_rop_y_panel_usan_lo_vendido_en_12_meses(self):
+        self._mov(self.tal, "ENTRADA", 500, dias_atras=400)
         self._mov(self.tal, "SALIDA", 365, dias_atras=20)
-        self._mov(self.tal, "AJUSTE_NEGATIVO", 50, dias_atras=5)  # no es venta
-        self.client.force_authenticate(self.sup)
-        respuesta = self.client.post(self._url(self.tal.id))
-        self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(respuesta.json()["demanda_anual"], 365)
-        self.tal.refresh_from_db()
-        self.assertEqual(self.tal.demanda_anual, 365)
-        # ROP = 365 / 365 * 15 días = 15
-        self.assertEqual(self.client.get(f"/api/indicadores/rop/{self.tal.id}/").json()["punto_reorden"], 15.0)
+        self._mov(self.tal, "SALIDA", 100, dias_atras=380)          # fuera del período
+        self._mov(self.tal, "AJUSTE_NEGATIVO", 30, dias_atras=5)    # no es venta
+        eoq = self.client.get(f"/api/indicadores/eoq/{self.tal.id}/").json()
+        self.assertEqual((eoq["demanda_anual"], eoq["demanda_observada"], eoq["demanda_usada"], eoq["fuente_demanda"]),
+                         (730, 365, 365, "OBSERVADA"))
+        # Stock 5; ROP = 365 / 365 * 15 = 15 -> alerta en el ROP y en el panel.
+        rop = self.client.get(f"/api/indicadores/rop/{self.tal.id}/").json()
+        self.assertEqual((rop["punto_reorden"], rop["stock_total"], rop["requiere_reorden"]), (15.0, 5, True))
+        alertas = self.client.get("/api/indicadores/panel/").json()["alertas"]
+        self.assertEqual([(a["codigo"], a["punto_reorden"]) for a in alertas], [("TAL", 15.0)])
 
-    def test_queda_en_el_historial_de_modificaciones(self):
-        from apps.auditoria.infrastructure.models import HistorialModificacion
-        self._mov(self.tal, "ENTRADA", 50, dias_atras=30)
-        self._mov(self.tal, "SALIDA", 20, dias_atras=3)
-        self.client.force_authenticate(self.admin)
-        self.client.post(self._url(self.tal.id))
-        ultimo = HistorialModificacion.objects.filter(accion="UPDATE").latest("id")
-        self.assertEqual(ultimo.datos_nuevos["demanda_anual"], 20)
-
-    def test_permisos_y_errores(self):
-        self._mov(self.tal, "ENTRADA", 50, dias_atras=30)
-        self._mov(self.tal, "SALIDA", 20, dias_atras=3)
-        self.client.force_authenticate(self.u)  # Empleado
-        self.assertEqual(self.client.post(self._url(self.tal.id)).status_code, 403)
-        self.client.force_authenticate(self.admin)
-        sin_ventas = self.client.post(self._url(self.amo.id))
-        self.assertEqual(sin_ventas.status_code, 409)
-        self.assertIn("detail", sin_ventas.json())
-        self.assertEqual(self.client.post(self._url(999)).status_code, 404)
-        self.client.force_authenticate(None)
-        self.assertEqual(self.client.post(self._url(self.tal.id)).status_code, 401)
+    def test_la_accion_manual_ya_no_existe(self):
+        self.assertEqual(self.client.post(f"/api/indicadores/eoq/{self.tal.id}/actualizar-demanda/").status_code, 404)
 
 
 # --- Reporte de antigüedad (HU22) ---
@@ -737,7 +693,7 @@ class ReporteAntiguedadUseCaseTests(SimpleTestCase):
             self._reporte(ADMIN, sucursal=9)
 
     def test_el_panel_cuenta_las_mismas_estancadas(self):
-        panel = construir_panel(self.filas, self.catalogo, self.sucursales, hoy=HOY)
+        panel = construir_panel(self.filas, self.catalogo, self.sucursales, hoy=HOY, ahora=AHORA)
         reporte = self._reporte(ADMIN)
         self.assertEqual(
             {(e.herramienta_id, e.sucursal_id, e.dias_sin_venta) for e in panel.estancadas},

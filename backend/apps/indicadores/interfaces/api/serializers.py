@@ -16,6 +16,8 @@ class ResultadoEOQSerializer(serializers.Serializer):
     eoq = serializers.FloatField(allow_null=True)
     eoq_ajustado_cajas = serializers.FloatField(allow_null=True)
     demanda_observada = serializers.IntegerField()
+    demanda_usada = serializers.IntegerField(allow_null=True)
+    fuente_demanda = serializers.CharField()
     datos_faltantes = serializers.ListField(child=serializers.CharField())
 
 
@@ -24,6 +26,9 @@ class ResultadoROPSerializer(serializers.Serializer):
     codigo = serializers.CharField()
     nombre = serializers.CharField()
     demanda_anual = serializers.IntegerField(allow_null=True)
+    demanda_observada = serializers.IntegerField()
+    demanda_usada = serializers.IntegerField(allow_null=True)
+    fuente_demanda = serializers.CharField()
     demanda_diaria_promedio = serializers.FloatField(allow_null=True)
     lead_time_dias = serializers.IntegerField(allow_null=True)
     punto_reorden = serializers.FloatField(allow_null=True)

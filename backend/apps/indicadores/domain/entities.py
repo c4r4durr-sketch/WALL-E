@@ -30,15 +30,17 @@ class ResultadoEOQ:
     herramienta_id: int
     codigo: str
     nombre: str
-    demanda_anual: Optional[int]  # D (estimada, del catálogo)
+    demanda_anual: Optional[int]  # estimada, del catálogo
     costo_pedido: Optional[float]  # S
     costo_almacenamiento_unitario: Optional[float]  # H
     unidades_por_caja: int
     eoq: Optional[float]  # raiz(2*D*S/H), en unidades
     eoq_ajustado_cajas: Optional[float]  # HU20: redondeado a cajas cerradas
-    # HU21: ventas reales de los últimos PERIODO_DEMANDA_DIAS, para comparar
-    # con la demanda estimada y decidir si hay que actualizarla.
+    # HU21: ventas reales de los últimos PERIODO_DEMANDA_DIAS. Si hubo
+    # ventas, es la D de la fórmula; si no, se usa la estimada.
     demanda_observada: int
+    demanda_usada: Optional[int]  # la D con la que se calculó
+    fuente_demanda: str  # formulas.DEMANDA_OBSERVADA | DEMANDA_ESTIMADA
     datos_faltantes: tuple[str, ...]
 
 
@@ -50,7 +52,10 @@ class ResultadoROP:
     herramienta_id: int
     codigo: str
     nombre: str
-    demanda_anual: Optional[int]
+    demanda_anual: Optional[int]  # estimada, del catálogo
+    demanda_observada: int  # HU21: ventas de los últimos 12 meses
+    demanda_usada: Optional[int]  # la D con la que se calculó el ROP
+    fuente_demanda: str
     demanda_diaria_promedio: Optional[float]
     lead_time_dias: Optional[int]
     punto_reorden: Optional[float]

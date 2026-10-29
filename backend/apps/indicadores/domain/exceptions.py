@@ -16,15 +16,6 @@ class FechaFuturaError(Exception):
     """El reporte pide un día que todavía no ocurrió."""
 
 
-class ActualizacionNoPermitidaError(Exception):
-    """HU21: solo el Administrador o el Supervisor cambian datos del catálogo."""
-
-
-class SinVentasObservadasError(Exception):
-    """HU21: sin ventas en el período no hay demanda observada con la que
-    reemplazar la estimada (con D = 0 el EOQ no tiene sentido)."""
-
-
 # --- Promociones (HU23) ---
 
 

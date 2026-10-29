@@ -653,7 +653,7 @@ class CargarDemoTests(MediaTemporal, TestCase):
     def test_deja_alertas_estancadas_abc_y_una_promocion(self):
         hoy = timezone.localdate()
         movimientos, herramientas = MovimientoRepositoryDjango(), HerramientaRepositoryDjango()
-        panel = construir_panel(movimientos, herramientas, SucursalRepositoryDjango(), hoy)
+        panel = construir_panel(movimientos, herramientas, SucursalRepositoryDjango(), hoy, timezone.now())
         self.assertTrue({"CIN-8M", "ALI-PUN6", "NIV-24", "TAL-13"} <= {a.codigo for a in panel.alertas})
         estancadas = {e.codigo for e in panel.estancadas}
         self.assertTrue({"LLA-TUBO", "NIV-LAS", "SIE-CIR", "ATO-12V"} <= estancadas)

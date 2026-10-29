@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { Aviso, Card, Cargando, Skeleton, cx } from '../../../components/ui'
 import { useEOQ, useROP } from '../hooks/useIndicadores'
-import { ActualizarDemanda } from './ActualizarDemanda'
 
 // Detalle de una herramienta: cuánto pedir (EOQ, ajustado a cajas) y cuándo
 // pedir (punto de reorden vs stock total). Si faltan datos en el catálogo,
-// se dice cuáles en vez de mostrar un número inventado.
+// se dice cuáles en vez de mostrar un número inventado. HU21: los dos usan
+// lo vendido en los últimos 12 meses; la demanda estimada del catálogo solo
+// cuando no hubo ventas. La tarjeta dice cuál se usó.
 
 const NOMBRE_CAMPO: Record<string, string> = {
   demanda_anual: 'demanda anual',
@@ -53,6 +54,16 @@ function Tarjeta({ titulo, children, alerta = false }: { titulo: string; childre
 
 const num = (v: number | null, sufijo = '') => (v === null ? '—' : `${v.toLocaleString('es')}${sufijo}`)
 
+function FuenteDemanda({ fuente }: { fuente: 'OBSERVADA' | 'ESTIMADA' }) {
+  return (
+    <p className="mt-3 text-xs text-muted">
+      {fuente === 'OBSERVADA'
+        ? 'Calculado con lo vendido en los últimos 12 meses.'
+        : 'Sin ventas en los últimos 12 meses: calculado con la demanda estimada del catálogo.'}
+    </p>
+  )
+}
+
 export function DetalleEOQROP({ herramientaId }: { herramientaId: number }) {
   const eoq = useEOQ(herramientaId)
   const rop = useROP(herramientaId)
@@ -95,12 +106,12 @@ export function DetalleEOQROP({ herramientaId }: { herramientaId: number }) {
           </>
         )}
         <dl className="mt-5 divide-y divide-line border-t border-line">
-          <Dato etiqueta="Demanda anual estimada (D)" valor={num(e.demanda_anual)} />
           <Dato etiqueta="Vendido en los últimos 12 meses" valor={num(e.demanda_observada)} />
+          <Dato etiqueta="Demanda anual estimada (catálogo)" valor={num(e.demanda_anual)} />
           <Dato etiqueta="Costo por pedido (S)" valor={num(e.costo_pedido)} />
           <Dato etiqueta="Costo de almacenamiento (H)" valor={num(e.costo_almacenamiento_unitario)} />
         </dl>
-        <ActualizarDemanda key={e.herramienta_id} eoq={e} />
+        <FuenteDemanda fuente={e.fuente_demanda} />
       </Tarjeta>
 
       <Tarjeta titulo="Cuándo pedir (punto de reorden)" alerta={r.requiere_reorden}>
@@ -127,6 +138,7 @@ export function DetalleEOQROP({ herramientaId }: { herramientaId: number }) {
           <Dato etiqueta="Demanda diaria promedio" valor={num(r.demanda_diaria_promedio)} />
           <Dato etiqueta="Tiempo de entrega" valor={num(r.lead_time_dias, ' días')} />
         </dl>
+        <FuenteDemanda fuente={r.fuente_demanda} />
       </Tarjeta>
     </div>
   )

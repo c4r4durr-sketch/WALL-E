@@ -136,16 +136,18 @@
     informe trae capturas de pantalla, hay que rehacerlas.
 
 ### Sprint 4
-17. **HU21, actualizar la demanda anual.** Nueva acción
-    `POST /api/indicadores/eoq/<id>/actualizar-demanda/`. **Base de datos:**
-    no cambia el esquema; escribe `herramientas.demanda_anual_herramienta`
-    (= salidas reales de los últimos 12 meses, sin ajustes ni
-    transferencias) y el cambio queda en `historial_modificaciones`.
-    Decisiones: solo Administrador y Supervisor (los que editan el
-    catálogo); sin ventas en el período no se actualiza (409, D = 0
-    dejaría el EOQ en 0); se toma el total de 12 meses sin anualizar. Si
-    el criterio de la HU pide recalcular automáticamente, documentar que
-    es una acción explícita del usuario.
+17. **HU21, las fórmulas usan la demanda observada.** Corregido contra el
+    backlog (CA4: «las fórmulas usan automáticamente la demanda
+    observada»): EOQ, ROP, el pedido sugerido y las alertas del panel
+    calculan con D = salidas reales de los últimos 12 meses (sin ajustes
+    ni transferencias). Solo si la herramienta no vendió nada en ese
+    período se usa la demanda estimada del catálogo (con D = 0 el EOQ
+    sería 0 y nunca habría alerta). Se toma el total de 12 meses sin
+    anualizar. `GET .../eoq/<id>/` y `.../rop/<id>/` devuelven además
+    `demanda_usada` y `fuente_demanda` (OBSERVADA o ESTIMADA).
+    **Base de datos:** sin cambios; la demanda anual del catálogo ya no se
+    sobrescribe. Se quitó la acción manual
+    `POST .../eoq/<id>/actualizar-demanda/` de la primera versión.
 
 18. **HU22, reporte de antigüedad.** `GET /api/indicadores/antiguedad/`
     y pantalla `/antiguedad`. **Base de datos:** sin cambios (se calcula

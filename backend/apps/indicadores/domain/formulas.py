@@ -53,6 +53,24 @@ def calcular_rop(
     return (demanda_anual / DIAS_POR_ANIO) * tiempo_entrega_dias
 
 
+# De dónde sale la D que usan las fórmulas (HU21).
+DEMANDA_OBSERVADA = "OBSERVADA"
+DEMANDA_ESTIMADA = "ESTIMADA"
+
+
+def demanda_para_formulas(estimada: Optional[int], observada: int) -> tuple[Optional[int], str]:
+    """HU21: EOQ y ROP usan automáticamente lo que realmente se vendió en
+    los últimos 12 meses (salidas reales). Solo si no hubo ventas en ese
+    período (herramienta nueva o sin historia) se usa la demanda estimada
+    del catálogo: con D = 0 el EOQ sería 0 y nunca habría alerta.
+
+    Se usa el total de los 12 meses tal cual, sin anualizar.
+    Devuelve (D, fuente)."""
+    if observada > 0:
+        return observada, DEMANDA_OBSERVADA
+    return estimada, DEMANDA_ESTIMADA
+
+
 def ajustar_a_cajas(cantidad_unidades: float, unidades_por_caja: Optional[int]) -> float:
     """HU20: redondea una cantidad en unidades hacia ARRIBA al múltiplo de
     caja cerrada más cercano (no se le puede pedir media caja al proveedor).

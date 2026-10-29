@@ -14,17 +14,14 @@ from apps.usuarios.infrastructure.repositories import SucursalRepositoryDjango
 
 from ...domain.entities import CierreDiario, PromocionListada, ReporteAntiguedad
 from ...domain.exceptions import (
-    ActualizacionNoPermitidaError,
     DatosPromocionInvalidosError,
     PromocionNoAplicableError,
     PromocionNoEncontradaError,
     PromocionNoPermitidaError,
     FechaFuturaError,
     ReporteNoPermitidoError,
-    SinVentasObservadasError,
     SucursalInexistenteError,
 )
-from ...use_cases.actualizar_demanda import actualizar_demanda_anual
 from ...use_cases.calcular_eoq import calcular_eoq
 from ...use_cases.cierre_diario import construir_cierre
 from ...use_cases.calcular_punto_reorden import calcular_punto_reorden
@@ -55,9 +52,10 @@ from .serializers import (
 
 class EOQPorHerramientaView(APIView):
     """GET /api/indicadores/eoq/<herramienta_id>/
-    EOQ (HU17), ajustado a cajas (HU20), y demanda observada de los últimos
-    12 meses (HU21). Si faltan datos en el catálogo responde 200 con
-    eoq = null y datos_faltantes, para que la pantalla diga qué completar."""
+    EOQ (HU17), ajustado a cajas (HU20), calculado con la demanda observada
+    de los últimos 12 meses o, sin ventas, con la estimada (HU21). Si faltan
+    datos en el catálogo responde 200 con eoq = null y datos_faltantes, para
+    que la pantalla diga qué completar."""
 
     permission_classes = [IsAuthenticated]
 
@@ -82,30 +80,6 @@ def _actor(request) -> Actor:
     return Actor(usuario_id=usuario.id, rol=usuario.rol, sucursal_id=usuario.sucursal_id)
 
 
-class ActualizarDemandaView(APIView):
-    """POST /api/indicadores/eoq/<herramienta_id>/actualizar-demanda/
-    HU21: reemplaza la demanda anual estimada del catálogo por la observada
-    (ventas de los últimos 12 meses) y devuelve el EOQ recalculado.
-    Administrador y Supervisor; Empleado 403; sin ventas en el período 409."""
-
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(request=None, responses=ResultadoEOQSerializer)
-    def post(self, request, herramienta_id: int):
-        try:
-            resultado = actualizar_demanda_anual(
-                HerramientaRepositoryDjango(), MovimientoRepositoryDjango(), _actor(request),
-                herramienta_id, ahora=timezone.now(),
-            )
-        except ActualizacionNoPermitidaError:
-            raise PermissionDenied("Solo el Administrador o el Supervisor pueden actualizar la demanda anual.")
-        except HerramientaNoEncontradaError:
-            raise NotFound("No existe esa herramienta.")
-        except SinVentasObservadasError:
-            raise Conflicto("No hay ventas en los últimos 12 meses: la demanda anual no se actualiza.")
-        return Response(ResultadoEOQSerializer(resultado).data)
-
-
 class PuntoReordenPorHerramientaView(APIView):
     """GET /api/indicadores/rop/<herramienta_id>/
     Punto de reorden (HU18) comparado con el stock total de la herramienta."""
@@ -116,7 +90,7 @@ class PuntoReordenPorHerramientaView(APIView):
     def get(self, request, herramienta_id: int):
         try:
             resultado = calcular_punto_reorden(
-                HerramientaRepositoryDjango(), MovimientoRepositoryDjango(), herramienta_id
+                HerramientaRepositoryDjango(), MovimientoRepositoryDjango(), herramienta_id, ahora=timezone.now()
             )
         except HerramientaNoEncontradaError:
             raise NotFound("No existe esa herramienta.")
@@ -163,6 +137,7 @@ class PanelAuditoriaView(APIView):
             HerramientaRepositoryDjango(),
             SucursalRepositoryDjango(),
             hoy=timezone.localdate(),
+            ahora=timezone.now(),
         )
         return Response(PanelAuditoriaSerializer(panel).data)
 
