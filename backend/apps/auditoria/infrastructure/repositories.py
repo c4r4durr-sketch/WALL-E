@@ -7,7 +7,7 @@ from django.db.models import Q
 
 from ..domain.entities import FiltroHistorial, OpcionFiltro, RegistroHistorial
 from ..domain.repositories import HistorialRepository
-from ..domain.value_objects import AccionAuditoria
+from ..domain.value_objects import AUTORES_DE_COMANDOS, AccionAuditoria, OrigenHistorial
 from .models import HistorialModificacion
 
 
@@ -50,6 +50,12 @@ class HistorialRepositoryDjango(HistorialRepository):
             condiciones &= Q(tabla_afectada=filtro.tabla)
         if filtro.accion:
             condiciones &= Q(accion=AccionAuditoria(filtro.accion).value)
+        if filtro.origen:
+            # Sin usuario y sin nombre (o firmado por cargar_demo). Un
+            # usuario borrado también deja la FK en NULL, pero conserva su
+            # nombre: sigue contando como cambio de un usuario.
+            de_comandos = Q(usuario__isnull=True, usuario_username__in=AUTORES_DE_COMANDOS)
+            condiciones &= de_comandos if filtro.origen == OrigenHistorial.COMANDOS else ~de_comandos
         consulta = HistorialModificacion.objects.filter(condiciones).order_by("-fecha", "-id")
         total = consulta.count()
         return total, [_a_entidad(m) for m in consulta[desde:desde + limite]]

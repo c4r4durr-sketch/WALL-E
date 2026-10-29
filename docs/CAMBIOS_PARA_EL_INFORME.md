@@ -218,3 +218,15 @@
     de herramientas, de proveedores y del historial de costos) para simular
     12 meses de historia. Sirve para las capturas del informe: panel con
     alertas y estancadas, ABC con las tres clases y una promoción vigente.
+
+22. **Auditoría: filtro por origen.** **Base de datos:** sin cambios de
+    estructura. `GET /api/auditoria/historial/?origen=USUARIOS|COMANDOS`:
+    COMANDOS son las filas sin usuario (`cod_usuario` NULL) y sin nombre o
+    firmadas como `cargar_demo`; USUARIOS, el resto (un usuario borrado
+    conserva su nombre y sigue contando como usuario). Desde ahora
+    `cargar_demo` guarda `cargar_demo` en `nombre_usuario_historial`, y
+    la pantalla lo muestra como «Datos de demo». Las filas de cargas
+    anteriores quedaron sin nombre: el filtro las agrupa con los demás
+    comandos (consola, `createsuperuser`, `cargar_fotos_demo`) y no se
+    pueden separar de ellos sin modificar el historial, que no se toca.
+

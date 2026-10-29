@@ -8,7 +8,7 @@ from apps.usuarios.domain.entities import Actor
 
 from ...domain.entities import FiltroHistorial
 from ...domain.exceptions import ConsultaNoPermitidaError, FiltroInvalidoError
-from ...domain.value_objects import AccionAuditoria
+from ...domain.value_objects import AccionAuditoria, OrigenHistorial
 from ...infrastructure.repositories import HistorialRepositoryDjango
 from ...use_cases import consultar_historial as casos
 from .serializers import FiltroHistorialSerializer, OpcionesHistorialSerializer, PaginaHistorialSerializer
@@ -39,6 +39,7 @@ class HistorialView(APIView):
             usuario_id=datos.get("usuario"),
             tabla=datos.get("tabla"),
             accion=AccionAuditoria(datos["accion"]) if datos.get("accion") else None,
+            origen=OrigenHistorial(datos["origen"]) if datos.get("origen") else None,
         )
         try:
             pagina = casos.consultar_historial(

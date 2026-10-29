@@ -19,7 +19,7 @@ from django.db.models.fields.files import FieldFile
 from django.db.models.signals import post_delete, post_save, pre_save
 
 from ..domain.value_objects import CAMPOS_AUTOMATICOS, AccionAuditoria
-from .contexto import obtener_usuario_actual
+from .contexto import comando_actual, obtener_usuario_actual
 from .models import HistorialModificacion
 
 MODELOS_AUDITADOS = [
@@ -76,7 +76,7 @@ def _registrar(instance, accion: AccionAuditoria, anteriores=None, nuevos=None):
         registro_id=str(instance.pk),
         accion=accion.value,
         usuario=usuario_fk,
-        usuario_username=usuario.username if usuario else "",
+        usuario_username=usuario.username if usuario else comando_actual.get(),
         datos_anteriores=anteriores,
         datos_nuevos=nuevos,
     )

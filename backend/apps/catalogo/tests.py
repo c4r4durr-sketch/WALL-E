@@ -623,6 +623,9 @@ class CargarDemoTests(MediaTemporal, TestCase):
         self.assertEqual(list(Sucursal.objects.order_by("id").values_list("nombre", flat=True)), ["Central", "Norte"])
         restantes = set(HistorialModificacion.objects.values_list("id", flat=True))
         self.assertTrue(self.auditoria_antes <= restantes)
+        # Lo que hizo el comando queda firmado como cargar_demo (sin usuario).
+        nuevos = HistorialModificacion.objects.exclude(id__in=self.auditoria_antes)
+        self.assertEqual(set(nuevos.values_list("usuario_id", "usuario_username")), {(None, "cargar_demo")})
         self.assertFalse(HerramientaModel.objects.filter(codigo="VIEJA").exists())
 
     def test_catalogo_completo_con_foto_proveedor_y_datos_eoq(self):

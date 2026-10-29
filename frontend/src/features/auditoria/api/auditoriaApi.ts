@@ -38,6 +38,8 @@ export interface OpcionesHistorial {
   tablas: OpcionFiltro[]
   usuarios: OpcionFiltro[]
   acciones: OpcionFiltro[]
+  // USUARIOS (desde la aplicación) o COMANDOS (cargar_demo y otros, sin usuario).
+  origenes: OpcionFiltro[]
 }
 
 export interface FiltroHistorial {
@@ -46,6 +48,7 @@ export interface FiltroHistorial {
   usuario?: string
   tabla?: string
   accion?: string
+  origen?: string
   pagina: number
 }
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Optional
 
-from .value_objects import AccionAuditoria
+from .value_objects import AccionAuditoria, OrigenHistorial
 
 
 @dataclass(frozen=True)
@@ -41,6 +41,7 @@ class FiltroHistorial:
     usuario_id: Optional[int] = None
     tabla: Optional[str] = None
     accion: Optional[AccionAuditoria] = None
+    origen: Optional[OrigenHistorial] = None
 
 
 @dataclass(frozen=True)

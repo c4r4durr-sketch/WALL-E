@@ -44,6 +44,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
+from apps.auditoria.domain.value_objects import AUTOR_CARGAR_DEMO
+from apps.auditoria.infrastructure.contexto import registrar_como
 from apps.catalogo.domain.entities import ImagenProducto
 from apps.catalogo.infrastructure.models import Herramienta as HerramientaModel
 from apps.catalogo.infrastructure.models import HistorialCosto as HistorialCostoModel
@@ -265,7 +267,9 @@ class Command(BaseCommand):
         self.hoy = self.ahora.date()
         self.fotos_nuevas: list[str] = []
         try:
-            with transaction.atomic():
+            # Firma sus registros del historial como "cargar_demo", para que
+            # la pantalla de Auditoría los pueda ocultar.
+            with registrar_como(AUTOR_CARGAR_DEMO), transaction.atomic():
                 if reiniciar:
                     self._borrar_inventario()
                 ids_proveedores = self._crear_proveedores()

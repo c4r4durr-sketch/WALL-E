@@ -19,7 +19,7 @@ from apps.usuarios.domain.value_objects import Rol
 from ..domain.entities import FiltroHistorial, OpcionFiltro, PaginaHistorial, RegistroHistorial
 from ..domain.exceptions import ConsultaNoPermitidaError, FiltroInvalidoError
 from ..domain.repositories import HistorialRepository
-from ..domain.value_objects import CAMPOS_AUTOMATICOS, AccionAuditoria
+from ..domain.value_objects import CAMPOS_AUTOMATICOS, AccionAuditoria, OrigenHistorial
 
 TAMANO_PAGINA = 25
 TAMANO_MAXIMO = 100
@@ -28,6 +28,10 @@ ETIQUETA_ACCION = {
     AccionAuditoria.INSERT: "Alta",
     AccionAuditoria.UPDATE: "Edición",
     AccionAuditoria.DELETE: "Baja",
+}
+ETIQUETA_ORIGEN = {
+    OrigenHistorial.USUARIOS: "Usuarios",
+    OrigenHistorial.COMANDOS: "Comandos (cargar_demo y otros)",
 }
 
 
@@ -75,4 +79,5 @@ def opciones_de_filtro(repo: HistorialRepository, actor: Actor) -> dict[str, lis
         "tablas": repo.tablas(),
         "usuarios": repo.autores(),
         "acciones": [OpcionFiltro(a.value, ETIQUETA_ACCION[a]) for a in AccionAuditoria],
+        "origenes": [OpcionFiltro(o.value, ETIQUETA_ORIGEN[o]) for o in OrigenHistorial],
     }

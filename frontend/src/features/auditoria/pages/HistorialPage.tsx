@@ -29,7 +29,9 @@ import type { AccionAuditoria, FiltroHistorial, RegistroHistorial } from '../api
 // Historial de modificaciones (HU13), solo lectura: quién dio de alta,
 // editó o dio de baja cada registro, y cuándo (hora de La Paz). Lo ven el
 // Administrador y el Supervisor; la ruta tiene RequireRol y el backend
-// responde 403 al Empleado.
+// responde 403 al Empleado. El filtro Origen separa lo que hicieron los
+// usuarios de lo que cargaron los comandos (cargar_demo firma lo suyo; los
+// demás comandos no tienen autor y se muestran como "Sistema").
 
 const ACCION: Record<AccionAuditoria, { texto: string; tono: TonoBadge }> = {
   INSERT: { texto: 'Alta', tono: 'ok' },
@@ -37,7 +39,12 @@ const ACCION: Record<AccionAuditoria, { texto: string; tono: TonoBadge }> = {
   DELETE: { texto: 'Baja', tono: 'danger' },
 }
 
-const FILTRO_VACIO: FiltroHistorial = { desde: '', hasta: '', usuario: '', tabla: '', accion: '', pagina: 1 }
+const FILTRO_VACIO: FiltroHistorial = { desde: '', hasta: '', usuario: '', tabla: '', accion: '', origen: '', pagina: 1 }
+
+function Autor({ usuario }: { usuario: string }) {
+  if (usuario === 'cargar_demo') return <Badge tono="neutral">Datos de demo</Badge>
+  return usuario ? <>{usuario}</> : <span className="text-muted">Sistema</span>
+}
 
 function resumen(r: RegistroHistorial): string {
   if (r.accion === 'INSERT') return 'Alta del registro'
@@ -82,7 +89,7 @@ export function HistorialPage() {
         subtitulo="Registro automático de altas, ediciones y bajas, con su autor. Solo lectura."
       />
 
-      <Card className="grid grid-cols-[repeat(5,minmax(0,1fr))_auto] items-start gap-4">
+      <Card className="grid grid-cols-[repeat(6,minmax(0,1fr))_auto] items-start gap-4">
         <Field etiqueta="Desde" error={rangoInvalido ? 'No puede ser posterior a "hasta".' : null}>
           <Input type="date" max={hoy} value={filtro.desde} onChange={(e) => cambiar('desde', e.target.value)} />
         </Field>
@@ -105,6 +112,12 @@ export function HistorialPage() {
           <Select value={filtro.accion} onChange={(e) => cambiar('accion', e.target.value)}>
             <option value="">Todas</option>
             {opciones?.acciones.map((o) => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
+          </Select>
+        </Field>
+        <Field etiqueta="Origen">
+          <Select value={filtro.origen} onChange={(e) => cambiar('origen', e.target.value)}>
+            <option value="">Todos</option>
+            {opciones?.origenes.map((o) => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
           </Select>
         </Field>
         <Button variante="ghost" className="mt-[22px]" onClick={limpiar} disabled={!hayFiltros} icono={<FilterX size={16} aria-hidden />}>
@@ -151,7 +164,7 @@ export function HistorialPage() {
                   <Fragment key={r.id}>
                     <Tr seleccionada={abierto}>
                       <Td className="whitespace-nowrap tabular-nums">{fechaHora(r.fecha)}</Td>
-                      <Td>{r.usuario || <span className="text-muted">Sistema</span>}</Td>
+                      <Td><Autor usuario={r.usuario} /></Td>
                       <Td>{r.tabla_nombre}</Td>
                       <Td numerico>#{r.registro_id}</Td>
                       <Td><Badge tono={ACCION[r.accion].tono}>{ACCION[r.accion].texto}</Badge></Td>

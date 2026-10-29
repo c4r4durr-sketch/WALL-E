@@ -178,3 +178,28 @@ class HistorialApiTests(MediaTemporal, APITestCase):
         self.assertEqual(tablas["catalogo.Herramienta"], "Herramientas")
         self.assertIn({"valor": str(self.admin.id), "texto": "admin_test"}, datos["usuarios"])
         self.assertEqual([a["valor"] for a in datos["acciones"]], ["INSERT", "UPDATE", "DELETE"])
+
+    def test_filtro_por_origen_separa_los_comandos(self):
+        from apps.auditoria.infrastructure.contexto import registrar_como
+        # Un comando sin nombre (consola) y cargar_demo, que firma lo suyo.
+        HistorialModificacion.objects.create(tabla_afectada="usuarios.Sucursal", registro_id="1", accion="UPDATE")
+        with registrar_como("cargar_demo"):
+            Sucursal.objects.create(nombre="Norte")
+        demo = HistorialModificacion.objects.get(tabla_afectada="usuarios.Sucursal", accion="INSERT",
+                                                 registro_id=str(Sucursal.objects.get(nombre="Norte").pk))
+        self.assertEqual((demo.usuario_id, demo.usuario_username), (None, "cargar_demo"))
+        # Un usuario borrado conserva su nombre: sigue siendo de usuarios.
+        HistorialModificacion.objects.create(tabla_afectada="usuarios.Sucursal", registro_id="2", accion="UPDATE",
+                                             usuario_username="ex_empleado")
+
+        comandos = self.client.get(URL, {"origen": "COMANDOS"}).json()
+        self.assertTrue(all(r["usuario_id"] is None and r["usuario"] in ("", "cargar_demo")
+                            for r in comandos["resultados"]))
+        self.assertIn("cargar_demo", [r["usuario"] for r in comandos["resultados"]])
+        usuarios = self.client.get(URL, {"origen": "USUARIOS"}).json()
+        self.assertNotIn("cargar_demo", [r["usuario"] for r in usuarios["resultados"]])
+        self.assertIn("ex_empleado", [r["usuario"] for r in usuarios["resultados"]])
+        self.assertEqual(comandos["total"] + usuarios["total"], HistorialModificacion.objects.count())
+        self.assertEqual(self.client.get(URL, {"origen": "OTRO"}).status_code, 400)
+        opciones = self.client.get(f"{URL}opciones/").json()["origenes"]
+        self.assertEqual([o["valor"] for o in opciones], ["USUARIOS", "COMANDOS"])
