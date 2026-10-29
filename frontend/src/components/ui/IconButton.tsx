@@ -1,9 +1,10 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { cx } from './cx'
 
 // Botón redondo solo con ícono (acciones de una fila o una tarjeta). La
 // etiqueta es obligatoria: es lo que lee el lector de pantalla y lo que
-// muestra el navegador al pasar el mouse.
+// muestra el navegador al pasar el mouse. forwardRef: Radix le pasa un ref
+// cuando se usa con asChild (el botón Cerrar del Modal).
 
 interface Props extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> {
   etiqueta: string
@@ -12,9 +13,13 @@ interface Props extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-labe
   tamano?: 'md' | 'sm'
 }
 
-export function IconButton({ etiqueta, children, peligro = false, tamano = 'md', className, type = 'button', ...props }: Props) {
+export const IconButton = forwardRef<HTMLButtonElement, Props>(function IconButton(
+  { etiqueta, children, peligro = false, tamano = 'md', className, type = 'button', ...props },
+  ref,
+) {
   return (
     <button
+      ref={ref}
       type={type}
       aria-label={etiqueta}
       title={etiqueta}
@@ -30,4 +35,4 @@ export function IconButton({ etiqueta, children, peligro = false, tamano = 'md',
       {children}
     </button>
   )
-}
+})

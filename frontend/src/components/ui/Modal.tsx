@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { X } from 'lucide-react'
@@ -21,9 +21,11 @@ interface PropsBase {
   pie?: ReactNode
 }
 
-function Fondo() {
+// forwardRef: Dialog.Portal envuelve a cada hijo en un Presence que le pasa
+// un ref; sin esto React avisa "Function components cannot be given refs".
+const Fondo = forwardRef<HTMLDivElement>(function Fondo(_, ref) {
   return (
-    <Dialog.Overlay asChild forceMount>
+    <Dialog.Overlay ref={ref} asChild forceMount>
       <motion.div
         className="fixed inset-0 z-40 bg-velo"
         initial={{ opacity: 0 }}
@@ -33,7 +35,7 @@ function Fondo() {
       />
     </Dialog.Overlay>
   )
-}
+})
 
 function Encabezado({ titulo, descripcion, onCerrar }: Pick<PropsBase, 'titulo' | 'descripcion' | 'onCerrar'>) {
   return (
