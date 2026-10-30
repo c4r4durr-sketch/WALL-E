@@ -8,7 +8,8 @@ prueba sin reloj ni base de datos).
 
   - Alerta de reorden (HU18): stock total de la herramienta, sumando todas
     las sucursales, <= ROP. ROP y pedido sugerido (EOQ ajustado a cajas,
-    HU19/HU20) salen de domain/formulas.py.
+    HU19/HU20) salen de domain/formulas.py, con la demanda observada de
+    los últimos 12 meses (HU21) o la estimada si no hubo ventas.
   - Estancada (HU22): stock > 0 en una sucursal y más de
     DIAS_PARA_ESTANCAMIENTO días sin una SALIDA real (los ajustes no son
     ventas). Si nunca se vendió, se cuenta desde su primer movimiento ahí,
@@ -16,20 +17,21 @@ prueba sin reloj ni base de datos).
 """
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 
 from apps.catalogo.domain.repositories import HerramientaRepository
 from apps.movimientos.domain.repositories import MovimientoRepository
 from apps.movimientos.domain.stock import stock_desde_totales
 from apps.usuarios.domain.repositories import SucursalRepository
 
+from ..domain.antiguedad import dias_sin_venta
 from ..domain.entities import (
     DIAS_PARA_ESTANCAMIENTO,
     AlertaReorden,
     HerramientaEstancada,
     PanelAuditoria,
 )
-from .calcular_eoq import resultado_eoq
+from .calcular_eoq import resultado_eoq, ventas_de_12_meses
 from .calcular_punto_reorden import resultado_rop
 
 
@@ -38,6 +40,7 @@ def construir_panel(
     herramientas: HerramientaRepository,
     sucursales: SucursalRepository,
     hoy: date,
+    ahora: datetime,
     dias_para_estancamiento: int = DIAS_PARA_ESTANCAMIENTO,
 ) -> PanelAuditoria:
     catalogo = {h.id: h for h in herramientas.listar()}
@@ -51,8 +54,7 @@ def construir_panel(
         stock_total[fila.herramienta_id] += stock
         if stock <= 0:
             continue
-        referencia = fila.ultima_salida or fila.primer_movimiento
-        dias = (hoy - referencia.date()).days
+        dias = dias_sin_venta(fila.ultima_salida, fila.primer_movimiento, hoy)
         if dias > dias_para_estancamiento:
             herramienta = catalogo[fila.herramienta_id]
             sucursal = todas_las_sucursales.get(fila.sucursal_id)
@@ -69,10 +71,12 @@ def construir_panel(
 
     # Misma regla y mismos cálculos que los endpoints de ROP y EOQ
     # (resultado_rop / resultado_eoq): el panel no tiene fórmulas propias.
+    vendidas = ventas_de_12_meses(movimientos, ahora)
     alertas: list[AlertaReorden] = []
     sin_datos_rop = 0
     for herramienta in catalogo.values():
-        rop = resultado_rop(herramienta, stock_total[herramienta.id])
+        observada = vendidas.get(herramienta.id, 0)
+        rop = resultado_rop(herramienta, stock_total[herramienta.id], observada)
         if rop.punto_reorden is None:
             sin_datos_rop += 1
             continue
@@ -83,7 +87,7 @@ def construir_panel(
                 nombre=herramienta.nombre,
                 stock_total=rop.stock_total,
                 punto_reorden=rop.punto_reorden,
-                pedido_sugerido=resultado_eoq(herramienta).eoq_ajustado_cajas,
+                pedido_sugerido=resultado_eoq(herramienta, observada).eoq_ajustado_cajas,
                 unidades_por_caja=herramienta.unidades_por_caja,
             ))
 

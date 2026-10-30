@@ -1,79 +1,127 @@
+import { useState } from 'react'
+import { BarChart3, ChevronRight } from 'lucide-react'
+import { Card, CardHeader, EmptyState, SegmentedControl, Table, THead, Td, Th, Tr, cx } from '../../../components/ui'
+import { CeldaHerramienta } from '../../catalogo/components/CeldaHerramienta'
+import { useFotos } from '../../catalogo/hooks/useFotos'
 import type { ClasificacionABC } from '../api/indicadoresApi'
 
 // Clasificación ABC (tabla, no gráfico: lo que se busca es qué herramienta
 // está en qué clase). La clase se muestra con su letra, nunca solo con
-// color. Clic en una fila = ver su EOQ y punto de reorden.
+// color. Clic (o Enter) en una fila = ver su EOQ y punto de reorden.
 
-const CLASE: Record<ClasificacionABC['clase'], { clase: string; descripcion: string }> = {
-  A: { clase: 'bg-slate-800 text-white', descripcion: 'Alta rotación: hasta el 80 % de lo vendido' },
-  B: { clase: 'bg-slate-300 text-slate-900', descripcion: 'Rotación media: hasta el 95 %' },
-  C: { clase: 'bg-slate-100 text-slate-600', descripcion: 'Baja rotación o sin ventas' },
+type Clase = ClasificacionABC['clase']
+
+const CLASE: Record<Clase, { clase: string; descripcion: string }> = {
+  A: { clase: 'bg-acc text-on-acc', descripcion: 'Alta rotación: hasta el 80 % de lo vendido' },
+  B: { clase: 'bg-soft text-softink', descripcion: 'Rotación media: hasta el 95 %' },
+  C: { clase: 'bg-surf2 text-muted', descripcion: 'Baja rotación o sin ventas' },
+}
+
+function Letra({ clase, grande = false }: { clase: Clase; grande?: boolean }) {
+  return (
+    <span
+      className={cx(
+        'inline-flex items-center justify-center rounded-chip font-bold',
+        grande ? 'h-7 w-7 text-sm' : 'h-6 w-6 text-xs',
+        CLASE[clase].clase,
+      )}
+    >
+      {clase}
+    </span>
+  )
 }
 
 interface Props {
   filas: ClasificacionABC[]
-  seleccionada: number | null
   onSeleccionar: (herramientaId: number) => void
 }
 
-export function TablaABC({ filas, seleccionada, onSeleccionar }: Props) {
-  const conteo = (c: ClasificacionABC['clase']) => filas.filter((f) => f.clase === c).length
+export function TablaABC({ filas, onSeleccionar }: Props) {
+  const foto = useFotos()
+  const [filtro, setFiltro] = useState<Clase | 'todas'>('todas')
+  const conteo = (c: Clase) => filas.filter((f) => f.clase === c).length
+  const visibles = filtro === 'todas' ? filas : filas.filter((f) => f.clase === filtro)
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="border-b border-slate-100 px-4 py-3">
-        <h2 className="font-semibold text-slate-800">Clasificación ABC</h2>
-        <p className="text-xs text-slate-500">
-          Por unidades vendidas en los últimos 12 meses (solo salidas reales; ajustes y transferencias no cuentan).
-        </p>
-        <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">
-          {(['A', 'B', 'C'] as const).map((c) => (
-            <span key={c} className="flex items-center gap-1.5">
-              <span className={`inline-flex h-5 w-5 items-center justify-center rounded font-semibold ${CLASE[c].clase}`}>{c}</span>
-              {conteo(c)} · {CLASE[c].descripcion}
-            </span>
-          ))}
-        </div>
+    <>
+      <div className="grid grid-cols-3 gap-5">
+        {(['A', 'B', 'C'] as const).map((c) => (
+          <Card key={c} interactiva className="flex items-center gap-4">
+            <Letra clase={c} grande />
+            <div>
+              <p className="text-[28px] font-bold leading-none tracking-[-0.03em] text-ink tabular-nums">{conteo(c)}</p>
+              <p className="mt-1.5 text-xs text-muted">{CLASE[c].descripcion}</p>
+            </div>
+          </Card>
+        ))}
       </div>
-      {filas.length === 0 ? (
-        <p className="px-4 py-6 text-center text-sm text-slate-500">No hay herramientas en el catálogo.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600">
+
+      <Card sinPadding className="overflow-hidden">
+        <CardHeader
+          className="px-6 pb-4 pt-6"
+          titulo="Herramientas por clase"
+          descripcion="Por unidades vendidas en los últimos 12 meses (solo salidas reales; ajustes y transferencias no cuentan)."
+          acciones={
+            <SegmentedControl<Clase | 'todas'>
+              etiqueta="Filtrar por clase"
+              valor={filtro}
+              onCambiar={setFiltro}
+              opciones={[
+                { valor: 'todas', texto: 'Todas' },
+                { valor: 'A', texto: 'A' },
+                { valor: 'B', texto: 'B' },
+                { valor: 'C', texto: 'C' },
+              ]}
+            />
+          }
+        />
+        {visibles.length === 0 ? (
+          <EmptyState
+            compacto
+            icono={BarChart3}
+            className="border-t border-line"
+            titulo={filas.length === 0 ? 'No hay herramientas en el catálogo' : `Ninguna herramienta en la clase ${filtro}`}
+            ayuda={filas.length === 0 ? 'La clasificación aparece cuando haya herramientas y ventas.' : 'Prueba con otra clase.'}
+          />
+        ) : (
+          <Table>
+            <THead>
               <tr>
-                <th className="px-4 py-2">Clase</th>
-                <th className="px-4 py-2">Herramienta</th>
-                <th className="px-4 py-2 text-right">Unidades vendidas</th>
-                <th className="px-4 py-2 text-right">% del total</th>
-                <th className="px-4 py-2 text-right">% acumulado</th>
+                <Th>Clase</Th>
+                <Th>Herramienta</Th>
+                <Th numerico>Unidades vendidas</Th>
+                <Th numerico>% del total</Th>
+                <Th numerico>% acumulado</Th>
+                <Th><span className="sr-only">Ver indicadores</span></Th>
               </tr>
-            </thead>
+            </THead>
             <tbody>
-              {filas.map((f) => (
-                <tr
+              {visibles.map((f) => (
+                <Tr
                   key={f.herramienta_id}
+                  interactiva
+                  tabIndex={0}
+                  aria-label={`${f.codigo} ${f.nombre}, clase ${f.clase}. Ver EOQ y punto de reorden`}
                   onClick={() => onSeleccionar(f.herramienta_id)}
-                  className={`cursor-pointer border-t border-slate-100 hover:bg-slate-50 ${seleccionada === f.herramienta_id ? 'bg-blue-50' : ''}`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onSeleccionar(f.herramienta_id)
+                    }
+                  }}
                 >
-                  <td className="px-4 py-2">
-                    <span className={`inline-flex h-6 w-6 items-center justify-center rounded text-xs font-semibold ${CLASE[f.clase].clase}`}>
-                      {f.clase}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="font-medium text-slate-800">{f.codigo}</span>{' '}
-                    <span className="text-slate-600">{f.nombre}</span>
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums">{f.unidades_vendidas}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{f.porcentaje.toFixed(1)} %</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{f.porcentaje_acumulado.toFixed(1)} %</td>
-                </tr>
+                  <Td><Letra clase={f.clase} /></Td>
+                  <Td><CeldaHerramienta codigo={f.codigo} nombre={f.nombre} imagen={foto(f.herramienta_id)} /></Td>
+                  <Td numerico className="font-semibold">{f.unidades_vendidas}</Td>
+                  <Td numerico>{f.porcentaje.toFixed(1)} %</Td>
+                  <Td numerico>{f.porcentaje_acumulado.toFixed(1)} %</Td>
+                  <Td className="w-10 text-muted"><ChevronRight size={16} aria-hidden /></Td>
+                </Tr>
               ))}
             </tbody>
-          </table>
-        </div>
-      )}
-    </section>
+          </Table>
+        )}
+      </Card>
+    </>
   )
 }

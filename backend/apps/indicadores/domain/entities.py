@@ -5,7 +5,11 @@ puro de un cálculo, devuelto por los use_cases de esta app.
 """
 
 from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Optional
+
+from apps.catalogo.domain.entities import Promocion
 
 
 # Período con el que se mide la demanda REAL (ventas registradas): los
@@ -26,15 +30,17 @@ class ResultadoEOQ:
     herramienta_id: int
     codigo: str
     nombre: str
-    demanda_anual: Optional[int]  # D (estimada, del catálogo)
+    demanda_anual: Optional[int]  # estimada, del catálogo
     costo_pedido: Optional[float]  # S
     costo_almacenamiento_unitario: Optional[float]  # H
     unidades_por_caja: int
     eoq: Optional[float]  # raiz(2*D*S/H), en unidades
     eoq_ajustado_cajas: Optional[float]  # HU20: redondeado a cajas cerradas
-    # HU21: ventas reales de los últimos PERIODO_DEMANDA_DIAS, para comparar
-    # con la demanda estimada y decidir si hay que actualizarla.
+    # HU21: ventas reales de los últimos PERIODO_DEMANDA_DIAS. Si hubo
+    # ventas, es la D de la fórmula; si no, se usa la estimada.
     demanda_observada: int
+    demanda_usada: Optional[int]  # la D con la que se calculó
+    fuente_demanda: str  # formulas.DEMANDA_OBSERVADA | DEMANDA_ESTIMADA
     datos_faltantes: tuple[str, ...]
 
 
@@ -46,7 +52,10 @@ class ResultadoROP:
     herramienta_id: int
     codigo: str
     nombre: str
-    demanda_anual: Optional[int]
+    demanda_anual: Optional[int]  # estimada, del catálogo
+    demanda_observada: int  # HU21: ventas de los últimos 12 meses
+    demanda_usada: Optional[int]  # la D con la que se calculó el ROP
+    fuente_demanda: str
     demanda_diaria_promedio: Optional[float]
     lead_time_dias: Optional[int]
     punto_reorden: Optional[float]
@@ -122,3 +131,100 @@ class PanelAuditoria:
     dias_para_estancamiento: int
     alertas: list[AlertaReorden]
     estancadas: list[HerramientaEstancada]
+
+
+@dataclass(frozen=True)
+class LineaCierre:
+    """HU14: un movimiento del día, con los datos para mostrarlo."""
+
+    movimiento_id: int
+    fecha_hora: datetime
+    herramienta_id: int
+    codigo: str
+    nombre: str
+    tipo_movimiento: str
+    tipo_unidad: str
+    cantidad: int
+    cantidad_unidades: int
+    usuario: str
+    motivo: str
+
+
+@dataclass(frozen=True)
+class TotalPorTipo:
+    tipo_movimiento: str
+    movimientos: int
+    unidades: int
+
+
+@dataclass(frozen=True)
+class CierreDiario:
+    """HU14: resumen del día de una sucursal para cuadrar la caja. Las
+    salidas (ventas) se destacan aparte porque son lo que se cuadra."""
+
+    fecha: date
+    sucursal_id: int
+    sucursal_nombre: str
+    lineas: tuple[LineaCierre, ...]
+    totales: tuple[TotalPorTipo, ...]  # uno por cada tipo, aunque sea 0
+    total_salidas_unidades: int
+    cantidad_salidas: int
+
+
+# --- Reporte de antigüedad del stock (HU22) ---
+
+
+@dataclass(frozen=True)
+class LineaAntiguedad:
+    """Stock de una herramienta en una sucursal y cuánto lleva sin
+    venderse. valor_inmovilizado = stock x costo unitario (None si la
+    herramienta no tiene costo cargado)."""
+
+    herramienta_id: int
+    codigo: str
+    nombre: str
+    sucursal_id: int
+    sucursal_nombre: str
+    stock: int
+    ultima_venta: Optional[datetime]
+    dias_sin_venta: int
+    nunca_vendida: bool
+    tramo: str
+    estancada: bool
+    costo_unitario: Optional[Decimal]
+    valor_inmovilizado: Optional[Decimal]
+
+
+@dataclass(frozen=True)
+class TotalTramo:
+    tramo: str
+    lineas: int
+    unidades: int
+
+
+@dataclass(frozen=True)
+class ReporteAntiguedad:
+    fecha: date
+    # None = todas las sucursales (solo el Administrador).
+    sucursal_id: Optional[int]
+    dias_minimos: int
+    dias_para_estancamiento: int
+    lineas: tuple[LineaAntiguedad, ...]
+    tramos: tuple[TotalTramo, ...]  # uno por cada tramo, aunque sea 0
+    total_unidades: int
+    total_estancadas: int
+    # Solo de las líneas con costo; lineas_sin_costo dice cuántas faltan.
+    valor_inmovilizado_estancado: Decimal
+    lineas_sin_costo: int
+
+
+# --- Promociones (HU23) ---
+
+
+@dataclass(frozen=True)
+class PromocionListada:
+    """Una promoción con su estado a la fecha: VIGENTE, VENCIDA (pasó su
+    fecha de fin) o TERMINADA (el Administrador la cortó antes)."""
+
+    promocion: Promocion
+    estado: str

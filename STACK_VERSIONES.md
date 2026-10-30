@@ -35,6 +35,8 @@ Base de datos de desarrollo: `eoq_db`, usuario `eoq_user` (con permiso
 | django-cors-headers | **4.9.0** | CORS frontend (5173) ↔ backend (8000) |
 | django-environ | **0.14.0** | Lee `backend/.env` |
 | psycopg | **3.3.5** | Driver PostgreSQL (v3, no psycopg2) |
+| openpyxl | **3.1.5** | Reportes en Excel (HU25, sprint 4) |
+| et_xmlfile | 2.0.0 | (dependencia de openpyxl) |
 | psycopg-binary | 3.3.5 | |
 | asgiref | 3.12.1 | (dependencia de Django) |
 | sqlparse | 0.6.0 | (dependencia de Django) |
@@ -60,7 +62,7 @@ Instalado = versión fijada en `package-lock.json` para todos los paquetes.
 | react-router-dom | **7.18.3** | ^7.18.3 |
 | @tanstack/react-query | **5.102.8** | ^5.102.8 |
 | axios | **1.20.0** | ^1.20.0 |
-| vite | **8.2.2** | ^8.2.2 |
+| vite | **8.3.5** | ^8.2.2 (8.3.5 por `npm audit fix`, 27/10/2026) |
 | @vitejs/plugin-react | 6.1.1 | ^6.1.0 |
 | typescript | **6.0.3** | ~6.0.2 |
 | tailwindcss | **4.3.3** | ^4.3.3 (plugin `@tailwindcss/vite`, sin tailwind.config.js) |

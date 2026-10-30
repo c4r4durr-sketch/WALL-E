@@ -8,6 +8,7 @@ from collections import defaultdict
 from typing import Optional
 
 from django.db.models import Max, Min, Q, Sum
+from django.utils import timezone
 
 from apps.catalogo.infrastructure.models import Herramienta as HerramientaModel
 
@@ -46,6 +47,17 @@ class MovimientoRepositoryDjango(MovimientoRepository):
             consulta = consulta.filter(herramienta_id=herramienta_id)
         if sucursal_id is not None:
             consulta = consulta.filter(sucursal_id=sucursal_id)
+        return [_a_entidad(m) for m in consulta]
+
+    def listar_del_dia(self, sucursal_id: int, fecha) -> list[Movimiento]:
+        # __date convierte creado_en (UTC en la base) a la zona actual
+        # (TIME_ZONE = America/La_Paz) antes de comparar: el "día" es el de
+        # La Paz, no el de UTC. Usa el índice (sucursal, fecha).
+        consulta = (
+            MovimientoModel.objects.select_related("usuario")
+            .filter(sucursal_id=sucursal_id, creado_en__date=fecha)
+            .order_by("creado_en", "id")
+        )
         return [_a_entidad(m) for m in consulta]
 
     def unidades_por_tipo(self, herramienta_id: int, sucursal_id: int) -> dict[TipoMovimiento, int]:
@@ -89,8 +101,11 @@ class MovimientoRepositoryDjango(MovimientoRepository):
                 herramienta_id=f["herramienta_id"],
                 sucursal_id=f["sucursal_id"],
                 unidades_por_tipo=totales[(f["herramienta_id"], f["sucursal_id"])],
-                primer_movimiento=f["primero"],
-                ultima_salida=f["ultima_salida"],
+                # En hora local (TIME_ZONE): el panel compara su .date() con
+                # la fecha local de hoy; en UTC, una venta hecha después de
+                # las 20:00 en La Paz contaría como del día siguiente.
+                primer_movimiento=timezone.localtime(f["primero"]),
+                ultima_salida=timezone.localtime(f["ultima_salida"]) if f["ultima_salida"] else None,
             )
             for f in fechas
         ]

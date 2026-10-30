@@ -1,151 +1,174 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { ArrowLeft, UserPlus } from 'lucide-react'
+import { Aviso, Button, Card, Field, Input, PageHeader, Select, clasesBoton } from '../../../components/ui'
 import { Rol } from '../../../shared/types/roles'
 import { useSucursales } from '../hooks/useSucursales'
 import { useCrearUsuario } from '../hooks/useCrearUsuario'
+import { ROL_LABEL } from '../roles'
+import { erroresPorCampo, mensajeDeError } from '../../../shared/api/errores'
 
-const ROL_LABEL: Record<Rol, string> = {
-  ADMINISTRADOR: 'Administrador',
-  SUPERVISOR: 'Supervisor',
-  EMPLEADO: 'Empleado',
+// Alta de una cuenta (HU4), solo Administrador. El login es por nombre de
+// usuario; la sucursal es obligatoria salvo para el Administrador.
+
+type FormState = {
+  username: string
+  password: string
+  first_name: string
+  last_name: string
+  rol: Rol
+  sucursal: string
 }
 
-// HU4/HU5: el Administrador crea una cuenta asignando rol y, si no es
-// Administrador, sucursal obligatoria. El formulario solo guía al usuario:
-// la regla real la valida el backend (usuarios/domain/reglas.py, aplicada
-// en UsuarioSerializer.validate), que responde 400 si falta la sucursal.
-// Flujo mínimo demostrable: falta validación fina y feedback de carga más
-// pulido.
-export function CrearUsuarioPage() {
-  const navigate = useNavigate()
-  const { data: sucursales } = useSucursales()
-  const { mutate, isPending, error, isSuccess } = useCrearUsuario()
+type Errores = Partial<Record<keyof FormState, string>>
 
-  const [form, setForm] = useState({
+function validar(form: FormState): Errores {
+  const errores: Errores = {}
+
+  if (!form.username.trim()) {
+    errores.username = 'El usuario es obligatorio.'
+  } else if (form.username.trim().length < 3) {
+    errores.username = 'Debe tener al menos 3 caracteres.'
+  } else if (/\s/.test(form.username)) {
+    errores.username = 'No puede contener espacios.'
+  }
+
+  if (!form.password) {
+    errores.password = 'La contraseña es obligatoria.'
+  } else if (form.password.length < 8) {
+    errores.password = 'Debe tener al menos 8 caracteres.'
+  }
+
+  if (!form.first_name.trim()) errores.first_name = 'El nombre es obligatorio.'
+  if (!form.last_name.trim()) errores.last_name = 'El apellido es obligatorio.'
+
+  if (form.rol !== Rol.ADMINISTRADOR && !form.sucursal) {
+    errores.sucursal = 'Selecciona una sucursal.'
+  }
+
+  return errores
+}
+
+export function CrearUsuarioPage() {
+  const { data: sucursales } = useSucursales()
+  const { mutate, isPending, error, isSuccess, reset } = useCrearUsuario()
+
+  const [form, setForm] = useState<FormState>({
     username: '',
     password: '',
     first_name: '',
     last_name: '',
-    rol: Rol.EMPLEADO as Rol,
+    rol: Rol.EMPLEADO,
     sucursal: '',
   })
+  const [errores, setErrores] = useState<Errores>({})
+  // Errores del backend (usuario repetido, contraseña débil...) junto a su
+  // campo; los del formulario tienen prioridad mientras se corrigen.
+  const erroresServidor = erroresPorCampo(error) as Errores
+  const visibles: Errores = { ...erroresServidor, ...errores }
+  const errorGeneral =
+    error && Object.keys(erroresServidor).length === 0
+      ? mensajeDeError(error, 'No se pudo crear la cuenta. Intenta de nuevo.')
+      : null
+
+  // Actualiza un campo y limpia su error mientras el usuario escribe
+  function setCampo<K extends keyof FormState>(campo: K, valor: FormState[K]) {
+    setForm((prev) => ({ ...prev, [campo]: valor }))
+    if (isSuccess) reset()
+    if (errores[campo]) {
+      setErrores((prev) => ({ ...prev, [campo]: undefined }))
+    }
+  }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
+
+    const erroresNuevos = validar(form)
+    setErrores(erroresNuevos)
+    if (Object.keys(erroresNuevos).length > 0) return // no envía
+
     mutate({
-      username: form.username,
+      username: form.username.trim(),
       password: form.password,
-      first_name: form.first_name,
-      last_name: form.last_name,
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
       rol: form.rol,
       sucursal: form.rol === Rol.ADMINISTRADOR ? null : Number(form.sucursal),
+    }, {
+      onSuccess: () => setForm((prev) => ({ ...prev, username: '', password: '', first_name: '', last_name: '' })),
     })
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="mb-4 text-sm text-slate-500 hover:underline"
-        >
-          ← Volver
-        </button>
-        <h1 className="mb-4 text-xl font-semibold text-slate-800">Crear cuenta nueva</h1>
+    <>
+      <PageHeader
+        migas={['Administración', 'Cuentas', 'Nueva cuenta']}
+        titulo="Nueva cuenta"
+        subtitulo="La persona entra con su nombre de usuario y esta contraseña."
+        acciones={
+          <Link to="/usuarios" className={clasesBoton({ variante: 'ghost' })}>
+            <ArrowLeft size={16} aria-hidden />
+            Volver a cuentas
+          </Link>
+        }
+      />
+
+      <Card className="max-w-2xl">
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Usuario</label>
-            <input
-              value={form.username}
-              onChange={(event) => setForm({ ...form, username: event.target.value })}
-              required
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Contraseña</label>
-            <input
-              type="password"
-              value={form.password}
-              onChange={(event) => setForm({ ...form, password: event.target.value })}
-              required
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
-              <input
-                value={form.first_name}
-                onChange={(event) => setForm({ ...form, first_name: event.target.value })}
-                required
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Apellido</label>
-              <input
-                value={form.last_name}
-                onChange={(event) => setForm({ ...form, last_name: event.target.value })}
-                required
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Rol</label>
-            <select
-              value={form.rol}
-              onChange={(event) => setForm({ ...form, rol: event.target.value as Rol })}
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
-            >
-              {Object.values(Rol).map((rol) => (
-                <option key={rol} value={rol}>
-                  {ROL_LABEL[rol]}
-                </option>
-              ))}
-            </select>
-          </div>
-          {form.rol !== Rol.ADMINISTRADOR && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Sucursal</label>
-              <select
-                value={form.sucursal}
-                onChange={(event) => setForm({ ...form, sucursal: event.target.value })}
-                required
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+          <div className="grid grid-cols-2 gap-4">
+            <Field etiqueta="Usuario" error={visibles.username}>
+              <Input autoComplete="off" value={form.username} onChange={(e) => setCampo('username', e.target.value)} />
+            </Field>
+            <Field etiqueta="Contraseña" error={visibles.password}>
+              <Input type="password" autoComplete="new-password" value={form.password} onChange={(e) => setCampo('password', e.target.value)} />
+            </Field>
+            <Field etiqueta="Nombre" error={visibles.first_name}>
+              <Input value={form.first_name} onChange={(e) => setCampo('first_name', e.target.value)} />
+            </Field>
+            <Field etiqueta="Apellido" error={visibles.last_name}>
+              <Input value={form.last_name} onChange={(e) => setCampo('last_name', e.target.value)} />
+            </Field>
+            <Field etiqueta="Rol">
+              <Select
+                value={form.rol}
+                onChange={(e) => {
+                  const rol = e.target.value as Rol
+                  setForm((prev) => ({
+                    ...prev,
+                    rol,
+                    // al pasar a Administrador, la sucursal ya no aplica
+                    sucursal: rol === Rol.ADMINISTRADOR ? '' : prev.sucursal,
+                  }))
+                  setErrores((prev) => ({ ...prev, sucursal: undefined }))
+                }}
               >
-                <option value="" disabled>
-                  Selecciona una sucursal
-                </option>
-                {sucursales?.map((sucursal) => (
-                  <option key={sucursal.id} value={sucursal.id}>
-                    {sucursal.nombre}
-                  </option>
+                {Object.values(Rol).map((rol) => (
+                  <option key={rol} value={rol}>{ROL_LABEL[rol]}</option>
                 ))}
-              </select>
-            </div>
-          )}
-          {error && (
-            <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-              No se pudo crear la cuenta. Revisa los datos.
-            </p>
-          )}
-          {isSuccess && (
-            <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
-              Cuenta creada correctamente.
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={isPending}
-            className="w-full rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
-          >
-            {isPending ? 'Creando...' : 'Crear cuenta'}
-          </button>
+              </Select>
+            </Field>
+            {form.rol !== Rol.ADMINISTRADOR && (
+              <Field etiqueta="Sucursal" error={visibles.sucursal}>
+                <Select value={form.sucursal} onChange={(e) => setCampo('sucursal', e.target.value)}>
+                  <option value="" disabled>Selecciona una sucursal</option>
+                  {sucursales?.map((sucursal) => (
+                    <option key={sucursal.id} value={sucursal.id}>{sucursal.nombre}</option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+          </div>
+
+          {errorGeneral && <Aviso tono="error">{errorGeneral}</Aviso>}
+          {isSuccess && <Aviso tono="exito">Cuenta creada correctamente.</Aviso>}
+
+          <div className="flex justify-end pt-2">
+            <Button type="submit" variante="primary" cargando={isPending} icono={<UserPlus size={16} aria-hidden />}>
+              Crear cuenta
+            </Button>
+          </div>
         </form>
-      </div>
-    </div>
+      </Card>
+    </>
   )
 }

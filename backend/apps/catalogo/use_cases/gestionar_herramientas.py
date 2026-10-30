@@ -11,23 +11,45 @@ en el modelo:
   - una caja trae al menos 1 unidad;
   - los datos de EOQ/ROP son opcionales pero nunca negativos;
   - no se elimina una herramienta con movimientos (el repositorio lo
-    detecta y lanza HerramientaEnUsoError).
+    detecta y lanza HerramientaEnUsoError);
+  - HU7: el costo unitario es mayor que cero; solo el Administrador lo
+    carga o lo cambia; una vez cargado no se puede quitar, solo
+    reemplazar; y cada cambio queda en el historial de costos con fecha y
+    usuario. La vista ejecuta alta y edición dentro de una transacción:
+    la herramienta y su fila de historial se guardan juntas o ninguna;
+  - HU8: el proveedor asignado debe existir y estar activo (una
+    herramienta que ya tenía un proveedor luego desactivado lo conserva);
+  - foto del producto: JPG, PNG o WebP de hasta 5 MB. Que sea obligatoria
+    en el alta lo exige el serializer de alta (las herramientas antiguas
+    no tienen foto); en la edición se puede reemplazar, nunca quitar.
 """
 
 from dataclasses import fields, replace
-from typing import Any
+from typing import Any, Optional
 
-from ..domain.entities import Herramienta
+from apps.proveedores.domain.repositories import ProveedorRepository
+from apps.usuarios.domain.entities import Actor
+from apps.usuarios.domain.value_objects import Rol
+
+from ..domain.entities import (
+    FORMATOS_DE_IMAGEN,
+    TAMANO_MAXIMO_IMAGEN,
+    CambioCosto,
+    Herramienta,
+    ImagenProducto,
+)
 from ..domain.exceptions import (
+    CambioDeCostoNoPermitidoError,
     CodigoDuplicadoError,
     DatosHerramientaInvalidosError,
     HerramientaNoEncontradaError,
 )
-from ..domain.repositories import HerramientaRepository
+from ..domain.repositories import HerramientaRepository, HistorialCostoRepository
 
 # Campos que el usuario puede cargar/editar (id y fechas los pone el sistema).
 CAMPOS_EDITABLES = {
-    f.name for f in fields(Herramienta) if f.name not in {"id", "creado_en", "actualizado_en"}
+    f.name for f in fields(Herramienta)
+    if f.name not in {"id", "creado_en", "actualizado_en", "proveedor_nombre", "imagen"}
 }
 CAMPOS_NO_NEGATIVOS = ["demanda_anual", "costo_pedido", "costo_almacenamiento_unitario", "tiempo_entrega_dias"]
 
@@ -52,9 +74,59 @@ def _validar(herramienta: Herramienta) -> Herramienta:
         valor = getattr(herramienta, campo)
         if valor is not None and valor < 0:
             errores[campo] = "No puede ser negativo."
+    if herramienta.costo_unitario is not None and herramienta.costo_unitario <= 0:
+        errores["costo_unitario"] = "El costo unitario debe ser mayor que cero."
     if errores:
         raise DatosHerramientaInvalidosError(errores)
     return herramienta
+
+
+def _verificar_cambio_de_costo(actor: Actor, anterior: Optional[Herramienta], nueva: Herramienta) -> bool:
+    """Devuelve True si el costo unitario cambia (y el actor puede
+    cambiarlo); lanza un error si el cambio no está permitido."""
+    costo_anterior = anterior.costo_unitario if anterior else None
+    if nueva.costo_unitario == costo_anterior:
+        return False
+    if costo_anterior is not None and nueva.costo_unitario is None:
+        raise DatosHerramientaInvalidosError(
+            {"costo_unitario": "El costo unitario no se puede quitar; ingresa el valor nuevo."}
+        )
+    if Rol(actor.rol) != Rol.ADMINISTRADOR:
+        raise CambioDeCostoNoPermitidoError()
+    return True
+
+
+def _verificar_proveedor(
+    proveedores: ProveedorRepository, anterior: Optional[Herramienta], nueva: Herramienta
+) -> None:
+    if nueva.proveedor_id is None or (anterior and anterior.proveedor_id == nueva.proveedor_id):
+        return
+    proveedor = proveedores.obtener_por_id(nueva.proveedor_id)
+    if proveedor is None or not proveedor.activo:
+        raise DatosHerramientaInvalidosError({"proveedor": "El proveedor no existe o está inactivo."})
+
+
+def _validar_imagen(imagen: Optional[ImagenProducto]) -> None:
+    if imagen is None:
+        return
+    if imagen.formato not in FORMATOS_DE_IMAGEN:
+        aceptados = ", ".join(FORMATOS_DE_IMAGEN.values())
+        raise DatosHerramientaInvalidosError({"imagen": f"La foto debe ser {aceptados}."})
+    if imagen.tamano_bytes > TAMANO_MAXIMO_IMAGEN:
+        maximo_mb = TAMANO_MAXIMO_IMAGEN // (1024 * 1024)
+        raise DatosHerramientaInvalidosError({"imagen": f"La foto no puede pesar más de {maximo_mb} MB."})
+
+
+def _registrar_cambio_de_costo(
+    historial: HistorialCostoRepository, actor: Actor, anterior: Optional[Herramienta], guardada: Herramienta
+) -> None:
+    historial.registrar(CambioCosto(
+        id=None,
+        herramienta_id=guardada.id,
+        costo_anterior=anterior.costo_unitario if anterior else None,
+        costo_nuevo=guardada.costo_unitario,
+        usuario_id=actor.usuario_id,
+    ))
 
 
 def _verificar_codigo_unico(repo: HerramientaRepository, herramienta: Herramienta) -> None:
@@ -74,28 +146,75 @@ def obtener_herramienta(repo: HerramientaRepository, herramienta_id: int) -> Her
     return herramienta
 
 
-def registrar_herramienta(repo: HerramientaRepository, datos: dict[str, Any]) -> Herramienta:
+def registrar_herramienta(
+    repo: HerramientaRepository,
+    datos: dict[str, Any],
+    *,
+    actor: Actor,
+    historial: HistorialCostoRepository,
+    proveedores: ProveedorRepository,
+    imagen: Optional[ImagenProducto] = None,
+) -> Herramienta:
     nueva = Herramienta(
         id=None,
         **{campo: valor for campo, valor in datos.items() if campo in CAMPOS_EDITABLES},
     )
     nueva = _validar(nueva)
+    _validar_imagen(imagen)
     _verificar_codigo_unico(repo, nueva)
-    return repo.guardar(nueva)
+    _verificar_proveedor(proveedores, None, nueva)
+    cambia_costo = _verificar_cambio_de_costo(actor, None, nueva)
+    guardada = repo.guardar(nueva, imagen)
+    if cambia_costo:
+        _registrar_cambio_de_costo(historial, actor, None, guardada)
+    return guardada
 
 
 def actualizar_herramienta(
-    repo: HerramientaRepository, herramienta_id: int, cambios: dict[str, Any]
+    repo: HerramientaRepository,
+    herramienta_id: int,
+    cambios: dict[str, Any],
+    *,
+    actor: Actor,
+    historial: HistorialCostoRepository,
+    proveedores: ProveedorRepository,
+    imagen: Optional[ImagenProducto] = None,
 ) -> Herramienta:
     """Aplica solo los campos recibidos (sirve para PUT y PATCH) y valida
-    el estado final de la herramienta, no solo lo que cambió."""
+    el estado final de la herramienta, no solo lo que cambió. Con
+    `imagen`, además reemplaza la foto."""
     actual = obtener_herramienta(repo, herramienta_id)
     actualizada = replace(
         actual, **{campo: valor for campo, valor in cambios.items() if campo in CAMPOS_EDITABLES}
     )
     actualizada = _validar(actualizada)
+    _validar_imagen(imagen)
     _verificar_codigo_unico(repo, actualizada)
-    return repo.guardar(actualizada)
+    _verificar_proveedor(proveedores, actual, actualizada)
+    cambia_costo = _verificar_cambio_de_costo(actor, actual, actualizada)
+    guardada = repo.guardar(actualizada, imagen)
+    if cambia_costo:
+        _registrar_cambio_de_costo(historial, actor, actual, guardada)
+    return guardada
+
+
+def herramientas_sin_foto(repo: HerramientaRepository) -> list[Herramienta]:
+    """Las herramientas cargadas antes de que la foto fuera obligatoria."""
+    return [h for h in repo.listar() if not h.imagen]
+
+
+def asignar_foto(repo: HerramientaRepository, herramienta_id: int, imagen: ImagenProducto) -> Herramienta:
+    """Solo la foto, sin tocar los demás datos (comando cargar_fotos_demo)."""
+    herramienta = obtener_herramienta(repo, herramienta_id)
+    _validar_imagen(imagen)
+    return repo.guardar(herramienta, imagen)
+
+
+def historial_de_costos(
+    repo: HerramientaRepository, historial: HistorialCostoRepository, herramienta_id: int
+) -> list[CambioCosto]:
+    obtener_herramienta(repo, herramienta_id)
+    return historial.listar_por_herramienta(herramienta_id)
 
 
 def eliminar_herramienta(repo: HerramientaRepository, herramienta_id: int) -> None:

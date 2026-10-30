@@ -1,8 +1,8 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from ...domain.reglas import requiere_sucursal
-from ...infrastructure.models import Sucursal, Usuario
+from ...domain.value_objects import Rol
+from ...infrastructure.models import Sucursal
 
 
 class SucursalSerializer(serializers.ModelSerializer):
@@ -12,59 +12,35 @@ class SucursalSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
-class UsuarioSerializer(serializers.ModelSerializer):
-    # write_only: nunca se devuelve en la respuesta. Se hashea en create()
-    # (nunca se guarda en texto plano); required solo al crear, no al
-    # editar (un PATCH sin password no debe borrarla).
-    password = serializers.CharField(write_only=True, required=False, allow_blank=False)
+class UsuarioSerializer(serializers.Serializer):
+    """
+    Serializer "plano": solo valida la FORMA de los datos y serializa la
+    entidad de dominio. Las reglas (username único, sucursal obligatoria,
+    política de contraseñas, proteger al último Administrador) las aplica
+    use_cases/gestionar_usuarios.py. Los nombres de la API (first_name,
+    is_active, sucursal) se conservan; `source` los traduce a los del
+    dominio (nombres, activo, sucursal_id).
+    """
 
-    class Meta:
-        model = Usuario
-        fields = [
-            "id",
-            "username",
-            "password",
-            "first_name",
-            "last_name",
-            "rol",
-            "sucursal",
-            "is_active",
-        ]
-        read_only_fields = ["id"]
+    id = serializers.IntegerField(read_only=True)
+    username = serializers.CharField(max_length=150)
+    # write_only: nunca se devuelve. Opcional en la forma; el use case la
+    # exige al crear. Editar sin enviarla conserva la actual (HU3, CA3).
+    password = serializers.CharField(
+        write_only=True, required=False, allow_blank=False, trim_whitespace=False,
+        style={"input_type": "password"},
+    )
+    first_name = serializers.CharField(source="nombres", max_length=150, required=False, allow_blank=True, default="")
+    last_name = serializers.CharField(source="apellidos", max_length=150, required=False, allow_blank=True, default="")
+    email = serializers.EmailField(required=False, allow_blank=True, default="")
+    rol = serializers.ChoiceField(choices=[r.value for r in Rol], required=False, default=Rol.EMPLEADO.value)
+    sucursal = serializers.IntegerField(source="sucursal_id", required=False, allow_null=True, default=None)
+    sucursal_nombre = serializers.CharField(read_only=True, allow_null=True)
+    is_active = serializers.BooleanField(source="activo", required=False, default=True)
 
-    def validate(self, attrs):
-        # En un PATCH parcial pueden venir solo el rol o solo la sucursal:
-        # se combina con lo que ya tiene el usuario para validar el estado
-        # final, no solo los campos enviados.
-        rol = attrs.get("rol", getattr(self.instance, "rol", None))
-        if "sucursal" in attrs:
-            sucursal = attrs["sucursal"]
-        else:
-            sucursal = getattr(self.instance, "sucursal", None)
 
-        if rol is not None and requiere_sucursal(rol) and sucursal is None:
-            raise serializers.ValidationError(
-                {"sucursal": "Supervisor y Empleado deben tener una sucursal asignada."}
-            )
-        return attrs
-
-    def create(self, validated_data):
-        password = validated_data.pop("password", None)
-        usuario = Usuario(**validated_data)
-        if password:
-            usuario.set_password(password)
-        else:
-            usuario.set_unusable_password()
-        usuario.save()
-        return usuario
-
-    def update(self, instance, validated_data):
-        password = validated_data.pop("password", None)
-        usuario = super().update(instance, validated_data)
-        if password:
-            usuario.set_password(password)
-            usuario.save()
-        return usuario
+class RestablecerPasswordSerializer(serializers.Serializer):
+    password = serializers.CharField(trim_whitespace=False, style={"input_type": "password"})
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):

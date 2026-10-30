@@ -48,7 +48,9 @@ class HistorialModificacion(models.Model):
         verbose_name_plural = "Historial de modificaciones"
         ordering = ["-fecha"]
         indexes = [
-            models.Index(fields=["tabla_afectada", "registro_id"], name="historial_tabla_registro_idx")
+            models.Index(fields=["tabla_afectada", "registro_id"], name="historial_tabla_registro_idx"),
+            # La pantalla del historial (HU13) ordena y filtra por fecha.
+            models.Index(fields=["-fecha"], name="historial_fecha_idx"),
         ]
 
     def __str__(self) -> str:

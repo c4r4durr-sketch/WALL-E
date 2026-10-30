@@ -14,8 +14,8 @@ class CodigoDuplicadoError(Exception):
 
 
 class HerramientaEnUsoError(Exception):
-    """No se puede eliminar: tiene movimientos o transferencias registrados
-    (borrarla dejaría el historial de stock inconsistente)."""
+    """No se puede eliminar: tiene movimientos, transferencias o historial
+    de costos (borrarla dejaría el historial inconsistente)."""
 
 
 class DatosHerramientaInvalidosError(Exception):
@@ -25,3 +25,7 @@ class DatosHerramientaInvalidosError(Exception):
     def __init__(self, errores: dict[str, str]):
         super().__init__(errores)
         self.errores = errores
+
+
+class CambioDeCostoNoPermitidoError(Exception):
+    """HU7: solo el Administrador puede cargar o cambiar el costo unitario."""

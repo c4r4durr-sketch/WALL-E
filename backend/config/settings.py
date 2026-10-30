@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     # estructura interna: domain/ use_cases/ infrastructure/ interfaces/api/
     "apps.usuarios.apps.UsuariosConfig",
     "apps.catalogo.apps.CatalogoConfig",
+    "apps.proveedores.apps.ProveedoresConfig",
     "apps.movimientos.apps.MovimientosConfig",
     "apps.transferencias.apps.TransferenciasConfig",
     "apps.indicadores.apps.IndicadoresConfig",
@@ -102,6 +103,7 @@ DATABASES = {
 MIGRATION_MODULES = {
     "usuarios": "apps.usuarios.infrastructure.migrations",
     "catalogo": "apps.catalogo.infrastructure.migrations",
+    "proveedores": "apps.proveedores.infrastructure.migrations",
     "movimientos": "apps.movimientos.infrastructure.migrations",
     "transferencias": "apps.transferencias.infrastructure.migrations",
     "auditoria": "apps.auditoria.infrastructure.migrations",
@@ -123,7 +125,10 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 
 LANGUAGE_CODE = "es"
-TIME_ZONE = "UTC"  # ajustar a la zona horaria real del negocio si aplica
+# Zona horaria del negocio (Bolivia, UTC-4 sin horario de verano). La base
+# sigue guardando en UTC (USE_TZ); esto define qué es "hoy" para el cierre
+# diario, el estancamiento y las fechas que ve el usuario.
+TIME_ZONE = "America/La_Paz"
 USE_I18N = True
 USE_TZ = True
 
@@ -131,6 +136,11 @@ USE_TZ = True
 # Static files
 
 STATIC_URL = "static/"
+
+# Archivos subidos por los usuarios (fotos de productos). En desarrollo los
+# sirve Django (ver config/urls.py); media/ no se versiona.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

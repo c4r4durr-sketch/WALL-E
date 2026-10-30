@@ -76,7 +76,7 @@ class Usuario(AbstractUser):
     )
     # Obligatorio para SUPERVISOR y EMPLEADO. Se deja nullable a nivel de BD
     # porque esa validación condicional es una regla de negocio: vive en
-    # domain/reglas.py y la aplica UsuarioSerializer.validate, no una
+    # domain/reglas.py y la aplica use_cases/gestionar_usuarios.py, no una
     # constraint de base de datos.
     sucursal = models.ForeignKey(
         Sucursal,

@@ -24,17 +24,22 @@ class Sucursal:
 
 @dataclass(frozen=True)
 class Usuario:
+    """Cuenta del sistema. La contraseña no forma parte de la entidad: el
+    dominio nunca la lee; solo la valida (ValidadorPassword) y la entrega
+    al repositorio para que la guarde cifrada."""
+
     id: Optional[int]
     username: str
-    # El modelo ORM (AbstractUser) separa first_name/last_name; se unen acá
-    # en un solo campo porque al dominio no le interesa esa distinción.
-    # UsuarioRepositoryDjango es quien hace esa conversión en ambos sentidos.
-    nombre_completo: str
+    nombres: str
+    apellidos: str
     rol: Rol
     # Solo puede ser None para Administrador: Supervisor y Empleado
     # siempre tienen sucursal (ver domain/reglas.py::requiere_sucursal).
     sucursal_id: Optional[int]
+    email: str = ""
     activo: bool = True
+    # Solo lectura, para mostrar en listas; lo completa el repositorio.
+    sucursal_nombre: Optional[str] = None
 
 
 @dataclass(frozen=True)

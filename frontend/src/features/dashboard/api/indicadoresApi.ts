@@ -18,8 +18,11 @@ export interface ResultadoEOQ {
   // null si falta algún dato (ver datos_faltantes).
   eoq: number | null
   eoq_ajustado_cajas: number | null
-  // Ventas reales de los últimos 12 meses (HU21).
+  // HU21: ventas reales de los últimos 12 meses. Si hubo, son la D de la
+  // fórmula (demanda_usada); si no, se usa la estimada del catálogo.
   demanda_observada: number
+  demanda_usada: number | null
+  fuente_demanda: 'OBSERVADA' | 'ESTIMADA'
   datos_faltantes: string[]
 }
 
@@ -28,6 +31,9 @@ export interface ResultadoROP {
   codigo: string
   nombre: string
   demanda_anual: number | null
+  demanda_observada: number
+  demanda_usada: number | null
+  fuente_demanda: 'OBSERVADA' | 'ESTIMADA'
   demanda_diaria_promedio: number | null
   lead_time_dias: number | null
   punto_reorden: number | null

@@ -1,10 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Walle-Importaciones</title>
+    <script>
+      // Aplica el tema antes de pintar, para que no parpadee en claro al
+      // abrir en oscuro. Misma regla que app/providers/ThemeProvider.tsx.
+      try {
+        var guardado = localStorage.getItem('tema')
+        var oscuro = guardado ? guardado === 'oscuro' : matchMedia('(prefers-color-scheme: dark)').matches
+        if (oscuro) document.documentElement.classList.add('dark')
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

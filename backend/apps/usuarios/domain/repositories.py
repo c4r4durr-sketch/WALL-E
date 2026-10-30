@@ -24,6 +24,8 @@ class UsuarioRepository(ABC):
 
     @abstractmethod
     def obtener_por_username(self, username: str) -> Optional[Usuario]:
+        """Búsqueda sin distinguir mayúsculas: "Ana" y "ana" son la misma
+        cuenta a efectos de unicidad."""
         ...
 
     @abstractmethod
@@ -31,7 +33,32 @@ class UsuarioRepository(ABC):
         ...
 
     @abstractmethod
-    def guardar(self, usuario: Usuario) -> Usuario:
+    def crear(self, usuario: Usuario, password: str) -> Usuario:
+        """Guarda la cuenta nueva con la contraseña cifrada."""
+        ...
+
+    @abstractmethod
+    def actualizar(self, usuario: Usuario) -> Usuario:
+        """Guarda los datos de la cuenta; no toca la contraseña."""
+        ...
+
+    @abstractmethod
+    def establecer_password(self, usuario_id: int, password: str) -> None:
+        """Reemplaza la contraseña (cifrada); la anterior deja de servir."""
+        ...
+
+    @abstractmethod
+    def contar_administradores_activos(self, excluir_id: Optional[int] = None) -> int:
+        ...
+
+
+class ValidadorPassword(ABC):
+    """Puerto para la política de contraseñas. La implementación concreta
+    usa los AUTH_PASSWORD_VALIDATORS de Django (infraestructura)."""
+
+    @abstractmethod
+    def errores(self, password: str, usuario: Usuario) -> list[str]:
+        """Mensajes en español de lo que no cumple; lista vacía si es válida."""
         ...
 
 

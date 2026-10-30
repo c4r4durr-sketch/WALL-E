@@ -99,6 +99,9 @@ class _Repo:
     def resumen_inventario(self):
         return self.datos
 
+    def unidades_por_herramienta(self, tipos, desde):
+        return getattr(self, "vendidas", {})
+
 
 def herramienta(id, demanda=None, entrega=None, costo_pedido=None, costo_alm=None, caja=1):
     return Herramienta(id=id, codigo=f"H-{id}", nombre=f"Herramienta {id}", modelo="",
@@ -115,7 +118,8 @@ class PanelAuditoriaUseCaseTests(SimpleTestCase):
     sucursales = _Repo([Sucursal(1, "Central", ""), Sucursal(2, "Norte", ""), Sucursal(3, "Cerrada", "", activa=False)])
 
     def _panel(self, herramientas, filas):
-        return construir_panel(_Repo(filas), _Repo(herramientas), self.sucursales, hoy=HOY)
+        return construir_panel(_Repo(filas), _Repo(herramientas), self.sucursales, hoy=HOY,
+                               ahora=hace(0))
 
     def test_alerta_de_reorden_con_stock_de_ambas_sucursales_y_pedido_en_cajas(self):
         # ROP = 730/365 * 10 = 20; stock total 10 + 5 = 15 <= 20 -> alerta.
@@ -190,20 +194,35 @@ class PanelAuditoriaApiTests(APITestCase):
         self.Movimiento.objects.filter(pk=m.pk).update(creado_en=timezone.now() - timedelta(days=dias_atras))
 
     def test_panel_con_datos_reales(self):
-        self._mov("ENTRADA", 30, dias_atras=100)
-        self._mov("SALIDA", 5, dias_atras=60)
+        self._mov("ENTRADA", 400, dias_atras=100)
+        self._mov("SALIDA", 365, dias_atras=60)
         # Un ajuste reciente NO es una venta: no reinicia los días sin venta.
-        self._mov("AJUSTE_NEGATIVO", 10, dias_atras=1)
+        self._mov("AJUSTE_NEGATIVO", 30, dias_atras=1)
         self.client.force_authenticate(self.emp)  # todos los roles ven el panel
         respuesta = self.client.get("/api/indicadores/panel/")
         self.assertEqual(respuesta.status_code, 200)
         datos = respuesta.json()
-        # stock = 30 - 5 - 10 = 15 <= ROP 20 -> alerta
+        # stock = 400 - 365 - 30 = 5 <= ROP 10 (D = 365 vendidas en 12 meses) -> alerta
         self.assertEqual(datos["total_alertas_stock"], 1)
-        self.assertEqual(datos["alertas"][0]["stock_total"], 15)
+        self.assertEqual((datos["alertas"][0]["stock_total"], datos["alertas"][0]["punto_reorden"]), (5, 10.0))
         self.assertEqual(datos["total_herramientas_estancadas"], 1)
         self.assertEqual(datos["estancadas"][0]["dias_sin_venta"], 60)
         self.assertEqual((datos["total_herramientas"], datos["total_sucursales_activas"]), (1, 1))
+
+    def test_dias_sin_venta_se_cuentan_en_hora_de_la_paz(self):
+        # Venta a las 22:00 de La Paz hace 41 días: en UTC ya es el día
+        # siguiente (02:00), y contando en UTC saldrían 40 días (no estancada).
+        from datetime import datetime, time
+        from django.utils import timezone
+        la_paz = timezone.get_current_timezone()
+        venta = datetime.combine(timezone.localdate() - timedelta(days=41), time(22, 0), tzinfo=la_paz)
+        self._mov("ENTRADA", 10, dias_atras=100)
+        self._mov("SALIDA", 1, dias_atras=0)
+        self.Movimiento.objects.filter(tipo_movimiento="SALIDA").update(creado_en=venta)
+        self.client.force_authenticate(self.emp)
+        datos = self.client.get("/api/indicadores/panel/").json()
+        self.assertEqual(datos["total_herramientas_estancadas"], 1)
+        self.assertEqual(datos["estancadas"][0]["dias_sin_venta"], 41)
 
     def test_sin_sesion_es_401(self):
         self.assertEqual(self.client.get("/api/indicadores/panel/").status_code, 401)
@@ -218,9 +237,9 @@ from .use_cases.clasificar_abc import clasificar
 
 class EOQUseCaseTests(SimpleTestCase):
     def test_eoq_completo_y_ajustado_a_cajas(self):
-        # raiz(2*730*120/8) = 147.99 -> cajas de 6: 25 cajas = 150
-        r = resultado_eoq(herramienta(1, demanda=730, costo_pedido=120, costo_alm=8, caja=6), demanda_observada=500)
-        self.assertEqual((r.eoq, r.eoq_ajustado_cajas, r.demanda_observada, r.datos_faltantes), (147.99, 150, 500, ()))
+        # Sin ventas usa la estimada: raiz(2*730*120/8) = 147.99 -> cajas de 6: 25 cajas = 150
+        r = resultado_eoq(herramienta(1, demanda=730, costo_pedido=120, costo_alm=8, caja=6))
+        self.assertEqual((r.eoq, r.eoq_ajustado_cajas, r.demanda_observada, r.datos_faltantes), (147.99, 150, 0, ()))
 
     def test_datos_faltantes(self):
         r = resultado_eoq(herramienta(1, demanda=730))
@@ -288,7 +307,8 @@ class IndicadoresApiTests(APITestCase):
         self._mov(self.tal, "AJUSTE_NEGATIVO", 5, dias_atras=3)     # no es venta
         self._mov(self.tal, "TRANSFERENCIA_SALIDA", 8, dias_atras=3)  # no es venta
         datos = self.client.get(f"/api/indicadores/eoq/{self.tal.id}/").json()
-        self.assertEqual((datos["eoq"], datos["eoq_ajustado_cajas"], datos["demanda_observada"]), (147.99, 150, 40))
+        # HU21: D = 40 vendidas -> raiz(2 * 40 * 120 / 8) = 34.64 -> 36 en cajas de 6.
+        self.assertEqual((datos["eoq"], datos["eoq_ajustado_cajas"], datos["demanda_observada"]), (34.64, 36, 40))
 
     def test_eoq_con_datos_faltantes_es_200(self):
         respuesta = self.client.get(f"/api/indicadores/eoq/{self.amo.id}/")
@@ -314,3 +334,713 @@ class IndicadoresApiTests(APITestCase):
         self.assertEqual(self.client.get("/api/indicadores/rop/999/").status_code, 404)
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get("/api/indicadores/abc/").status_code, 401)
+
+
+# --- Cierre diario (HU14) ---
+
+from datetime import date as _date, datetime as _datetime, time as _time
+
+from apps.catalogo.domain.entities import Herramienta as _Herramienta
+from apps.movimientos.domain.entities import Movimiento as _Movimiento
+from apps.movimientos.domain.value_objects import TipoMovimiento as _Tipo, TipoUnidad as _Unidad
+from apps.usuarios.domain.entities import Actor as _Actor, Sucursal as _Sucursal
+from apps.usuarios.domain.value_objects import Rol as _Rol
+
+from .domain.exceptions import FechaFuturaError, ReporteNoPermitidoError, SucursalInexistenteError
+from .use_cases.cierre_diario import construir_cierre
+
+_HOY = _date(2026, 10, 20)
+
+
+class _MovimientosDelDia:
+    def __init__(self, movimientos):
+        self.movimientos = movimientos
+        self.pedidos = []
+
+    def listar_del_dia(self, sucursal_id, fecha):
+        self.pedidos.append((sucursal_id, fecha))
+        return [m for m in self.movimientos if m.sucursal_id == sucursal_id]
+
+
+class _Catalogo:
+    def __init__(self):
+        self.llamadas = 0
+
+    def listar(self):
+        self.llamadas += 1
+        return [_Herramienta(1, "T-1", "Taladro", "", 12), _Herramienta(2, "M-1", "Martillo", "", 1)]
+
+
+class _Sucursales:
+    def obtener_por_id(self, sucursal_id):
+        return {1: _Sucursal(1, "Central", ""), 2: _Sucursal(2, "Norte", "")}.get(sucursal_id)
+
+
+def _mov(id, tipo, unidades, herramienta=1, sucursal=1, motivo=""):
+    return _Movimiento(id=id, herramienta_id=herramienta, sucursal_id=sucursal, tipo_movimiento=tipo,
+                       tipo_unidad=_Unidad.UNIDAD, cantidad=unidades, cantidad_unidades=unidades,
+                       usuario_id=1, motivo=motivo, creado_en=_datetime(2026, 10, 20, 10, id),
+                       usuario_username="ana")
+
+
+_ADMIN = _Actor(usuario_id=1, rol=_Rol.ADMINISTRADOR, sucursal_id=None)
+_SUP_CENTRAL = _Actor(usuario_id=2, rol=_Rol.SUPERVISOR, sucursal_id=1)
+_EMPLEADO = _Actor(usuario_id=3, rol=_Rol.EMPLEADO, sucursal_id=1)
+
+
+class CierreDiarioUseCaseTests(SimpleTestCase):
+    def _cierre(self, movimientos, actor=_ADMIN, sucursal_id=1, fecha=_HOY):
+        self.repo = _MovimientosDelDia(movimientos)
+        self.catalogo = _Catalogo()
+        return construir_cierre(self.repo, self.catalogo, _Sucursales(), actor, sucursal_id, fecha, hoy=_HOY)
+
+    def test_totales_por_tipo_y_salidas_destacadas(self):
+        cierre = self._cierre([
+            _mov(1, _Tipo.ENTRADA, 24),
+            _mov(2, _Tipo.SALIDA, 3),
+            _mov(3, _Tipo.SALIDA, 2, herramienta=2),
+            _mov(4, _Tipo.AJUSTE_NEGATIVO, 1, motivo="Rota"),
+            _mov(5, _Tipo.TRANSFERENCIA_SALIDA, 5),
+            _mov(6, _Tipo.SALIDA, 99, sucursal=2),  # otra sucursal: no entra
+        ])
+        totales = {t.tipo_movimiento: (t.movimientos, t.unidades) for t in cierre.totales}
+        self.assertEqual(totales["ENTRADA"], (1, 24))
+        self.assertEqual(totales["SALIDA"], (2, 5))
+        self.assertEqual(totales["AJUSTE_NEGATIVO"], (1, 1))
+        self.assertEqual(totales["TRANSFERENCIA_SALIDA"], (1, 5))
+        self.assertEqual(totales["TRANSFERENCIA_ENTRADA"], (0, 0))
+        self.assertEqual((cierre.cantidad_salidas, cierre.total_salidas_unidades), (2, 5))
+        self.assertEqual([l.codigo for l in cierre.lineas], ["T-1", "T-1", "M-1", "T-1", "T-1"])
+        self.assertEqual(cierre.sucursal_nombre, "Central")
+        self.assertEqual(self.catalogo.llamadas, 1)  # una consulta al catálogo, no una por línea
+
+    def test_dia_sin_movimientos(self):
+        cierre = self._cierre([])
+        self.assertEqual((cierre.lineas, cierre.cantidad_salidas, cierre.total_salidas_unidades), ((), 0, 0))
+        self.assertEqual(self.catalogo.llamadas, 0)
+
+    def test_permisos_por_rol_y_sucursal(self):
+        self._cierre([], actor=_SUP_CENTRAL, sucursal_id=1)
+        with self.assertRaises(ReporteNoPermitidoError):
+            self._cierre([], actor=_SUP_CENTRAL, sucursal_id=2)
+        with self.assertRaises(ReporteNoPermitidoError):
+            self._cierre([], actor=_EMPLEADO, sucursal_id=1)
+        self._cierre([], actor=_ADMIN, sucursal_id=2)
+
+    def test_fecha_futura_y_sucursal_inexistente(self):
+        with self.assertRaises(FechaFuturaError):
+            self._cierre([], fecha=_date(2026, 10, 21))
+        with self.assertRaises(SucursalInexistenteError):
+            self._cierre([], sucursal_id=99)
+
+    def test_dia_pasado(self):
+        self._cierre([], fecha=_date(2026, 1, 15))
+        self.assertEqual(self.repo.pedidos, [(1, _date(2026, 1, 15))])
+
+
+class CierreDiarioApiTests(APITestCase):
+    URL = "/api/indicadores/cierre-diario/"
+
+    def setUp(self):
+        from apps.catalogo.infrastructure.models import Herramienta as HerramientaModel
+        from apps.movimientos.infrastructure.models import Movimiento
+        from apps.usuarios.infrastructure.models import Sucursal as SucursalModel, Usuario
+
+        self.Movimiento = Movimiento
+        self.central = SucursalModel.objects.create(nombre="Central")
+        self.norte = SucursalModel.objects.create(nombre="Norte")
+        self.h = HerramientaModel.objects.create(codigo="T-1", nombre="Taladro", unidades_por_caja=12)
+        self.admin = Usuario.objects.create_user("adm", password="x", rol="ADMINISTRADOR")
+        self.sup = Usuario.objects.create_user("sup", password="x", rol="SUPERVISOR", sucursal=self.central)
+        self.emp = Usuario.objects.create_user("emp", password="x", rol="EMPLEADO", sucursal=self.central)
+
+    def _mov(self, tipo, unidades, cuando, sucursal=None):
+        m = self.Movimiento.objects.create(
+            herramienta=self.h, sucursal=sucursal or self.central, usuario=self.sup, tipo_movimiento=tipo,
+            tipo_unidad="UNIDAD", cantidad=unidades, cantidad_unidades=unidades,
+            motivo="x" if "AJUSTE" in tipo else "",
+        )
+        self.Movimiento.objects.filter(pk=m.pk).update(creado_en=cuando)
+
+    def _la_paz(self, dia, hora, minuto=0):
+        from django.utils import timezone
+        return _datetime.combine(dia, _time(hora, minuto), tzinfo=timezone.get_current_timezone())
+
+    def test_el_dia_es_el_de_la_paz(self):
+        from django.utils import timezone
+        ayer = timezone.localdate() - timedelta(days=1)
+        # 23:30 de ayer en La Paz = 03:30 de hoy en UTC: es de AYER.
+        self._mov("SALIDA", 2, self._la_paz(ayer, 23, 30))
+        # 00:10 de hoy en La Paz = 04:10 UTC de hoy: es de HOY.
+        self._mov("SALIDA", 5, self._la_paz(ayer + timedelta(days=1), 0, 10))
+        self.client.force_authenticate(self.sup)
+        de_ayer = self.client.get(self.URL, {"fecha": ayer.isoformat()}).json()
+        self.assertEqual((de_ayer["cantidad_salidas"], de_ayer["total_salidas_unidades"]), (1, 2))
+        de_hoy = self.client.get(self.URL).json()  # sin fecha = hoy
+        self.assertEqual((de_hoy["cantidad_salidas"], de_hoy["total_salidas_unidades"]), (1, 5))
+        self.assertTrue(de_ayer["lineas"][0]["fecha_hora"].endswith("-04:00"))
+
+    def test_lineas_y_totales(self):
+        from django.utils import timezone
+        hoy = timezone.localdate()
+        self._mov("ENTRADA", 24, self._la_paz(hoy, 0, 5))
+        self._mov("SALIDA", 3, self._la_paz(hoy, 0, 20))
+        self._mov("AJUSTE_NEGATIVO", 1, self._la_paz(hoy, 0, 30))
+        self._mov("SALIDA", 7, self._la_paz(hoy, 0, 40), sucursal=self.norte)
+        self.client.force_authenticate(self.admin)
+        datos = self.client.get(self.URL, {"sucursal": self.central.id}).json()
+        self.assertEqual([l["tipo_movimiento"] for l in datos["lineas"]], ["ENTRADA", "SALIDA", "AJUSTE_NEGATIVO"])
+        self.assertEqual(datos["lineas"][0]["codigo"], "T-1")
+        self.assertEqual(datos["lineas"][0]["usuario"], "sup")
+        self.assertEqual(len(datos["totales"]), 6)
+        self.assertEqual((datos["sucursal_nombre"], datos["total_salidas_unidades"]), ("Central", 3))
+
+    def test_dia_sin_movimientos_responde_vacio(self):
+        self.client.force_authenticate(self.sup)
+        datos = self.client.get(self.URL).json()
+        self.assertEqual((datos["lineas"], datos["cantidad_salidas"]), ([], 0))
+
+    def test_permisos(self):
+        self.client.force_authenticate(self.emp)
+        self.assertEqual(self.client.get(self.URL).status_code, 403)
+        self.client.force_authenticate(self.sup)
+        self.assertEqual(self.client.get(self.URL, {"sucursal": self.norte.id}).status_code, 403)
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.client.get(self.URL, {"sucursal": self.norte.id}).status_code, 200)
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get(self.URL).status_code, 401)
+
+    def test_validaciones(self):
+        from django.utils import timezone
+        self.client.force_authenticate(self.admin)
+        sin_sucursal = self.client.get(self.URL)
+        self.assertEqual(sin_sucursal.status_code, 400)
+        self.assertIn("sucursal", sin_sucursal.json())
+        manana = (timezone.localdate() + timedelta(days=1)).isoformat()
+        futura = self.client.get(self.URL, {"sucursal": self.central.id, "fecha": manana})
+        self.assertEqual(futura.status_code, 400)
+        self.assertIn("fecha", futura.json())
+        self.assertEqual(self.client.get(self.URL, {"sucursal": self.central.id, "fecha": "20-10-2026"}).status_code, 400)
+        self.assertEqual(self.client.get(self.URL, {"sucursal": 9999}).status_code, 400)
+
+    def test_consultas_constantes(self):
+        from django.utils import timezone
+        hoy = timezone.localdate()
+        for minuto in range(5):
+            self._mov("SALIDA", 1, self._la_paz(hoy, 0, minuto))
+        self.client.force_authenticate(self.sup)
+        # sucursal + movimientos del día (con usuario) + catálogo
+        with self.assertNumQueries(3):
+            self.client.get(self.URL)
+
+
+# --- Las fórmulas usan la demanda observada (HU21) ---
+
+from dataclasses import replace as _replace
+
+from .domain.formulas import DEMANDA_ESTIMADA, DEMANDA_OBSERVADA, demanda_para_formulas
+
+AHORA = _datetime(2026, 10, 27, 12, tzinfo=dt_timezone.utc)
+ADMIN = _Actor(usuario_id=1, rol=_Rol.ADMINISTRADOR, sucursal_id=None)
+SUPERVISOR = _Actor(usuario_id=2, rol=_Rol.SUPERVISOR, sucursal_id=1)
+EMPLEADO = _Actor(usuario_id=3, rol=_Rol.EMPLEADO, sucursal_id=1)
+
+
+class DemandaObservadaTests(SimpleTestCase):
+    def test_con_ventas_usa_lo_vendido_y_sin_ventas_la_estimada(self):
+        self.assertEqual(demanda_para_formulas(730, 500), (500, DEMANDA_OBSERVADA))
+        self.assertEqual(demanda_para_formulas(730, 0), (730, DEMANDA_ESTIMADA))
+        self.assertEqual(demanda_para_formulas(None, 0), (None, DEMANDA_ESTIMADA))
+        self.assertEqual(demanda_para_formulas(None, 12), (12, DEMANDA_OBSERVADA))
+
+    def test_eoq_y_rop_con_la_observada(self):
+        h = herramienta(1, demanda=730, entrega=15, costo_pedido=120, costo_alm=8, caja=6)
+        # raiz(2 * 500 * 120 / 8) = 122.47 -> 21 cajas de 6 = 126
+        eoq = resultado_eoq(h, demanda_observada=500)
+        self.assertEqual((eoq.eoq, eoq.eoq_ajustado_cajas, eoq.demanda_usada, eoq.fuente_demanda),
+                         (122.47, 126, 500, DEMANDA_OBSERVADA))
+        self.assertEqual(eoq.demanda_anual, 730)  # la estimada se informa igual
+        # ROP = 365 / 365 * 15 = 15: con 30 en stock no hay que pedir.
+        rop = resultado_rop(h, stock_total=30, demanda_observada=365)
+        self.assertEqual((rop.punto_reorden, rop.requiere_reorden, rop.fuente_demanda), (15.0, False, DEMANDA_OBSERVADA))
+
+    def test_sin_estimada_pero_con_ventas_ya_se_calcula(self):
+        h = herramienta(1, entrega=10, costo_pedido=50, costo_alm=2)
+        self.assertEqual(resultado_eoq(h, demanda_observada=100).datos_faltantes, ())
+        self.assertEqual(resultado_rop(h, stock_total=0, demanda_observada=365).punto_reorden, 10.0)
+
+
+class PanelConDemandaObservadaTests(SimpleTestCase):
+    sucursales = PanelAuditoriaUseCaseTests.sucursales
+
+    def _panel(self, vendidas):
+        movimientos = _Repo([resumen(1, 1, entradas=15, ultima_salida=1)])
+        movimientos.vendidas = vendidas
+        h = herramienta(1, demanda=730, entrega=10, costo_pedido=50, costo_alm=2, caja=12)
+        return construir_panel(movimientos, _Repo([h]), self.sucursales, hoy=HOY, ahora=AHORA)
+
+    def test_la_alerta_sale_de_lo_vendido(self):
+        # Estimada 730 -> ROP 20 (alerta con 15); vendido 36 -> ROP 0.99 (no).
+        self.assertEqual(self._panel({}).total_alertas_stock, 1)
+        self.assertEqual(self._panel({1: 36}).total_alertas_stock, 0)
+        # Vendido 3650 -> ROP 100; pedido = raiz(2*3650*50/2) = 427.2 -> 432.
+        alerta = self._panel({1: 3650}).alertas[0]
+        self.assertEqual((alerta.punto_reorden, alerta.pedido_sugerido), (100.0, 432))
+
+
+class DemandaObservadaApiTests(APITestCase):
+    """Mismos datos que IndicadoresApiTests (Taladro con D estimada 730)."""
+
+    _mov = IndicadoresApiTests._mov
+
+    def setUp(self):
+        IndicadoresApiTests.setUp(self)
+
+    def test_eoq_rop_y_panel_usan_lo_vendido_en_12_meses(self):
+        self._mov(self.tal, "ENTRADA", 500, dias_atras=400)
+        self._mov(self.tal, "SALIDA", 365, dias_atras=20)
+        self._mov(self.tal, "SALIDA", 100, dias_atras=380)          # fuera del período
+        self._mov(self.tal, "AJUSTE_NEGATIVO", 30, dias_atras=5)    # no es venta
+        eoq = self.client.get(f"/api/indicadores/eoq/{self.tal.id}/").json()
+        self.assertEqual((eoq["demanda_anual"], eoq["demanda_observada"], eoq["demanda_usada"], eoq["fuente_demanda"]),
+                         (730, 365, 365, "OBSERVADA"))
+        # Stock 5; ROP = 365 / 365 * 15 = 15 -> alerta en el ROP y en el panel.
+        rop = self.client.get(f"/api/indicadores/rop/{self.tal.id}/").json()
+        self.assertEqual((rop["punto_reorden"], rop["stock_total"], rop["requiere_reorden"]), (15.0, 5, True))
+        alertas = self.client.get("/api/indicadores/panel/").json()["alertas"]
+        self.assertEqual([(a["codigo"], a["punto_reorden"]) for a in alertas], [("TAL", 15.0)])
+
+    def test_la_accion_manual_ya_no_existe(self):
+        self.assertEqual(self.client.post(f"/api/indicadores/eoq/{self.tal.id}/actualizar-demanda/").status_code, 404)
+
+
+# --- Reporte de antigüedad (HU22) ---
+
+from decimal import Decimal
+
+from .domain.antiguedad import dias_sin_venta, tramo
+from .use_cases.reporte_antiguedad import construir_reporte_antiguedad
+
+
+class _SucursalesConId(_Repo):
+    def obtener_por_id(self, sucursal_id):
+        return next((s for s in self.datos if s.id == sucursal_id), None)
+
+
+class AntiguedadDominioTests(SimpleTestCase):
+    def test_tramos_con_corte_en_40_dias(self):
+        self.assertEqual(
+            [tramo(d) for d in (0, 30, 31, 40, 41, 90, 91, 500)],
+            ["0–30 días", "0–30 días", "31–40 días", "31–40 días", "41–90 días", "41–90 días",
+             "Más de 90 días", "Más de 90 días"],
+        )
+
+    def test_dias_desde_la_ultima_venta_o_el_primer_movimiento(self):
+        self.assertEqual(dias_sin_venta(hace(5), hace(100), HOY), 5)
+        self.assertEqual(dias_sin_venta(None, hace(100), HOY), 100)
+
+
+class ReporteAntiguedadUseCaseTests(SimpleTestCase):
+    sucursales = _SucursalesConId([Sucursal(1, "Central", ""), Sucursal(2, "Norte", "")])
+
+    def setUp(self):
+        con_costo = _replace(herramienta(1), costo_unitario=Decimal("12.50"))
+        self.catalogo = _Repo([con_costo, herramienta(2), herramienta(3)])
+        self.filas = _Repo([
+            resumen(1, 1, entradas=10, salidas=2, ultima_salida=60),   # estancada, con costo
+            resumen(1, 2, entradas=5, ultima_salida=None, primero=10),  # nunca vendida, reciente
+            resumen(2, 1, entradas=4, salidas=1, ultima_salida=35),
+            resumen(3, 1, entradas=3, salidas=3, ultima_salida=200),   # sin stock: no aparece
+            resumen(2, 2, entradas=7, salidas=1, ultima_salida=95),    # estancada, sin costo
+        ])
+
+    def _reporte(self, actor, sucursal=None, dias_minimos=0):
+        return construir_reporte_antiguedad(self.filas, self.catalogo, self.sucursales, actor, sucursal,
+                                            hoy=HOY, dias_minimos=dias_minimos)
+
+    def test_admin_ve_todas_las_sucursales_ordenadas_por_dias(self):
+        r = self._reporte(ADMIN)
+        self.assertEqual(
+            [(l.herramienta_id, l.sucursal_nombre, l.stock, l.dias_sin_venta, l.estancada) for l in r.lineas],
+            [(2, "Norte", 6, 95, True), (1, "Central", 8, 60, True), (2, "Central", 3, 35, False),
+             (1, "Norte", 5, 10, False)],
+        )
+        self.assertEqual((r.total_unidades, r.total_estancadas, r.lineas_sin_costo), (22, 2, 2))
+        # Solo la estancada con costo: 8 x 12.50 (la de Norte no tiene costo).
+        self.assertEqual(r.valor_inmovilizado_estancado, Decimal("100.00"))
+        self.assertEqual([(t.tramo, t.lineas, t.unidades) for t in r.tramos],
+                         [("0–30 días", 1, 5), ("31–40 días", 1, 3), ("41–90 días", 1, 8), ("Más de 90 días", 1, 6)])
+        self.assertTrue(r.lineas[3].nunca_vendida)
+
+    def test_filtro_por_sucursal_y_dias_minimos(self):
+        r = self._reporte(ADMIN, sucursal=1, dias_minimos=41)
+        self.assertEqual([(l.herramienta_id, l.sucursal_id) for l in r.lineas], [(1, 1)])
+        self.assertEqual(r.sucursal_id, 1)
+
+    def test_supervisor_ve_solo_la_suya(self):
+        r = self._reporte(SUPERVISOR)
+        self.assertEqual({l.sucursal_id for l in r.lineas}, {1})
+        self.assertEqual(r.sucursal_id, 1)
+        with self.assertRaises(ReporteNoPermitidoError):
+            self._reporte(SUPERVISOR, sucursal=2)
+
+    def test_empleado_no_ve_el_reporte(self):
+        with self.assertRaises(ReporteNoPermitidoError):
+            self._reporte(EMPLEADO, sucursal=1)
+
+    def test_sucursal_inexistente(self):
+        with self.assertRaises(SucursalInexistenteError):
+            self._reporte(ADMIN, sucursal=9)
+
+    def test_el_panel_cuenta_las_mismas_estancadas(self):
+        panel = construir_panel(self.filas, self.catalogo, self.sucursales, hoy=HOY, ahora=AHORA)
+        reporte = self._reporte(ADMIN)
+        self.assertEqual(
+            {(e.herramienta_id, e.sucursal_id, e.dias_sin_venta) for e in panel.estancadas},
+            {(l.herramienta_id, l.sucursal_id, l.dias_sin_venta) for l in reporte.lineas if l.estancada},
+        )
+
+
+class ReporteAntiguedadApiTests(APITestCase):
+    URL = "/api/indicadores/antiguedad/"
+
+    def setUp(self):
+        CierreDiarioApiTests.setUp(self)
+        self.h.costo_unitario = Decimal("10")
+        self.h.save()
+        from django.utils import timezone
+        ahora = timezone.now()
+        self._mov("ENTRADA", 20, ahora - timedelta(days=80))
+        self._mov("SALIDA", 5, ahora - timedelta(days=50))
+        self._mov("ENTRADA", 4, ahora - timedelta(days=3), sucursal=self.norte)
+
+    _mov = CierreDiarioApiTests._mov
+
+    def test_admin_todas_y_filtradas(self):
+        self.client.force_authenticate(self.admin)
+        datos = self.client.get(self.URL).json()
+        self.assertEqual([(l["sucursal_nombre"], l["stock"], l["estancada"]) for l in datos["lineas"]],
+                         [("Central", 15, True), ("Norte", 4, False)])
+        self.assertEqual((datos["sucursal_id"], datos["valor_inmovilizado_estancado"]), (None, "150.00"))
+        filtrado = self.client.get(self.URL, {"sucursal": self.norte.id}).json()
+        self.assertEqual([l["sucursal_nombre"] for l in filtrado["lineas"]], ["Norte"])
+        self.assertEqual(len(self.client.get(self.URL, {"dias_minimos": 41}).json()["lineas"]), 1)
+
+    def test_permisos_por_rol(self):
+        self.client.force_authenticate(self.sup)
+        self.assertEqual([l["sucursal_nombre"] for l in self.client.get(self.URL).json()["lineas"]], ["Central"])
+        self.assertEqual(self.client.get(self.URL, {"sucursal": self.norte.id}).status_code, 403)
+        self.client.force_authenticate(self.emp)
+        self.assertEqual(self.client.get(self.URL).status_code, 403)
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get(self.URL).status_code, 401)
+
+    def test_validaciones(self):
+        self.client.force_authenticate(self.admin)
+        self.assertIn("sucursal", self.client.get(self.URL, {"sucursal": 999}).json())
+        self.assertIn("dias_minimos", self.client.get(self.URL, {"dias_minimos": -1}).json())
+
+
+# --- Promociones (HU23) ---
+
+from apps.catalogo.domain.entities import Promocion as _Promocion
+
+from .domain.exceptions import (
+    DatosPromocionInvalidosError,
+    PromocionNoAplicableError,
+    PromocionNoEncontradaError,
+    PromocionNoPermitidaError,
+)
+from .use_cases.promociones import crear_promocion, listar_promociones, terminar_promocion
+
+
+class _Promociones:
+    def __init__(self, *existentes):
+        self.datos = {p.id: p for p in existentes}
+
+    def obtener_por_id(self, promocion_id):
+        return self.datos.get(promocion_id)
+
+    def listar(self):
+        return sorted(self.datos.values(), key=lambda p: -p.id)
+
+    def de_herramienta_en_sucursal(self, herramienta_id, sucursal_id):
+        return [p for p in self.datos.values() if (p.herramienta_id, p.sucursal_id) == (herramienta_id, sucursal_id)]
+
+    def guardar(self, p):
+        if p.id is None:
+            p = _replace(p, id=max(self.datos, default=0) + 1)
+        self.datos[p.id] = p
+        return p
+
+
+class _CatalogoConId(_Repo):
+    def obtener_por_id(self, herramienta_id):
+        return next((h for h in self.datos if h.id == herramienta_id), None)
+
+
+def _promo(id, herramienta=1, sucursal=1, inicio=10, fin=-5, activa=True):
+    """inicio/fin en días antes de HOY (negativo = después de HOY)."""
+    return _Promocion(id=id, herramienta_id=herramienta, sucursal_id=sucursal, descuento_porcentaje=20,
+                      fecha_inicio=HOY - timedelta(days=inicio), fecha_fin=HOY - timedelta(days=fin),
+                      usuario_id=1, activa=activa)
+
+
+class PromocionesUseCaseTests(SimpleTestCase):
+    sucursales = _SucursalesConId([Sucursal(1, "Central", ""), Sucursal(2, "Norte", "")])
+
+    def setUp(self):
+        self.catalogo = _CatalogoConId([herramienta(1), herramienta(2)])
+        self.filas = _Repo([
+            resumen(1, 1, entradas=10, salidas=2, ultima_salida=60),  # estancada en Central
+            resumen(1, 2, entradas=5, salidas=1, ultima_salida=3),    # se vende en Norte
+            resumen(2, 1, entradas=4, salidas=4, ultima_salida=90),   # sin stock
+        ])
+
+    def _crear(self, promociones=None, actor=ADMIN, **datos):
+        datos = {"herramienta_id": 1, "sucursal_id": 1, "descuento_porcentaje": 25,
+                 "fecha_fin": HOY + timedelta(days=15), "motivo": "  liquidar  ", **datos}
+        return crear_promocion(promociones or _Promociones(), self.filas, self.catalogo, self.sucursales,
+                               actor, datos, hoy=HOY)
+
+    def test_crea_sobre_una_estancada_desde_hoy(self):
+        p = self._crear()
+        self.assertEqual((p.id, p.fecha_inicio, p.descuento_porcentaje, p.motivo, p.usuario_id, p.activa),
+                         (1, HOY, 25, "liquidar", ADMIN.usuario_id, True))
+
+    def test_solo_estancadas_con_stock_en_esa_sucursal(self):
+        for herramienta_id, sucursal_id in [(1, 2), (2, 1)]:  # se vende, sin stock
+            with self.assertRaises(PromocionNoAplicableError):
+                self._crear(herramienta_id=herramienta_id, sucursal_id=sucursal_id)
+
+    def test_una_sola_vigente_por_herramienta_y_sucursal(self):
+        with self.assertRaises(PromocionNoAplicableError):
+            self._crear(_Promociones(_promo(7)))
+        # Una vencida o terminada no impide crear otra.
+        self.assertIsNotNone(self._crear(_Promociones(_promo(7, fin=1), _promo(8, activa=False))))
+
+    def test_descuento_y_fecha_de_fin(self):
+        for datos, campo in [({"descuento_porcentaje": 0}, "descuento_porcentaje"),
+                             ({"descuento_porcentaje": 91}, "descuento_porcentaje"),
+                             ({"fecha_fin": HOY - timedelta(days=1)}, "fecha_fin")]:
+            with self.assertRaises(DatosPromocionInvalidosError) as ctx:
+                self._crear(**datos)
+            self.assertIn(campo, ctx.exception.errores)
+        self.assertEqual(self._crear(descuento_porcentaje=90, fecha_fin=HOY).fecha_fin, HOY)
+
+    def test_herramienta_o_sucursal_inexistente(self):
+        with self.assertRaises(DatosPromocionInvalidosError):
+            self._crear(herramienta_id=99)
+        with self.assertRaises(DatosPromocionInvalidosError):
+            self._crear(sucursal_id=99)
+
+    def test_el_supervisor_pone_y_quita_solo_en_su_sucursal(self):
+        # SUPERVISOR es de la sucursal 1 (Central), donde está estancada.
+        self.assertEqual(self._crear(actor=SUPERVISOR).usuario_id, SUPERVISOR.usuario_id)
+        with self.assertRaises(PromocionNoPermitidaError):
+            self._crear(actor=SUPERVISOR, sucursal_id=2)
+        repo = _Promociones(_promo(1, sucursal=1), _promo(2, herramienta=2, sucursal=2))
+        with self.assertRaises(PromocionNoPermitidaError):
+            terminar_promocion(repo, SUPERVISOR, 2, HOY)
+        self.assertTrue(repo.datos[2].activa)
+        self.assertFalse(terminar_promocion(repo, SUPERVISOR, 1, HOY).activa)
+        # El Administrador, en cualquier sucursal.
+        self.assertFalse(terminar_promocion(repo, ADMIN, 2, HOY).activa)
+
+    def test_el_empleado_no_pone_ni_quita(self):
+        repo = _Promociones(_promo(1))
+        with self.assertRaises(PromocionNoPermitidaError):
+            self._crear(actor=EMPLEADO)
+        with self.assertRaises(PromocionNoPermitidaError):
+            terminar_promocion(repo, EMPLEADO, 1, HOY)
+        self.assertTrue(repo.datos[1].activa)
+
+    def test_el_descuento_es_opcional(self):
+        self.assertIsNone(self._crear(descuento_porcentaje=None).descuento_porcentaje)
+        datos = {"herramienta_id": 1, "sucursal_id": 1, "fecha_fin": HOY}
+        sin_clave = crear_promocion(_Promociones(), self.filas, self.catalogo, self.sucursales, ADMIN, datos, hoy=HOY)
+        self.assertIsNone(sin_clave.descuento_porcentaje)
+
+    def test_terminar(self):
+        repo = _Promociones(_promo(1), _promo(2, fin=1))
+        self.assertFalse(terminar_promocion(repo, ADMIN, 1, HOY).activa)
+        with self.assertRaises(PromocionNoAplicableError):
+            terminar_promocion(repo, ADMIN, 1, HOY)  # ya terminada
+        with self.assertRaises(PromocionNoAplicableError):
+            terminar_promocion(repo, ADMIN, 2, HOY)  # vencida
+        with self.assertRaises(PromocionNoEncontradaError):
+            terminar_promocion(repo, ADMIN, 9, HOY)
+
+    def test_listar_con_estado(self):
+        repo = _Promociones(_promo(1), _promo(2, fin=1), _promo(3, activa=False))
+        self.assertEqual([(l.promocion.id, l.estado) for l in listar_promociones(repo, HOY)],
+                         [(3, "TERMINADA"), (2, "VENCIDA"), (1, "VIGENTE")])
+        self.assertEqual([l.promocion.id for l in listar_promociones(repo, HOY, solo_vigentes=True)], [1])
+
+
+class PromocionesApiTests(APITestCase):
+    URL = "/api/indicadores/promociones/"
+
+    _mov = CierreDiarioApiTests._mov
+
+    def setUp(self):
+        CierreDiarioApiTests.setUp(self)
+        from django.utils import timezone
+        self.hoy = timezone.localdate()
+        self._mov("ENTRADA", 20, timezone.now() - timedelta(days=80))  # estancada en Central
+
+    def _datos(self, **extra):
+        return {"herramienta_id": self.h.id, "sucursal_id": self.central.id, "descuento_porcentaje": 30,
+                "fecha_fin": (self.hoy + timedelta(days=10)).isoformat(), **extra}
+
+    def test_admin_crea_lista_y_termina(self):
+        self.client.force_authenticate(self.admin)
+        creada = self.client.post(self.URL, self._datos(), format="json")
+        self.assertEqual(creada.status_code, 201)
+        self.assertEqual((creada.json()["estado"], creada.json()["fecha_inicio"], creada.json()["usuario"]),
+                         ("VIGENTE", self.hoy.isoformat(), "adm"))
+        self.assertEqual(self.client.post(self.URL, self._datos(), format="json").status_code, 409)
+
+        self.client.force_authenticate(self.emp)  # todos ven las promociones
+        vigentes = self.client.get(self.URL, {"vigentes": "true"}).json()
+        self.assertEqual([p["descuento_porcentaje"] for p in vigentes], [30])
+
+        self.client.force_authenticate(self.admin)
+        terminar = f"{self.URL}{creada.json()['id']}/terminar/"
+        self.assertEqual(self.client.post(terminar).json()["estado"], "TERMINADA")
+        self.assertEqual(self.client.post(terminar).status_code, 409)
+        self.assertEqual(self.client.get(self.URL, {"vigentes": "true"}).json(), [])
+
+    def test_queda_en_el_historial(self):
+        from apps.auditoria.infrastructure.models import HistorialModificacion
+        self.client.force_authenticate(self.admin)
+        self.client.post(self.URL, self._datos(), format="json")
+        self.assertTrue(
+            HistorialModificacion.objects.filter(tabla_afectada="catalogo.Promocion", accion="INSERT").exists()
+        )
+
+    def test_permisos_por_rol(self):
+        self.client.force_authenticate(self.emp)
+        self.assertEqual(self.client.post(self.URL, self._datos(), format="json").status_code, 403)
+        # El Supervisor de Central no toca otra sucursal (403 antes de mirar el stock)...
+        self.client.force_authenticate(self.sup)
+        otra = self.client.post(self.URL, self._datos(sucursal_id=self.norte.id), format="json")
+        self.assertEqual(otra.status_code, 403)
+        # ...pero en la suya pone la etiqueta (sin descuento) y la quita.
+        creada = self.client.post(self.URL, self._datos(descuento_porcentaje=None), format="json")
+        self.assertEqual(creada.status_code, 201, creada.content)
+        self.assertIsNone(creada.json()["descuento_porcentaje"])
+        terminar = f"{self.URL}{creada.json()['id']}/terminar/"
+        self.client.force_authenticate(self.emp)
+        self.assertEqual(self.client.post(terminar).status_code, 403)
+        self.client.force_authenticate(self.sup)
+        self.assertEqual(self.client.post(terminar).json()["estado"], "TERMINADA")
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get(self.URL).status_code, 401)
+
+    def test_sin_descuento_en_el_cuerpo(self):
+        self.client.force_authenticate(self.admin)
+        datos = self._datos()
+        del datos["descuento_porcentaje"]
+        creada = self.client.post(self.URL, datos, format="json")
+        self.assertEqual(creada.status_code, 201, creada.content)
+        self.assertIsNone(creada.json()["descuento_porcentaje"])
+
+    def test_validaciones_y_no_estancada(self):
+        self.client.force_authenticate(self.admin)
+        self.assertIn("descuento_porcentaje",
+                      self.client.post(self.URL, self._datos(descuento_porcentaje=95), format="json").json())
+        ayer = (self.hoy - timedelta(days=1)).isoformat()
+        self.assertIn("fecha_fin", self.client.post(self.URL, self._datos(fecha_fin=ayer), format="json").json())
+        sin_stock = self.client.post(self.URL, self._datos(sucursal_id=self.norte.id), format="json")
+        self.assertEqual(sin_stock.status_code, 409)
+        self.assertIn("detail", sin_stock.json())
+        self.assertEqual(self.client.post(f"{self.URL}999/terminar/").status_code, 404)
+
+
+# --- Exportar reportes a Excel (HU25) ---
+
+from io import BytesIO as _BytesIO
+
+from openpyxl import load_workbook
+
+
+def _hoja(respuesta):
+    return load_workbook(_BytesIO(respuesta.content)).active
+
+
+def _filas(hoja):
+    return [list(f) for f in hoja.iter_rows(values_only=True)]
+
+
+class ExcelApiTests(APITestCase):
+    _mov = CierreDiarioApiTests._mov
+
+    def setUp(self):
+        CierreDiarioApiTests.setUp(self)
+        from django.utils import timezone
+        self.h.costo_unitario = Decimal("10")
+        self.h.save()
+        ahora = timezone.now()
+        self._mov("ENTRADA", 20, ahora - timedelta(days=80))
+        self._mov("SALIDA", 5, ahora - timedelta(days=50))
+        self._mov("SALIDA", 3, ahora)
+
+    def test_cierre_diario_en_excel_igual_que_la_pantalla(self):
+        self.client.force_authenticate(self.sup)
+        respuesta = self.client.get("/api/indicadores/cierre-diario/excel/")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta["Content-Type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        self.assertIn('attachment; filename="cierre-diario-central-', respuesta["Content-Disposition"])
+        filas = _filas(_hoja(respuesta))
+        self.assertEqual(filas[0][0], "Cierre diario")
+        self.assertEqual(filas[3][:4], ["Hora", "Tipo", "Código", "Herramienta"])
+        self.assertEqual(filas[4][1:4], ["Salida", "T-1", "Taladro"])
+        self.assertEqual(filas[-1][0], "Total de salidas del día")
+        self.assertEqual(filas[-1][6], 3)
+
+    def test_antiguedad_en_excel(self):
+        self.client.force_authenticate(self.admin)
+        hoja = _hoja(self.client.get("/api/indicadores/antiguedad/excel/"))
+        filas = _filas(hoja)
+        self.assertIn("Todas las sucursales", filas[1][0])
+        self.assertEqual(filas[4][:4], ["T-1", "Taladro", "Central", 12])
+        self.assertEqual((filas[4][7], filas[4][9]), ("No", 120.0))  # se vendió hoy
+        self.assertEqual(hoja.cell(row=5, column=10).number_format, "#,##0.00")
+
+    def test_abc_en_excel_para_todos(self):
+        self.client.force_authenticate(self.emp)
+        filas = _filas(_hoja(self.client.get("/api/indicadores/abc/excel/")))
+        self.assertEqual(filas[4][:4], ["A", "T-1", "Taladro", 8])
+        self.assertEqual(filas[-1][:4], ["Total", None, None, 8])
+
+    def test_reporte_vacio_no_genera_archivo(self):
+        # HU25 CA3: 409 con aviso, sin .xlsx.
+        self.client.force_authenticate(self.sup)
+        ayer = (self.hoy_la_paz() - timedelta(days=1)).isoformat()
+        for url, params in [("/api/indicadores/cierre-diario/excel/", {"fecha": ayer}),
+                            ("/api/indicadores/antiguedad/excel/", {"dias_minimos": 91})]:
+            respuesta = self.client.get(url, params)
+            self.assertEqual(respuesta.status_code, 409, url)
+            self.assertIn("vacío", respuesta.json()["detail"])
+        self.Movimiento.objects.all().delete()
+        self.h.delete()
+        self.assertEqual(self.client.get("/api/indicadores/abc/excel/").status_code, 409)
+
+    @staticmethod
+    def hoy_la_paz():
+        from django.utils import timezone
+        return timezone.localdate()
+
+    def test_mismos_permisos_que_el_reporte(self):
+        self.client.force_authenticate(self.emp)
+        self.assertEqual(self.client.get("/api/indicadores/cierre-diario/excel/").status_code, 403)
+        self.assertEqual(self.client.get("/api/indicadores/antiguedad/excel/").status_code, 403)
+        self.client.force_authenticate(self.sup)
+        otra = {"sucursal": self.norte.id}
+        self.assertEqual(self.client.get("/api/indicadores/cierre-diario/excel/", otra).status_code, 403)
+        self.assertEqual(self.client.get("/api/indicadores/antiguedad/excel/", otra).status_code, 403)
+        self.client.force_authenticate(self.admin)
+        self.assertIn("sucursal", self.client.get("/api/indicadores/cierre-diario/excel/").json())
+        self.client.force_authenticate(None)
+        self.assertEqual(self.client.get("/api/indicadores/abc/excel/").status_code, 401)

@@ -46,6 +46,12 @@ usuarios   1 ──< transferencias           (cod_usuario: quién la pidió; co
 usuarios   1 ──< historial_modificaciones (cod_usuario: autor del cambio, opcional)
 herramientas 1 ──< movimientos            (movimientos.cod_herramienta)
 herramientas 1 ──< transferencias         (transferencias.cod_herramienta)
+herramientas 1 ──< historial_costos       (historial_costos.cod_herramienta)
+herramientas 1 ──< promociones            (promociones.cod_herramienta)
+sucursales   1 ──< promociones            (promociones.cod_sucursal)
+usuarios     1 ──< promociones            (cod_usuario: quién la creó)
+proveedores  1 ──< herramientas           (herramientas.cod_proveedor, opcional)
+usuarios     1 ──< historial_costos       (cod_usuario: quién cambió el costo)
 movimientos  1 ── 0..1 transferencias     (cod_movimiento_salida / cod_movimiento_entrada, únicos)
 ```
 
@@ -99,8 +105,64 @@ Modelo `catalogo.Herramienta`. Catálogo y datos de entrada de EOQ/ROP.
 | `costo_pedido_herramienta` | `costo_pedido` | numeric(12,2) | sí | S de EOQ |
 | `costo_almacenamiento_herramienta` | `costo_almacenamiento_unitario` | numeric(12,2) | sí | H de EOQ |
 | `dias_entrega_herramienta` | `tiempo_entrega_dias` | integer | sí | ≥ 0 (lead time del ROP) |
+| `costo_unitario_herramienta` | `costo_unitario` | numeric(12,2) | sí | > 0 (lo valida el caso de uso); HU7, cada cambio va a `historial_costos` |
+| `cod_proveedor` | `proveedor` | bigint | sí | **FK** → `proveedores.cod_proveedor` (HU8; solo se asigna uno activo) |
+| `imagen_herramienta` | `imagen` | varchar(255) | sí | ruta de la foto dentro de `MEDIA_ROOT` (`productos/…`); obligatoria al dar de alta (lo exige la API), nula en las herramientas anteriores; JPG, PNG o WebP de hasta 5 MB |
 | `fecha_registro_herramienta` | `creado_en` | timestamptz | no | se fija al crear |
 | `fecha_actualizacion_herramienta` | `actualizado_en` | timestamptz | no | se actualiza en cada guardado |
+
+## proveedores
+Modelo `proveedores.Proveedor` (HU8). Directorio de proveedores. Un
+proveedor con herramientas asociadas no se elimina: se desactiva.
+
+| Columna | ← Campo Python | Tipo | Nulo | Clave / restricción |
+|---|---|---|---|---|
+| `cod_proveedor` | `id` | bigint (identity) | no | **PK** |
+| `nombre_proveedor` | `nombre` | varchar(150) | no | **UNIQUE** (además, único sin distinguir mayúsculas, lo valida el caso de uso) |
+| `telefono_proveedor` | `telefono` | varchar(30) | no | 7 a 15 dígitos (caso de uso) |
+| `email_proveedor` | `email` | varchar(254) | no (vacío permitido) | |
+| `estado_proveedor` | `activo` | boolean | no | default `true` |
+| `fecha_registro_proveedor` | `creado_en` | timestamptz | no | se fija al crear |
+| `fecha_actualizacion_proveedor` | `actualizado_en` | timestamptz | no | se actualiza en cada guardado |
+
+## historial_costos
+Modelo `catalogo.HistorialCosto` (HU7). Una fila por cada vez que se carga o
+cambia el costo unitario de una herramienta. Solo se insertan filas.
+
+| Columna | ← Campo Python | Tipo | Nulo | Clave / restricción |
+|---|---|---|---|---|
+| `cod_historial_costo` | `id` | bigint (identity) | no | **PK** |
+| `cod_herramienta` | `herramienta` | bigint | no | **FK** → `herramientas.cod_herramienta`; índice `historial_costo_herr_fecha_idx` (con la fecha, descendente) |
+| `costo_anterior_historial_costo` | `costo_anterior` | numeric(12,2) | sí | null la primera vez que se carga el costo |
+| `costo_nuevo_historial_costo` | `costo_nuevo` | numeric(12,2) | no | |
+| `cod_usuario` | `usuario` | bigint | no | **FK** → `usuarios.cod_usuario` (quién lo cambió) |
+| `fecha_historial_costo` | `fecha` | timestamptz | no | se fija al crear |
+
+## promociones
+Modelo `catalogo.Promocion` (HU23, sprint 4, migraciones `catalogo.0007`
+y `0008`). Etiqueta de promoción, con descuento opcional, sobre una
+herramienta **estancada** en una sucursal. No se edita ni se borra: se
+quita con `activa_promocion = false`. Reglas del caso de uso
+(`indicadores/use_cases/promociones.py`): la pone o la quita el Supervisor
+en su sucursal o el Administrador en cualquiera; solo si la herramienta tiene stock y más de 40 días sin venta
+en esa sucursal; una sola vigente por herramienta y sucursal. Auditada en
+`historial_modificaciones`.
+
+| Columna | ← Campo Python | Tipo | Nulo | Clave / restricción |
+|---|---|---|---|---|
+| `cod_promocion` | `id` | bigint (identity) | no | **PK** |
+| `cod_herramienta` | `herramienta` | bigint | no | **FK** → `herramientas.cod_herramienta`; índice `promocion_herr_suc_idx` (con la sucursal) |
+| `cod_sucursal` | `sucursal` | bigint | no | **FK** → `sucursales.cod_sucursal` |
+| `descuento_promocion` | `descuento_porcentaje` | smallint | sí | Opcional (NULL = etiqueta sin descuento). CHECK `promocion_descuento_1_a_90` (1 a 90 %) |
+| `fecha_inicio_promocion` | `fecha_inicio` | date | no | el día en que se crea (hora de La Paz) |
+| `fecha_fin_promocion` | `fecha_fin` | date | no | inclusive; CHECK `promocion_fin_no_antes_de_inicio` |
+| `motivo_promocion` | `motivo` | varchar(255) | no | puede ser vacío |
+| `activa_promocion` | `activa` | boolean | no | default true; false = terminada antes de tiempo |
+| `cod_usuario` | `usuario` | bigint | no | **FK** → `usuarios.cod_usuario` (quién la creó) |
+| `fecha_registro_promocion` | `creado_en` | timestamptz | no | se fija al crear |
+
+Vigente = `activa_promocion` y hoy entre `fecha_inicio_promocion` y
+`fecha_fin_promocion` (lo calcula el caso de uso, no se guarda).
 
 ## movimientos
 Modelo `movimientos.Movimiento`. Entradas, salidas, ajustes y los
