@@ -203,3 +203,12 @@ class HistorialApiTests(MediaTemporal, APITestCase):
         self.assertEqual(self.client.get(URL, {"origen": "OTRO"}).status_code, 400)
         opciones = self.client.get(f"{URL}opciones/").json()["origenes"]
         self.assertEqual([o["valor"] for o in opciones], ["USUARIOS", "COMANDOS"])
+
+    def test_opciones_sin_tablas_repetidas(self):
+        # Varias filas de la misma tabla en fechas distintas: una sola opción.
+        for dias in range(3):
+            fila = HistorialModificacion.objects.create(tabla_afectada="usuarios.Sucursal", registro_id="9", accion="UPDATE")
+            HistorialModificacion.objects.filter(pk=fila.pk).update(fecha=timezone.now() - timedelta(days=dias))
+        valores = [t["valor"] for t in self.client.get(f"{URL}opciones/").json()["tablas"]]
+        self.assertEqual(len(valores), len(set(valores)))
+        self.assertEqual(valores.count("usuarios.Sucursal"), 1)

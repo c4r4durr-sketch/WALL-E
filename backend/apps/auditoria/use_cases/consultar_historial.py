@@ -31,7 +31,7 @@ ETIQUETA_ACCION = {
 }
 ETIQUETA_ORIGEN = {
     OrigenHistorial.USUARIOS: "Usuarios",
-    OrigenHistorial.COMANDOS: "Comandos (cargar_demo y otros)",
+    OrigenHistorial.COMANDOS: "Comandos",
 }
 
 

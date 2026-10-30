@@ -61,7 +61,9 @@ class HistorialRepositoryDjango(HistorialRepository):
         return total, [_a_entidad(m) for m in consulta[desde:desde + limite]]
 
     def tablas(self) -> list[OpcionFiltro]:
-        etiquetas = HistorialModificacion.objects.values_list("tabla_afectada", flat=True).distinct()
+        # order_by() vacío: el orden por defecto del modelo (-fecha) entraría
+        # en el SELECT DISTINCT y repetiría cada tabla una vez por fecha.
+        etiquetas = HistorialModificacion.objects.order_by().values_list("tabla_afectada", flat=True).distinct()
         return sorted(
             (OpcionFiltro(e, _nombre_de_tabla(e)) for e in etiquetas), key=lambda o: o.texto
         )
