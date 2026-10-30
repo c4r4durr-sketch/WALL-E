@@ -7,12 +7,20 @@
 
 ## Pendientes de decidir
 
-1. **Diccionario de datos de 16 tablas.** No está en el repo ni en el
-   informe actual (los capítulos de diseño tienen marcadores "ACA PONES").
-   `docs/DICCIONARIO_DE_DATOS.md` documenta las tablas **reales** (hoy 9:
-   se sumaron `proveedores` y `promociones`).
-   Al pasar el diccionario al informe, partir de ese archivo, no del script
-   v7.
+1. **Diccionario de datos: v7 (16 tablas) vs. base real (18).** Ver
+   `docs/COMPARACION_DICCIONARIO_v7.md`. Coinciden 7 tablas, con columnas
+   distintas: `sucursales`, `usuarios`, `proveedores`, `herramientas`,
+   `transferencias`, `promociones` e `historial_modificaciones`. Del v7 no
+   existen 9: tres tienen equivalente (`costos` → `historial_costos`;
+   `ingresos_inventario` y `salidas_inventario` → `movimientos`), dos no se
+   guardan (`calculo_eoq_rop` se calcula al consultar; `sesiones_usuario`
+   no hace falta con JWT), `presentaciones` es el campo `tipo_unidad`, y
+   `marcas`, `categorias` y `lotes_compra` no se implementaron. La base
+   suma `historial_costos`, `movimientos` y 9 tablas internas de Django.
+   En todas, las claves son bigint autoincremental, no varchar(8).
+   Recomendación: el diccionario del informe sale de
+   `docs/DICCIONARIO_DE_DATOS.md` (las 9 tablas del dominio), y el v7 se
+   presenta como diseño inicial con la tabla de equivalencias.
 
 2. **¿Dónde viven los reportes?** El informe habla de un "Módulo de
    Reportes y Auditoría", pero los 7 módulos del backend no incluyen
