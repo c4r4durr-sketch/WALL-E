@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { KeyRound } from 'lucide-react'
-import { Aviso, Button, Field, Input } from '../../../components/ui'
+import { Aviso, Button, Field, PasswordInput } from '../../../components/ui'
 import { erroresPorCampo, mensajeDeError } from '../../../shared/api/errores'
 import { useRestablecerPassword } from '../hooks/useUsuarios'
 import type { Usuario } from '../api/usuariosApi'
@@ -68,10 +68,10 @@ export function RestablecerPasswordForm({ usuario, onTerminar }: Props) {
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div className="space-y-4 rounded-card bg-surf p-5 shadow-sh">
         <Field etiqueta="Contraseña nueva" ayuda={`Mínimo ${LARGO_MINIMO} caracteres; no solo números ni parecida al usuario.`}>
-          <Input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
+          <PasswordInput autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
         </Field>
         <Field etiqueta="Repetir contraseña">
-          <Input type="password" autoComplete="new-password" value={confirmacion} onChange={(e) => setConfirmacion(e.target.value)} />
+          <PasswordInput autoComplete="new-password" value={confirmacion} onChange={(e) => setConfirmacion(e.target.value)} />
         </Field>
       </div>
 

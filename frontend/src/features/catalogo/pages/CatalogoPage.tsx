@@ -166,7 +166,7 @@ export function CatalogoPage() {
           placeholder="Buscar por código, nombre, modelo o proveedor"
           value={buscar}
           onChange={(e) => setBuscar(e.target.value)}
-          className="w-[340px]"
+          className="w-[380px]"
         />
         <SegmentedControl<Filtro>
           etiqueta="Filtrar herramientas"

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, UserPlus } from 'lucide-react'
-import { Aviso, Button, Card, Field, Input, PageHeader, Select, clasesBoton } from '../../../components/ui'
+import { Aviso, Button, Card, Field, Input, PageHeader, PasswordInput, Select, clasesBoton } from '../../../components/ui'
 import { Rol } from '../../../shared/types/roles'
 import { useSucursales } from '../hooks/useSucursales'
 import { useCrearUsuario } from '../hooks/useCrearUsuario'
@@ -120,7 +120,7 @@ export function CrearUsuarioPage() {
               <Input autoComplete="off" value={form.username} onChange={(e) => setCampo('username', e.target.value)} />
             </Field>
             <Field etiqueta="Contraseña" error={visibles.password}>
-              <Input type="password" autoComplete="new-password" value={form.password} onChange={(e) => setCampo('password', e.target.value)} />
+              <PasswordInput autoComplete="new-password" value={form.password} onChange={(e) => setCampo('password', e.target.value)} />
             </Field>
             <Field etiqueta="Nombre" error={visibles.first_name}>
               <Input value={form.first_name} onChange={(e) => setCampo('first_name', e.target.value)} />

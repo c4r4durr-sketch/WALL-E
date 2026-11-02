@@ -5,14 +5,17 @@ Pruebas del catálogo:
   - la API completa (CRUD, validaciones y permisos por rol);
   - HU7: costo unitario con historial (solo el Administrador lo cambia);
   - foto del producto: obligatoria en el alta, JPG/PNG/WebP de hasta 5 MB;
-  - comando cargar_demo (datos de ejemplo para la demo).
+  - comando cargar_demo (datos de ejemplo para la demo) y su opción
+    --usuarios (cuentas de demo por sucursal).
 
 Correr con: python manage.py test apps.catalogo
 """
 
 import io
+import os
 import shutil
 import tempfile
+from unittest import mock
 from dataclasses import replace
 from typing import Optional
 
@@ -49,6 +52,7 @@ from .domain.repositories import HerramientaRepository, HistorialCostoRepository
 from .infrastructure.models import Herramienta as HerramientaModel
 from .infrastructure.models import HistorialCosto, Promocion
 from .infrastructure.repositories import HerramientaRepositoryDjango, PromocionRepositoryDjango
+from .management.commands.cargar_demo import sufijo_de_sucursal
 from .use_cases import gestionar_herramientas as casos
 
 URL = "/api/catalogo/herramientas/"
@@ -674,7 +678,7 @@ class CargarDemoTests(MediaTemporal, TestCase):
     def test_sin_reiniciar_no_hace_nada_si_ya_hay_herramientas(self):
         salida = io.StringIO()
         call_command("cargar_demo", stdout=salida)
-        self.assertIn("no se hizo nada", salida.getvalue())
+        self.assertIn("el inventario no se tocó", salida.getvalue())
         self.assertEqual(self._conteo(), self.conteo_despues)
 
     def test_reiniciar_dos_veces_deja_lo_mismo(self):
@@ -692,3 +696,90 @@ class CargarDemoTests(MediaTemporal, TestCase):
         with self.assertRaises(CommandError):
             call_command("cargar_demo", "--reiniciar", stdout=io.StringIO())
         self.assertEqual(self._conteo(), self.conteo_despues)
+
+
+@mock.patch.dict(os.environ, {"DEMO_PASSWORD": "Herramientas-Demo-2026"})
+class CargarDemoUsuariosTests(TestCase):
+    """cargar_demo --usuarios: un Supervisor y un Empleado por sucursal
+    activa, con la contraseña de DEMO_PASSWORD, sin tocar las cuentas que
+    ya existen."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.central = Sucursal.objects.create(nombre="Sucursal Central")
+        cls.dos = Sucursal.objects.create(nombre="Sucursal 2")
+        Sucursal.objects.create(nombre="Cerrada", activa=False)
+        cls.admin = Usuario.objects.create_user("admin_demo", password="x", rol="ADMINISTRADOR")
+        # Ya hay inventario: el comando solo crea las cuentas.
+        HerramientaModel.objects.create(codigo="YA-HAY", nombre="Herramienta previa")
+
+    def _cargar(self):
+        salida = io.StringIO()
+        call_command("cargar_demo", "--usuarios", stdout=salida)
+        return salida.getvalue()
+
+    @staticmethod
+    def _cuentas():
+        return list(Usuario.objects.order_by("id").values_list(
+            "username", "password", "rol", "sucursal_id", "first_name", "last_name", "is_active"))
+
+    def test_sufijo_de_sucursal(self):
+        self.assertEqual(sufijo_de_sucursal("Sucursal Central", 1), "central")
+        self.assertEqual(sufijo_de_sucursal("Sucursal 2", 2), "2")
+        self.assertEqual(sufijo_de_sucursal("Zona Norte - Ñuñoa", 3), "zona_norte_nunoa")
+        self.assertEqual(sufijo_de_sucursal("Sucursal", 7), "7")
+
+    def test_crea_supervisor_y_empleado_por_sucursal_activa(self):
+        salida = self._cargar()
+        creadas = {u.username: u for u in Usuario.objects.exclude(pk=self.admin.pk)}
+        self.assertEqual(set(creadas), {"supervisor_central", "empleado_central", "supervisor_2", "empleado_2"})
+        self.assertEqual((creadas["supervisor_central"].rol, creadas["supervisor_central"].sucursal_id),
+                         ("SUPERVISOR", self.central.id))
+        self.assertEqual((creadas["empleado_2"].rol, creadas["empleado_2"].sucursal_id), ("EMPLEADO", self.dos.id))
+        for usuario in creadas.values():
+            self.assertTrue(usuario.is_active)
+            self.assertTrue(usuario.check_password("Herramientas-Demo-2026"))
+        self.assertIn("Cuenta creada: supervisor_central", salida)
+        # Quedan en la auditoría, firmadas como cargar_demo, sin la contraseña.
+        altas = HistorialModificacion.objects.filter(tabla_afectada="usuarios.Usuario", accion="INSERT").exclude(
+            registro_id=str(self.admin.pk))
+        self.assertEqual(set(altas.values_list("usuario_username", flat=True)), {"cargar_demo"})
+        self.assertEqual(altas.count(), 4)
+        for datos in altas.values_list("datos_nuevos", flat=True):
+            self.assertNotIn("password", datos)
+        self.assertEqual(HerramientaModel.objects.count(), 1)
+
+    def test_no_toca_las_cuentas_que_ya_existen(self):
+        Usuario.objects.create_user("Supervisor_Central", password="otra", rol="EMPLEADO", sucursal=self.dos)
+        antes = self._cuentas()
+        salida = self._cargar()
+        self.assertIn("ya existía: no se modificó", salida)
+        self.assertEqual(self._cuentas()[: len(antes)], antes)
+        self.assertFalse(Usuario.objects.filter(username="supervisor_central").exists())
+        self.assertEqual(Usuario.objects.count(), len(antes) + 3)
+
+        # Una segunda corrida no crea ni cambia nada.
+        despues = self._cuentas()
+        self._cargar()
+        self.assertEqual(self._cuentas(), despues)
+
+    def test_sin_demo_password_se_detiene_sin_crear_nada(self):
+        antes = self._cuentas()
+        with mock.patch.dict(os.environ, {"DEMO_PASSWORD": ""}), self.assertRaisesMessage(CommandError, "DEMO_PASSWORD"):
+            self._cargar()
+        del os.environ["DEMO_PASSWORD"]
+        with self.assertRaisesMessage(CommandError, "DEMO_PASSWORD"):
+            self._cargar()
+        self.assertEqual(self._cuentas(), antes)
+
+    def test_contrasena_debil_no_crea_ninguna(self):
+        antes = self._cuentas()
+        with mock.patch.dict(os.environ, {"DEMO_PASSWORD": "12345678"}), self.assertRaises(CommandError):
+            self._cargar()
+        self.assertEqual(self._cuentas(), antes)
+
+    def test_sin_administrador_activo_se_detiene(self):
+        Usuario.objects.filter(pk=self.admin.pk).update(is_active=False)
+        with self.assertRaisesMessage(CommandError, "Administrador"):
+            self._cargar()
+        self.assertEqual(Usuario.objects.count(), 1)

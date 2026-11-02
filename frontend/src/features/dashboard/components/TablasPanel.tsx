@@ -6,6 +6,7 @@ import { CeldaHerramienta } from '../../catalogo/components/CeldaHerramienta'
 import { useFotos } from '../../catalogo/hooks/useFotos'
 import { EtiquetaPromocion } from '../../promociones/components/EtiquetaPromocion'
 import { usePromocionesVigentes } from '../../promociones/hooks/usePromociones'
+import { decimal } from '../../../shared/formato'
 import type { AlertaReorden, HerramientaEstancada } from '../api/indicadoresApi'
 
 // Detalle de las alertas del panel y de la pantalla de reposición. Tablas
@@ -77,7 +78,7 @@ export function TablaAlertasReorden({ alertas, sinDatos, limite }: PropsAlertas)
               <Tr key={a.herramienta_id}>
                 <Td><CeldaHerramienta codigo={a.codigo} nombre={a.nombre} imagen={foto(a.herramienta_id)} /></Td>
                 <Td numerico className="font-semibold text-warn">{a.stock_total}</Td>
-                <Td numerico>{a.punto_reorden}</Td>
+                <Td numerico>{decimal(a.punto_reorden)}</Td>
                 <Td numerico>
                   {a.pedido_sugerido === null ? (
                     <span className="text-xs text-muted">Faltan costos en el catálogo</span>

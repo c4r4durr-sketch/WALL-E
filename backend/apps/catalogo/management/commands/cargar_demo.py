@@ -1,5 +1,5 @@
 """
-python manage.py cargar_demo [--reiniciar]
+python manage.py cargar_demo [--reiniciar] [--usuarios]
 
 Carga datos de ejemplo de inventario para probar y para la demo: 4
 proveedores, 20 herramientas de ferretería (con foto generada por código y
@@ -11,6 +11,11 @@ promoción una herramienta estancada.
   - Con --reiniciar primero borra el inventario: herramientas y sus fotos,
     movimientos, transferencias, promociones, historial de costos y
     proveedores. Nunca toca usuarios, sucursales ni la auditoría.
+  - Con --usuarios, antes del inventario crea un Supervisor y un Empleado
+    por sucursal activa (supervisor_central, empleado_central...) si no
+    existen. La contraseña sale de la variable de entorno DEMO_PASSWORD
+    (sin ella el comando se detiene) y pasa por la misma política que en
+    la API. Las cuentas que ya existen no se modifican.
 
 Todo pasa por los casos de uso (registrar_herramienta, registrar_salida,
 completar_transferencia, crear_promocion...), así que se cumplen las mismas
@@ -32,7 +37,10 @@ da los mismos datos. Está pensada para que se vean resultados:
 """
 
 import math
+import os
 import random
+import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
@@ -70,7 +78,13 @@ from apps.transferencias.infrastructure.repositories import TransferenciaReposit
 from apps.transferencias.use_cases import gestionar_transferencias
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.domain.value_objects import Rol
-from apps.usuarios.infrastructure.repositories import SucursalRepositoryDjango, UsuarioRepositoryDjango
+from apps.usuarios.domain.exceptions import DatosUsuarioInvalidosError
+from apps.usuarios.infrastructure.repositories import (
+    SucursalRepositoryDjango,
+    UsuarioRepositoryDjango,
+    ValidadorPasswordDjango,
+)
+from apps.usuarios.use_cases.gestionar_usuarios import crear_usuario
 
 from ._dibujos_demo import dibujar
 
@@ -139,6 +153,17 @@ PROMOCION = {"codigo": "SIE-CIR", "descuento_porcentaje": 25, "dias": 30,
 TRANSFERENCIA_PENDIENTE = ("DES-SET", 2)  # (código, hace cuántos días)
 TRANSFERENCIA_RECHAZADA = ("LLA-AJU10", 20)
 MOTIVO_RECHAZO = "La sucursal de destino ya repuso con el proveedor."
+# Cuentas de demo (--usuarios): una por rol y sucursal activa.
+VARIABLE_PASSWORD = "DEMO_PASSWORD"
+ROLES_DEMO = ((Rol.SUPERVISOR, "supervisor", "Supervisor"), (Rol.EMPLEADO, "empleado", "Empleado"))
+
+
+def sufijo_de_sucursal(nombre: str, sucursal_id: int) -> str:
+    """"Sucursal Central" -> "central", "Sucursal 2" -> "2": sin la palabra
+    "sucursal", sin tildes y con guiones bajos. Si no queda nada, el id."""
+    texto = unicodedata.normalize("NFKD", nombre).encode("ascii", "ignore").decode().lower()
+    texto = re.sub(r"\bsucursal\b", " ", texto)
+    return re.sub(r"[^a-z0-9]+", "_", texto).strip("_") or str(sucursal_id)
 
 
 @dataclass(frozen=True)
@@ -242,8 +267,16 @@ class Command(BaseCommand):
             action="store_true",
             help="Borra antes el inventario (no usuarios, sucursales ni auditoría).",
         )
+        parser.add_argument(
+            "--usuarios",
+            action="store_true",
+            help=f"Crea un Supervisor y un Empleado por sucursal si no existen (contraseña en {VARIABLE_PASSWORD}).",
+        )
 
-    def handle(self, *args, reiniciar=False, **opciones):
+    def handle(self, *args, reiniciar=False, usuarios=False, **opciones):
+        if usuarios:
+            self._crear_usuarios_demo()
+
         self.herramientas = HerramientaRepositoryDjango()
         self.historial = HistorialCostoRepositoryDjango()
         self.proveedores = ProveedorRepositoryDjango()
@@ -254,7 +287,7 @@ class Command(BaseCommand):
 
         if not reiniciar and HerramientaModel.objects.exists():
             self.stdout.write(self.style.WARNING(
-                "Ya hay herramientas cargadas: no se hizo nada. Usa --reiniciar para reemplazar el inventario."
+                "Ya hay herramientas cargadas: el inventario no se tocó. Usa --reiniciar para reemplazarlo."
             ))
             return
 
@@ -304,6 +337,50 @@ class Command(BaseCommand):
             encargado = de_la_sucursal(sucursal.id, Rol.SUPERVISOR) or self.admin
             self.encargado.append(encargado)
             self.vendedor.append(de_la_sucursal(sucursal.id, Rol.EMPLEADO) or encargado)
+
+    def _crear_usuarios_demo(self) -> None:
+        """Crea las cuentas que falten con el caso de uso de la API (mismas
+        validaciones y auditoría). Todo o nada: si una no pasa, no queda
+        ninguna creada."""
+        password = os.environ.get(VARIABLE_PASSWORD, "")
+        if not password:
+            raise CommandError(
+                f"Falta la variable de entorno {VARIABLE_PASSWORD} con la contraseña de las cuentas de demo. "
+                "No se creó ninguna cuenta."
+            )
+        repo, sucursales = UsuarioRepositoryDjango(), SucursalRepositoryDjango()
+        activas = [s for s in sucursales.listar() if s.activa]
+        if not activas:
+            raise CommandError("No hay sucursales activas: crea al menos una antes de cargar la demo.")
+        administradores = sorted(
+            (u for u in repo.listar() if u.activo and u.rol == Rol.ADMINISTRADOR), key=lambda u: u.id
+        )
+        if not administradores:
+            raise CommandError("No hay un Administrador activo: hace falta uno para crear las cuentas.")
+        admin = self._actor(administradores[0])
+
+        creadas, existentes = [], []
+        try:
+            with registrar_como(AUTOR_CARGAR_DEMO), transaction.atomic():
+                for sucursal in activas:
+                    sufijo = sufijo_de_sucursal(sucursal.nombre, sucursal.id)
+                    for rol, prefijo, titulo in ROLES_DEMO:
+                        username = f"{prefijo}_{sufijo}"
+                        if repo.obtener_por_username(username) is not None:
+                            existentes.append(username)
+                            continue
+                        datos = {"username": username, "nombres": titulo, "apellidos": sucursal.nombre,
+                                 "rol": rol, "sucursal_id": sucursal.id}
+                        crear_usuario(admin, repo, sucursales, ValidadorPasswordDjango(), datos, password)
+                        creadas.append(f"{username} ({titulo}, {sucursal.nombre})")
+        except DatosUsuarioInvalidosError as error:
+            mensajes = " ".join(m for lista in error.errores.values() for m in lista)
+            raise CommandError(f"No se crearon las cuentas de demo: {mensajes}") from error
+
+        for cuenta in creadas:
+            self.stdout.write(self.style.SUCCESS(f"Cuenta creada: {cuenta}"))
+        for username in existentes:
+            self.stdout.write(self.style.WARNING(f"{username} ya existía: no se modificó."))
 
     @staticmethod
     def _actor(usuario) -> Actor:

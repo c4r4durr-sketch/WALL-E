@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { motion, useReducedMotion } from 'motion/react'
 import { LogIn } from 'lucide-react'
-import { Aviso, Button, Field, Input } from '../../../components/ui'
+import { Aviso, Button, Field, Input, PasswordInput } from '../../../components/ui'
 import { TRANSICION } from '../../../components/ui/movimiento'
 import { useLogin } from '../hooks/useLogin'
 
@@ -60,8 +60,7 @@ export function LoginPage() {
             />
           </Field>
           <Field etiqueta="Contraseña">
-            <Input
-              type="password"
+            <PasswordInput
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}

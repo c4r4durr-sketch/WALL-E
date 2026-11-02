@@ -24,12 +24,12 @@ export function TransferenciasPage() {
         subtitulo="Mover stock entre sucursales: se solicita y luego se completa o se rechaza."
       />
       {herramientas && sucursales ? (
-        <div className="grid grid-cols-[400px_minmax(0,1fr)] items-start gap-5">
+        <div className="grid grid-cols-[360px_minmax(0,1fr)] items-start gap-5">
           <SolicitudForm herramientas={herramientas} sucursales={sucursales} origenFijo={origenFijo} />
           <TablaTransferencias herramientas={herramientas} sucursales={sucursales} puedeResolver={puedeResolver} />
         </div>
       ) : (
-        <div className="grid grid-cols-[400px_minmax(0,1fr)] items-start gap-5">
+        <div className="grid grid-cols-[360px_minmax(0,1fr)] items-start gap-5">
           <Cargando>
             <div className="space-y-4 rounded-[26px] bg-surf p-6 shadow-sh">
               <Skeleton className="h-4 w-1/2" />

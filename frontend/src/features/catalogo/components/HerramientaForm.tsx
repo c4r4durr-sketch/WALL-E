@@ -179,7 +179,8 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
           {campo('costo_unitario', 'Costo unitario de compra', {
             type: 'number',
             step: '0.01',
-            opcional: true,
+            // HU7: una vez cargado no se puede quitar, solo cambiar.
+            opcional: herramienta?.costo_unitario == null,
             disabled: !puedeCambiarCosto,
             ayuda: puedeCambiarCosto
               ? 'Cada cambio queda en el historial de costos.'

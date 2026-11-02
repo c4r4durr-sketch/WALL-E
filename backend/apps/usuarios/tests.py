@@ -8,7 +8,10 @@ contraseña), con repositorios falsos y contra la API.
 Correr con: python manage.py test apps.usuarios
 """
 
+import re
+
 from django.test import SimpleTestCase
+from django.urls import URLResolver, get_resolver
 from rest_framework.test import APITestCase
 
 from .domain.reglas import requiere_sucursal
@@ -383,3 +386,34 @@ class CuentasApiTests(APITestCase):
     def test_no_se_eliminan_cuentas(self):
         self.assertEqual(self.client.delete(self._url(self.empleado)).status_code, 405)
         self.assertTrue(Usuario.objects.filter(pk=self.empleado.pk).exists())
+
+
+class TodasLasVistasExigenSesionTests(APITestCase):
+    """Revisión de seguridad: sin token, toda ruta de /api/ responde 401
+    para cualquier método. Las únicas públicas son el login y la
+    renovación del token (y la documentación, solo con DEBUG)."""
+
+    PUBLICAS = {"api/token/", "api/token/refresh/", "api/schema/", "api/docs/"}
+
+    def _rutas(self, patrones, prefijo=""):
+        for patron in patrones:
+            ruta = prefijo + str(patron.pattern)
+            if isinstance(patron, URLResolver):
+                yield from self._rutas(patron.url_patterns, ruta)
+            else:
+                yield ruta
+
+    def test_sin_token_todo_es_401(self):
+        revisadas = 0
+        for ruta in self._rutas(get_resolver().url_patterns):
+            # Las variantes con sufijo de formato (.json) son la misma vista.
+            if not ruta.startswith("api/") or ruta in self.PUBLICAS or "format" in ruta:
+                continue
+            # <int:pk>, (?P<pk>[^/.]+), formatos .json... -> valores de ejemplo
+            url = "/" + re.sub(r"<[^>]+>|\(\?P<[^>]+>[^)]+\)", "1", ruta)
+            url = url.replace("^", "").replace("$", "")
+            for metodo in ("get", "post", "put", "patch", "delete"):
+                respuesta = getattr(self.client, metodo)(url)
+                self.assertEqual(respuesta.status_code, 401, f"{metodo.upper()} {url}")
+            revisadas += 1
+        self.assertGreater(revisadas, 20)
