@@ -3,6 +3,7 @@ import { BarChart3, ChevronRight } from 'lucide-react'
 import { Card, CardHeader, EmptyState, SegmentedControl, Table, THead, Td, Th, Tr, cx } from '../../../components/ui'
 import { CeldaHerramienta } from '../../catalogo/components/CeldaHerramienta'
 import { useFotos } from '../../catalogo/hooks/useFotos'
+import { decimal } from '../../../shared/formato'
 import type { ClasificacionABC } from '../api/indicadoresApi'
 
 // Clasificación ABC (tabla, no gráfico: lo que se busca es qué herramienta
@@ -113,8 +114,8 @@ export function TablaABC({ filas, onSeleccionar }: Props) {
                   <Td><Letra clase={f.clase} /></Td>
                   <Td><CeldaHerramienta codigo={f.codigo} nombre={f.nombre} imagen={foto(f.herramienta_id)} /></Td>
                   <Td numerico className="font-semibold">{f.unidades_vendidas}</Td>
-                  <Td numerico>{f.porcentaje.toFixed(1)} %</Td>
-                  <Td numerico>{f.porcentaje_acumulado.toFixed(1)} %</Td>
+                  <Td numerico>{decimal(f.porcentaje, 1)} %</Td>
+                  <Td numerico>{decimal(f.porcentaje_acumulado, 1)} %</Td>
                   <Td className="w-10 text-muted"><ChevronRight size={16} aria-hidden /></Td>
                 </Tr>
               ))}

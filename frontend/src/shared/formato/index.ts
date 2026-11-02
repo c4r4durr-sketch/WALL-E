@@ -59,3 +59,9 @@ export function sumarDias(isoFecha: string, dias: number): string {
 export function monto(valor: number): string {
   return montoFmt.format(valor)
 }
+
+// Cifras con decimales con la coma de "es" (12,88; 41,2), con a lo más
+// `decimales` dígitos después de la coma.
+export function decimal(valor: number, decimales = 2): string {
+  return valor.toLocaleString('es', { maximumFractionDigits: decimales })
+}

@@ -21,7 +21,9 @@ env = environ.Env(
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
-SECRET_KEY = env("DJANGO_SECRET_KEY", default="django-insecure-change-me-in-.env")
+# Sin valor por defecto: si falta en .env, Django no arranca (antes caía en
+# una clave conocida y nadie se enteraba).
+SECRET_KEY = env("DJANGO_SECRET_KEY")
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
@@ -171,6 +173,11 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "API de inventario para importadora de herramientas (2 sucursales).",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    # La documentación (/api/schema/, /api/docs/) es pública solo en
+    # desarrollo; con DEBUG=False pide sesión como el resto de la API.
+    "SERVE_PERMISSIONS": [
+        "rest_framework.permissions.AllowAny" if DEBUG else "rest_framework.permissions.IsAuthenticated"
+    ],
 }
 
 # CORS: el frontend (Vite, puerto 5173) corre en un origen distinto al

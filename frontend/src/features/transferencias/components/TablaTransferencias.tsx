@@ -59,8 +59,9 @@ function FilaAcciones({ t }: { t: Transferencia }) {
 
   return (
     <div className="space-y-1.5 py-1">
+      {/* Apilado: la tabla comparte el ancho con el formulario de solicitud. */}
       {rechazando ? (
-        <div className="flex items-center gap-2">
+        <div className="flex w-44 flex-col gap-1.5">
           <Input
             aria-label="Motivo del rechazo"
             value={motivo}
@@ -68,18 +69,20 @@ function FilaAcciones({ t }: { t: Transferencia }) {
             placeholder="Motivo del rechazo"
             autoFocus
             onChange={(e) => { setMotivo(e.target.value); rechazar.reset() }}
-            className="h-8! min-w-40 text-xs"
+            className="h-8! text-xs"
           />
-          <Button tamano="sm" peligro disabled={!motivo.trim()} cargando={rechazar.isPending}
-            onClick={() => rechazar.mutate({ id: t.id, motivo: motivo.trim() })}>
-            Rechazar
-          </Button>
-          <Button tamano="sm" variante="ghost" onClick={() => { setRechazando(false); rechazar.reset() }}>
-            Cancelar
-          </Button>
+          <div className="flex gap-1.5">
+            <Button tamano="sm" peligro disabled={!motivo.trim()} cargando={rechazar.isPending}
+              onClick={() => rechazar.mutate({ id: t.id, motivo: motivo.trim() })}>
+              Rechazar
+            </Button>
+            <Button tamano="sm" variante="ghost" onClick={() => { setRechazando(false); rechazar.reset() }}>
+              Cancelar
+            </Button>
+          </div>
         </div>
       ) : (
-        <div className="flex gap-2">
+        <div className="flex flex-col items-stretch gap-1.5">
           <Button tamano="sm" disabled={ocupado} cargando={completar.isPending} icono={<Check size={14} aria-hidden />}
             onClick={() => completar.mutate(t.id)}>
             Completar
@@ -146,11 +149,12 @@ export function TablaTransferencias({ herramientas, sucursales, puedeResolver }:
               const h = herramienta(t.herramienta)
               return (
                 <Tr key={t.id}>
-                  <Td className="max-w-[240px]">
+                  <Td className="max-w-[210px]">
                     <CeldaHerramienta codigo={h?.codigo ?? `#${t.herramienta}`} nombre={h?.nombre ?? 'Herramienta'} imagen={h?.imagen} />
                   </Td>
                   <Td>
-                    <span className="whitespace-nowrap">{sucursal(t.sucursal_origen)} → {sucursal(t.sucursal_destino)}</span>
+                    <span className="block whitespace-nowrap">{sucursal(t.sucursal_origen)}</span>
+                    <span className="block whitespace-nowrap">→ {sucursal(t.sucursal_destino)}</span>
                     <span className="block text-xs text-muted tabular-nums">{fechaHora(t.creado_en)}</span>
                   </Td>
                   <Td numerico className="whitespace-nowrap">

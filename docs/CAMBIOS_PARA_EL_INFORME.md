@@ -238,3 +238,30 @@
     comandos (consola, `createsuperuser`, `cargar_fotos_demo`) y no se
     pueden separar de ellos sin modificar el historial, que no se toca.
 
+
+23. **Cuentas de demo (`cargar_demo --usuarios`).** **Base de datos:** sin
+    cambios de estructura; agrega filas a `usuarios`. Crea, si no existen,
+    un Supervisor y un Empleado por sucursal activa
+    (`supervisor_<sucursal>`, `empleado_<sucursal>`; con las sucursales
+    actuales: `supervisor_central`, `empleado_central`, `supervisor_2`,
+    `empleado_2`). La contraseña sale de la variable de entorno
+    `DEMO_PASSWORD` (no está en el código ni en el repositorio) y pasa por
+    la misma política que la API; sin la variable el comando se detiene.
+    Nunca modifica cuentas existentes. Las altas quedan en el historial
+    firmadas como `cargar_demo`, sin la contraseña.
+
+24. **Ver contraseña (frontend).** Todos los campos de contraseña (login,
+    nueva cuenta, restablecer contraseña) tienen un botón de ojo para
+    mostrarla; vuelve a ocultarse al enviar o al cerrar el panel. Si el
+    informe tiene capturas de esas pantallas, ahora se ve el ícono.
+
+25. **Revisión de seguridad básica.** Capítulo de seguridad o requisitos no
+    funcionales: `DEBUG`, `DJANGO_SECRET_KEY` y `DJANGO_ALLOWED_HOSTS`
+    salen de `.env` (desde ahora sin `DJANGO_SECRET_KEY` Django no
+    arranca); CORS solo para el origen del frontend
+    (`CORS_ALLOWED_ORIGINS`); JWT de acceso de 30 min y de renovación de
+    1 día; toda la API exige token salvo login y renovación (hay una
+    prueba que recorre todas las rutas); Swagger es público solo con
+    `DEBUG=True`. Pendientes conocidos, sin cambiar: los tokens se guardan
+    en `localStorage` (expuestos si hubiera XSS) y no hay lista negra de
+    refresh al cerrar sesión.
