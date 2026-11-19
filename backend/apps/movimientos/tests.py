@@ -367,3 +367,34 @@ class AjusteApiTests(_ApiBase):
         movimiento_id = self._ajustar().json()["id"]
         self.assertEqual(self.client.delete(f"{URL}{movimiento_id}/").status_code, 405)
         self.assertEqual(self.client.patch(f"{URL}{movimiento_id}/", {"motivo": "x"}, format="json").status_code, 405)
+
+
+class ValidacionMovimientosApiTests(_ApiBase):
+    """Formularios de movimientos y ajustes contra la API."""
+
+    URL_AJUSTES = f"{URL}ajustes/"
+
+    def _ajustar(self, cantidad=5, motivo="Conteo físico"):
+        return self.client.post(self.URL_AJUSTES, {
+            "herramienta": self.herramienta.id, "sucursal": self.central.id,
+            "sentido": "POSITIVO", "tipo_unidad": "UNIDAD", "cantidad": cantidad, "motivo": motivo,
+        }, format="json")
+
+    def test_cantidad_negativa_cero_decimal_o_e_es_400(self):
+        for cantidad in (-5, 0, 2.5, 2.0, "2.5", "1e2", True):
+            with self.subTest(cantidad=cantidad):
+                respuesta = self._registrar(cantidad=cantidad)
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("cantidad", respuesta.json())
+
+    def test_cantidad_en_ajuste_negativa_o_decimal_es_400(self):
+        for cantidad in (-1, 1.5):
+            with self.subTest(cantidad=cantidad):
+                self.assertIn("cantidad", self._ajustar(cantidad=cantidad).json())
+
+    def test_motivo_del_ajuste_obligatorio_y_con_largo_maximo(self):
+        for motivo in ("", "    ", "x" * 256):
+            with self.subTest(largo=len(motivo)):
+                respuesta = self._ajustar(motivo=motivo)
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("motivo", respuesta.json())

@@ -93,11 +93,13 @@ class GestionarProveedoresTests(SimpleTestCase):
         self.assertEqual(set(ctx.exception.errores), {"nombre", "telefono", "email"})
 
     def test_telefonos(self):
-        for telefono in ("77712345", "+591 777-12345", "(2) 2123456"):
+        for telefono in ("77712345", "+591 777-12345", "+591 2 2123456"):
             with self.subTest(telefono=telefono):
                 self.repo = RepositorioEnMemoria()
                 self.assertEqual(self._registrar(telefono=telefono).telefono, telefono)
-        for telefono in ("12345", "abc1234567", "1234567890123456"):
+        # Desde la regla común (apps/comun/reglas.py) no se aceptan
+        # paréntesis: solo números, espacios, guiones y + al inicio.
+        for telefono in ("12345", "abc1234567", "1234567890123456", "(2) 2123456", "591+77712345"):
             with self.subTest(telefono=telefono), self.assertRaises(DatosProveedorInvalidosError):
                 self._registrar(telefono=telefono)
 
@@ -247,3 +249,36 @@ class ProveedorEnCatalogoApiTests(MediaTemporal, APITestCase):
             HerramientaModel.objects.create(codigo=f"H-{i}", nombre="X", proveedor=self.activo)
         with self.assertNumQueries(1):
             self.client.get(URL_CATALOGO)
+
+
+class ValidacionProveedorApiTests(APITestCase):
+    """Formulario de proveedores contra la API: cada regla da 400."""
+
+    def setUp(self):
+        admin = Usuario.objects.create_user("admin_v", password="x", rol="ADMINISTRADOR")
+        self.client.force_authenticate(admin)
+
+    def _crear(self, **datos):
+        return self.client.post(URL, {"nombre": "Ferretera Andina", "telefono": "77712345", **datos}, format="json")
+
+    def test_telefono_con_letras_parentesis_o_pocos_digitos_es_400(self):
+        for telefono in ("77a12345", "(2) 2123456", "123456", "1234567890123456"):
+            with self.subTest(telefono=telefono):
+                respuesta = self._crear(telefono=telefono)
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("telefono", respuesta.json())
+
+    def test_nombre_solo_espacios_o_de_un_caracter_es_400(self):
+        for nombre in ("   ", "A"):
+            with self.subTest(nombre=nombre):
+                respuesta = self._crear(nombre=nombre)
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("nombre", respuesta.json())
+
+    def test_nombre_de_empresa_admite_numeros_y_simbolos(self):
+        self.assertEqual(self._crear(nombre="Ferretería 3H S.R.L.").status_code, 201)
+
+    def test_editar_sin_tocar_un_telefono_antiguo_ok(self):
+        antiguo = ProveedorModel.objects.create(nombre="Antiguo", telefono="(2) 2123456")
+        respuesta = self.client.patch(f"{URL}{antiguo.id}/", {"email": "a@b.bo"}, format="json")
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)

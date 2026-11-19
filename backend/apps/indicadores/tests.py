@@ -1044,3 +1044,37 @@ class ExcelApiTests(APITestCase):
         self.assertIn("sucursal", self.client.get("/api/indicadores/cierre-diario/excel/").json())
         self.client.force_authenticate(None)
         self.assertEqual(self.client.get("/api/indicadores/abc/excel/").status_code, 401)
+
+
+class ValidacionPromocionApiTests(APITestCase):
+    """Formulario de promociones contra la API: descuento entero de 1 a 90
+    (opcional), fecha de fin desde hoy y motivo con largo máximo."""
+
+    URL = PromocionesApiTests.URL
+    _mov = CierreDiarioApiTests._mov
+    setUp = PromocionesApiTests.setUp
+    _datos = PromocionesApiTests._datos
+
+    def _crear(self, **extra):
+        self.client.force_authenticate(self.admin)
+        return self.client.post(self.URL, self._datos(**extra), format="json")
+
+    def test_descuento_fuera_de_rango_o_con_decimales_es_400(self):
+        for descuento in (0, 91, -5, 10.5, "1e1"):
+            with self.subTest(descuento=descuento):
+                respuesta = self._crear(descuento_porcentaje=descuento)
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("descuento_porcentaje", respuesta.json())
+
+    def test_sin_descuento_ok(self):
+        self.assertEqual(self._crear(descuento_porcentaje=None).status_code, 201)
+
+    def test_fecha_fin_anterior_a_hoy_es_400(self):
+        respuesta = self._crear(fecha_fin=(self.hoy - timedelta(days=1)).isoformat())
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("fecha_fin", respuesta.json())
+
+    def test_motivo_de_mas_de_255_caracteres_es_400(self):
+        respuesta = self._crear(motivo="x" * 256)
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertIn("motivo", respuesta.json())

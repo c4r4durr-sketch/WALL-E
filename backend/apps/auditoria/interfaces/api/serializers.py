@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from ...domain.value_objects import AccionAuditoria, OrigenHistorial
@@ -15,6 +16,20 @@ class FiltroHistorialSerializer(serializers.Serializer):
     origen = serializers.ChoiceField(choices=[o.value for o in OrigenHistorial], required=False)
     pagina = serializers.IntegerField(min_value=1, required=False, default=1)
     tamano = serializers.IntegerField(min_value=1, max_value=100, required=False, default=25)
+
+    # El historial no tiene filas del futuro: una fecha posterior a hoy (hora
+    # de La Paz) es un error de tipeo. Que "desde" no pase a "hasta" lo
+    # revisa el caso de uso.
+    def _no_futura(self, fecha):
+        if fecha and fecha > timezone.localdate():
+            raise serializers.ValidationError("La fecha no puede ser posterior a hoy.")
+        return fecha
+
+    def validate_desde(self, fecha):
+        return self._no_futura(fecha)
+
+    def validate_hasta(self, fecha):
+        return self._no_futura(fecha)
 
 
 class RegistroHistorialSerializer(serializers.Serializer):

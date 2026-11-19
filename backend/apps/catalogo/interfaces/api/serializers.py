@@ -4,6 +4,8 @@ from django.core.files.storage import default_storage
 from rest_framework import serializers
 from rest_framework.fields import SkipField
 
+from apps.comun.campos import EnteroEstricto, Monto
+
 from ...domain.entities import ImagenProducto
 
 
@@ -48,26 +50,15 @@ class HerramientaSerializer(serializers.Serializer):
     codigo = serializers.CharField(max_length=30)
     nombre = serializers.CharField(max_length=150)
     modelo = serializers.CharField(max_length=100, allow_blank=True, required=False, default="")
-    unidades_por_caja = serializers.IntegerField(min_value=1, required=False, default=1)
-    demanda_anual = serializers.IntegerField(min_value=0, required=False, allow_null=True, default=None)
-    # coerce_to_string=False: los costos viajan como número en el JSON (DRF
-    # los manda como texto por defecto), así el frontend no tiene que
-    # convertirlos antes de mostrarlos o calcular.
-    costo_pedido = serializers.DecimalField(
-        max_digits=12, decimal_places=2, min_value=0,
-        required=False, allow_null=True, default=None, coerce_to_string=False,
-    )
-    costo_almacenamiento_unitario = serializers.DecimalField(
-        max_digits=12, decimal_places=2, min_value=0,
-        required=False, allow_null=True, default=None, coerce_to_string=False,
-    )
-    tiempo_entrega_dias = serializers.IntegerField(min_value=0, required=False, allow_null=True, default=None)
-    # HU7. "Mayor que cero" y "solo el Administrador lo cambia" son reglas
-    # del caso de uso; acá solo la forma.
-    costo_unitario = serializers.DecimalField(
-        max_digits=12, decimal_places=2, min_value=0,
-        required=False, allow_null=True, default=None, coerce_to_string=False,
-    )
+    # Enteros sin decimales y montos mayores que 0 con hasta 2 decimales
+    # (apps/comun/campos.py). Los datos de EOQ son opcionales (null).
+    unidades_por_caja = EnteroEstricto(min_value=1, required=False, default=1)
+    demanda_anual = EnteroEstricto(min_value=1, required=False, allow_null=True, default=None)
+    costo_pedido = Monto(required=False, allow_null=True, default=None)
+    costo_almacenamiento_unitario = Monto(required=False, allow_null=True, default=None)
+    tiempo_entrega_dias = EnteroEstricto(min_value=0, required=False, allow_null=True, default=None)
+    # HU7. "Solo el Administrador lo cambia" es regla del caso de uso.
+    costo_unitario = Monto(required=False, allow_null=True, default=None)
     # HU8: id del proveedor (null = sin proveedor); que exista y esté
     # activo lo valida el caso de uso.
     proveedor = serializers.IntegerField(

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.comun.campos import EnteroEstricto
 from apps.movimientos.domain.value_objects import TipoUnidad
 
 from ...domain.value_objects import EstadoTransferencia
@@ -14,7 +15,8 @@ class SolicitarTransferenciaSerializer(serializers.Serializer):
     sucursal_origen = serializers.IntegerField(min_value=1)
     sucursal_destino = serializers.IntegerField(min_value=1)
     tipo_unidad = serializers.ChoiceField(choices=[t.value for t in TipoUnidad])
-    cantidad = serializers.IntegerField(min_value=1)
+    # Entero mayor que 0: sin decimales ("2.5", "2.0") ni notación "1e3".
+    cantidad = EnteroEstricto(min_value=1)
 
 
 class RechazarTransferenciaSerializer(serializers.Serializer):

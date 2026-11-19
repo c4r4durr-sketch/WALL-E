@@ -692,3 +692,61 @@ class CargarDemoTests(MediaTemporal, TestCase):
         with self.assertRaises(CommandError):
             call_command("cargar_demo", "--reiniciar", stdout=io.StringIO())
         self.assertEqual(self._conteo(), self.conteo_despues)
+
+
+class ValidacionHerramientaApiTests(MediaTemporal, APITestCase):
+    """Formulario de herramientas contra la API (multipart, como el
+    frontend): código, enteros estrictos, montos y datos EOQ."""
+
+    def setUp(self):
+        admin = Usuario.objects.create_user("admin_v", password="x", rol="ADMINISTRADOR")
+        self.client.force_authenticate(admin)
+
+    def _crear(self, **datos):
+        datos = {"codigo": "T-1", "nombre": "Taladro", "imagen": imagen_de_prueba(), **datos}
+        return self.client.post(URL, datos, format="multipart")
+
+    def _es_400_en(self, respuesta, campo):
+        self.assertEqual(respuesta.status_code, 400, respuesta.content)
+        self.assertIn(campo, respuesta.json())
+
+    def test_codigo_en_minusculas_se_guarda_en_mayusculas(self):
+        respuesta = self._crear(codigo=" tal-18v ")
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual(respuesta.json()["codigo"], "TAL-18V")
+
+    def test_codigo_con_espacios_o_simbolos_es_400(self):
+        for codigo in ("T 1", "T_1", "T/1", "-T1", "   "):
+            with self.subTest(codigo=codigo):
+                self._es_400_en(self._crear(codigo=codigo), "codigo")
+
+    def test_codigo_repetido_sin_distinguir_mayusculas_es_400(self):
+        self._crear(codigo="T-1")
+        self._es_400_en(self._crear(codigo="t-1"), "codigo")
+
+    def test_nombre_solo_espacios_es_400(self):
+        self._es_400_en(self._crear(nombre="   "), "nombre")
+
+    def test_cantidades_con_decimales_o_e_son_400(self):
+        for valor in ("2.5", "2.0", "1e3", "-4", "0"):
+            with self.subTest(valor=valor):
+                self._es_400_en(self._crear(codigo="T-2", unidades_por_caja=valor), "unidades_por_caja")
+        self._es_400_en(self._crear(codigo="T-3", demanda_anual="10.5"), "demanda_anual")
+
+    def test_datos_eoq_en_cero_son_400_salvo_los_dias(self):
+        for campo in ("demanda_anual", "costo_pedido", "costo_almacenamiento_unitario"):
+            with self.subTest(campo=campo):
+                self._es_400_en(self._crear(codigo="T-4", **{campo: "0"}), campo)
+        self.assertEqual(self._crear(codigo="T-5", tiempo_entrega_dias="0").status_code, 201)
+        self._es_400_en(self._crear(codigo="T-6", tiempo_entrega_dias="1.5"), "tiempo_entrega_dias")
+
+    def test_montos_con_mas_de_2_decimales_o_notacion_e_son_400(self):
+        for valor in ("12.345", "1e3", "-5", "0", "abc"):
+            with self.subTest(valor=valor):
+                self._es_400_en(self._crear(codigo="T-7", costo_unitario=valor), "costo_unitario")
+        self.assertEqual(self._crear(codigo="T-8", costo_unitario="12.50").status_code, 201)
+
+    def test_editar_sin_tocar_un_codigo_antiguo_ok(self):
+        antigua = HerramientaModel.objects.create(codigo="viejo 1", nombre="Antigua")
+        respuesta = self.client.patch(f"{URL}{antigua.id}/", {"nombre": "Antigua renombrada"}, format="json")
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)

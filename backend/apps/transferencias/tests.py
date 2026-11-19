@@ -160,3 +160,21 @@ class TransferenciaApiTests(APITestCase):
         from apps.movimientos.domain.stock import cuenta_como_demanda
         from apps.movimientos.domain.value_objects import TipoMovimiento
         self.assertFalse(cuenta_como_demanda(TipoMovimiento.TRANSFERENCIA_SALIDA))
+
+    # --- Validación de formularios ---
+
+    def test_cantidad_negativa_decimal_o_e_es_400(self):
+        for cantidad in (-2, 0, 1.5, "1e1"):
+            with self.subTest(cantidad=cantidad):
+                respuesta = self._solicitar(cantidad=cantidad)
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("cantidad", respuesta.json())
+
+    def test_motivo_de_rechazo_obligatorio_y_con_largo_maximo(self):
+        transferencia = self._solicitar().json()["id"]
+        self._como(self.admin)
+        for motivo in ("   ", "x" * 256):
+            with self.subTest(largo=len(motivo)):
+                respuesta = self.client.post(f"{URL}{transferencia}/rechazar/", {"motivo": motivo}, format="json")
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn("motivo", respuesta.json())
