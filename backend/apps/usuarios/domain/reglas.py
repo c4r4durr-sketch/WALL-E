@@ -7,8 +7,6 @@ su cuenta no puede quedar sin sucursal. El Administrador es global y es el
 del script SQL descartado.)
 """
 
-import re
-
 from .value_objects import Rol
 
 ROLES_CON_SUCURSAL_OBLIGATORIA = frozenset({Rol.SUPERVISOR, Rol.EMPLEADO})
@@ -18,20 +16,6 @@ def requiere_sucursal(rol: str) -> bool:
     return Rol(rol) in ROLES_CON_SUCURSAL_OBLIGATORIA
 
 
-# Mismos caracteres que acepta el username de Django (letras, números y
-# @ . + - _), sin espacios; mínimo 3 para que no haya cuentas tipo "a".
-USERNAME_LARGO_MINIMO = 3
-USERNAME_LARGO_MAXIMO = 150
-_USERNAME_VALIDO = re.compile(r"^[\w.@+-]+$")
-
-
-def errores_de_username(username: str) -> list[str]:
-    if not username:
-        return ["El nombre de usuario es obligatorio."]
-    if len(username) < USERNAME_LARGO_MINIMO:
-        return [f"Debe tener al menos {USERNAME_LARGO_MINIMO} caracteres."]
-    if len(username) > USERNAME_LARGO_MAXIMO:
-        return [f"No puede tener más de {USERNAME_LARGO_MAXIMO} caracteres."]
-    if not _USERNAME_VALIDO.match(username):
-        return ["Solo letras, números y los símbolos @ . + - _ (sin espacios)."]
-    return []
+# El formato del usuario (3 a 30 caracteres, letras sin tildes, números,
+# punto, guion y guion bajo) y el de los nombres están en
+# apps/comun/reglas.py, compartidos con el resto de los formularios.
