@@ -23,6 +23,7 @@ import { getSession } from '../../auth/session'
 import { Rol } from '../../../shared/types/roles'
 import { mensajeDeError } from '../../../shared/api/errores'
 import { fechaLarga, hora, hoyEnLaPaz } from '../../../shared/formato'
+import { reglas } from '../../../shared/validacion'
 import { StatTile } from '../../dashboard/components/StatTile'
 import { CeldaHerramienta } from '../../catalogo/components/CeldaHerramienta'
 import { useFotos } from '../../catalogo/hooks/useFotos'
@@ -55,8 +56,8 @@ export function CierreDiarioPage() {
   const { data: sucursales } = useSucursales()
   const foto = useFotos()
 
-  const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(fecha) && fecha <= hoy
-  const listo = fechaValida && (!esAdmin || sucursal !== '')
+  const errorFecha = /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? reglas.fechaNoFutura(fecha, hoy) : 'Elige una fecha.'
+  const listo = !errorFecha && (!esAdmin || sucursal !== '')
   const { data: cierre, isLoading, isError, error, refetch } = useCierreDiario(
     { sucursal: esAdmin ? Number(sucursal) : undefined, fecha },
     listo,
@@ -80,7 +81,7 @@ export function CierreDiarioPage() {
       />
 
       <Card className="flex flex-wrap items-start gap-5">
-        <Field etiqueta="Fecha" error={fechaValida ? null : 'Elige una fecha que no sea posterior a hoy.'} className="w-48">
+        <Field etiqueta="Fecha" obligatorio error={errorFecha} className="w-48">
           <Input type="date" value={fecha} max={hoy} onChange={(e) => setFecha(e.target.value)} />
         </Field>
         {esAdmin ? (

@@ -22,6 +22,7 @@ import {
 } from '../../../components/ui'
 import { mensajeDeError } from '../../../shared/api/errores'
 import { fechaHora, hoyEnLaPaz } from '../../../shared/formato'
+import { reglas } from '../../../shared/validacion'
 import { DetalleCambio } from '../components/DetalleCambio'
 import { useHistorial, useOpcionesHistorial } from '../hooks/useHistorial'
 import type { AccionAuditoria, FiltroHistorial, RegistroHistorial } from '../api/auditoriaApi'
@@ -60,8 +61,12 @@ export function HistorialPage() {
   const [abiertoId, setAbiertoId] = useState<number | null>(null)
   const { data: opciones } = useOpcionesHistorial()
 
-  const rangoInvalido = Boolean(filtro.desde && filtro.hasta && filtro.desde > filtro.hasta)
-  const { data: pagina, isLoading, isError, error, isFetching, refetch } = useHistorial(filtro, !rangoInvalido)
+  // Sin fechas futuras (el historial no las tiene) y "hasta" no anterior a
+  // "desde"; con un error, no se consulta.
+  const errorDesde = reglas.fechaNoFutura(filtro.desde ?? '', hoy)
+  const errorHasta = reglas.fechaNoFutura(filtro.hasta ?? '', hoy) ?? reglas.rangoFechas(filtro.desde ?? '', filtro.hasta ?? '')
+  const filtroInvalido = Boolean(errorDesde || errorHasta)
+  const { data: pagina, isLoading, isError, error, isFetching, refetch } = useHistorial(filtro, !filtroInvalido)
 
   // Cambiar un filtro vuelve a la primera página.
   function cambiar(campo: Exclude<keyof FiltroHistorial, 'pagina'>, valor: string) {
@@ -90,10 +95,10 @@ export function HistorialPage() {
       />
 
       <Card className="grid grid-cols-[repeat(6,minmax(0,1fr))_auto] items-start gap-4">
-        <Field etiqueta="Desde" error={rangoInvalido ? 'No puede ser posterior a "hasta".' : null}>
+        <Field etiqueta="Desde" error={errorDesde}>
           <Input type="date" max={hoy} value={filtro.desde} onChange={(e) => cambiar('desde', e.target.value)} />
         </Field>
-        <Field etiqueta="Hasta">
+        <Field etiqueta="Hasta" error={errorHasta}>
           <Input type="date" max={hoy} value={filtro.hasta} onChange={(e) => cambiar('hasta', e.target.value)} />
         </Field>
         <Field etiqueta="Usuario">
@@ -132,7 +137,7 @@ export function HistorialPage() {
       )}
 
       <Card sinPadding className={cx('transicion overflow-hidden', isFetching && !isLoading && 'opacity-70')}>
-        {isLoading && !rangoInvalido && <SkeletonFilas filas={8} columnas={6} />}
+        {isLoading && !filtroInvalido && <SkeletonFilas filas={8} columnas={6} />}
         {pagina?.total === 0 &&
           (hayFiltros ? (
             <EmptyState

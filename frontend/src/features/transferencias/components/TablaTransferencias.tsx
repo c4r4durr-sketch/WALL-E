@@ -24,6 +24,7 @@ import type { Sucursal } from '../../usuarios/api/usuariosApi'
 import { cajas } from '../../movimientos/formato'
 import { erroresDelBackend } from '../../movimientos/errores'
 import type { EstadoTransferencia, Transferencia } from '../api/transferenciasApi'
+import { LARGO_TEXTO, reglas } from '../../../shared/validacion'
 import { useCompletarTransferencia, useRechazarTransferencia, useTransferencias } from '../hooks/useTransferencias'
 
 // Listado de transferencias (pendientes o todas). Administrador/Supervisor
@@ -55,7 +56,12 @@ function FilaAcciones({ t }: { t: Transferencia }) {
   const [rechazando, setRechazando] = useState(false)
   const [motivo, setMotivo] = useState('')
   const ocupado = completar.isPending || rechazar.isPending
-  const error = mensajeError(completar.error) ?? mensajeError(rechazar.error)
+  // El motivo del rechazo es obligatorio (no solo espacios) y de hasta 255
+  // caracteres; el aviso aparece apenas se escribe.
+  const [motivoTocado, setMotivoTocado] = useState(false)
+  const errorMotivo = reglas.texto(motivo, { etiqueta: 'El motivo del rechazo', requerido: true })
+  const error =
+    (rechazando && motivoTocado ? errorMotivo : null) ?? mensajeError(completar.error) ?? mensajeError(rechazar.error)
 
   return (
     <div className="space-y-1.5 py-1">
@@ -64,17 +70,20 @@ function FilaAcciones({ t }: { t: Transferencia }) {
           <Input
             aria-label="Motivo del rechazo"
             value={motivo}
-            maxLength={255}
-            placeholder="Motivo del rechazo"
+            aria-required
+            aria-invalid={(motivoTocado && Boolean(errorMotivo)) || undefined}
+            maxLength={LARGO_TEXTO}
+            placeholder="Motivo del rechazo *"
             autoFocus
-            onChange={(e) => { setMotivo(e.target.value); rechazar.reset() }}
+            onChange={(e) => { setMotivo(e.target.value); setMotivoTocado(true); rechazar.reset() }}
+            onBlur={() => setMotivoTocado(true)}
             className="h-8! min-w-40 text-xs"
           />
-          <Button tamano="sm" peligro disabled={!motivo.trim()} cargando={rechazar.isPending}
-            onClick={() => rechazar.mutate({ id: t.id, motivo: motivo.trim() })}>
+          <Button tamano="sm" peligro disabled={Boolean(errorMotivo)} cargando={rechazar.isPending}
+            onClick={() => rechazar.mutate({ id: t.id, motivo: reglas.limpiar(motivo) })}>
             Rechazar
           </Button>
-          <Button tamano="sm" variante="ghost" onClick={() => { setRechazando(false); rechazar.reset() }}>
+          <Button tamano="sm" variante="ghost" onClick={() => { setRechazando(false); setMotivoTocado(false); rechazar.reset() }}>
             Cancelar
           </Button>
         </div>
