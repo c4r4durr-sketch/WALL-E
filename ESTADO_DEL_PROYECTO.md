@@ -92,7 +92,14 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | **Excel** (HU25) | `GET .../cierre-diario/excel/`, `.../antiguedad/excel/` y `.../abc/excel/`: el mismo caso de uso, filtros y permisos que la versión JSON; el .xlsx lo arma `indicadores/interfaces/excel.py` (openpyxl); reporte vacío → 409 con aviso, sin archivo | Botón "Exportar a Excel" en Cierre diario, Antigüedad del stock y Clasificación ABC |
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
 
-Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **254 pruebas OK**.
+Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **311 pruebas OK**.
+
+**Validación de formularios** (rama `validaciones`, 19/11/2026): reglas en
+`frontend/src/shared/validacion/` y `backend/apps/comun/` (las mismas en los
+dos lados; detalle en `docs/CAMBIOS_PARA_EL_INFORME.md`, punto 23).
+Formularios con `useFormulario`, `Field obligatorio` y, para contraseñas,
+`PasswordInput` + `PasswordStrength`. Al agregar un formulario, usar esas
+reglas en vez de escribir otras.
 
 **Fase 1 de diseño** (cerrada y fusionada en `sprint3-cierre` el 27/10): todas las pantallas sobre el sistema
 de `docs/DISENO.md` (componentes en `frontend/src/components/ui/`, barra
