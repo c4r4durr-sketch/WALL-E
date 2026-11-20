@@ -238,6 +238,45 @@
     comandos (consola, `createsuperuser`, `cargar_fotos_demo`) y no se
     pueden separar de ellos sin modificar el historial, que no se toca.
 
+23. **Validación de todos los formularios.** **Base de datos:** sin
+    cambios (no hay migraciones; los CHECK de la base no cambian, las
+    reglas nuevas viven en los casos de uso y los serializers). Reglas,
+    iguales en el frontend (`shared/validacion/`) y en el backend
+    (`apps/comun/reglas.py` y `apps/comun/campos.py`, código compartido
+    que no es una app de Django ni un módulo nuevo del informe):
+    - **nombre y apellido** de las cuentas: obligatorios, 2 a 50
+      caracteres, solo letras (con tildes y ñ), espacios, apóstrofo y
+      guion. Antes podían quedar vacíos;
+    - **usuario**: 3 a 30 caracteres, letras sin tildes, números, punto,
+      guion y guion bajo. Antes: hasta 150 y se aceptaban `@` y `+`;
+    - **contraseña**: a los validadores de Django se suma
+      `ComplejidadPasswordValidator` (mayúscula, minúscula, número y
+      símbolo). Nueva cuenta y Restablecer muestran una barra de
+      seguridad y piden repetir la contraseña;
+    - **teléfono** del proveedor: 7 a 15 dígitos con `+`, espacios o
+      guiones; ya **no se aceptan paréntesis**;
+    - **código de herramienta**: se guarda en mayúsculas; solo letras,
+      números y guiones entre ellos;
+    - **datos EOQ**: demanda anual, costo de pedido y de almacenamiento
+      deben ser **mayores que 0** (antes se aceptaba 0); días de entrega,
+      entero ≥ 0;
+    - **cantidades y enteros** (unidades, cajas, unidades por caja,
+      descuento): se rechazan `2.5`, `2.0` y `1e3` (DRF aceptaba los dos
+      últimos); **montos**: mayores que 0 con hasta 2 decimales, sin
+      notación `e`;
+    - **fechas**: el filtro de Auditoría no acepta fechas futuras y
+      "Hasta" no puede ser anterior a "Desde";
+    - **motivos** (ajuste, rechazo, promoción): hasta 255 caracteres;
+      obligatorios en ajuste y rechazo (como antes).
+    Datos anteriores a las reglas: al editar, el usuario, los nombres,
+    el código de herramienta y el teléfono solo se revisan **si cambian**,
+    así una cuenta, herramienta o proveedor antiguo se sigue pudiendo
+    editar. El login no valida formatos (solo que no estén vacíos).
+    En el frontend: asterisco en los obligatorios, mensaje debajo de cada
+    campo y botón de guardar deshabilitado mientras haya errores.
+    Los proveedores no tienen "nombre de contacto": el nombre es el de la
+    empresa y admite números y símbolos.
+
 24. **Reportes estadísticos con gráficos (página `/reportes`).** **Base de
     datos:** sin cambios (no hay modelos nuevos ni migraciones; todo se
     calcula con consultas agregadas del ORM sobre movimientos, catálogo,
@@ -273,4 +312,8 @@
     que pide como dependencia par), solo en el archivo de la página
     (carga diferida). Colores de los tokens de `DISENO.md` mediante
     `--graf-1/2/3` en `index.css` (naranja y grises), hoja de impresión
-    (`@media print`) en blanco y negro sin menú.
+    (`@media print`) en blanco y negro sin menú. Los filtros de fecha usan
+    las reglas del punto 23 (`shared/validacion`: obligatorias, sin fechas
+    futuras, "hasta" no anterior a "desde"). Pruebas: 25 nuevas
+    (`indicadores/tests_estadisticas.py`); con las del punto 23, **336
+    pruebas OK** en total.

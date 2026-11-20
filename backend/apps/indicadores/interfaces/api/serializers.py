@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.comun.campos import EnteroEstricto
+
 # Serializers "planos" (no ModelSerializer): indicadores no tiene modelos
 # propios, así que estos serializan los DTOs de domain/entities.py, no un
 # modelo ORM.
@@ -169,8 +171,9 @@ class ReporteAntiguedadSerializer(serializers.Serializer):
 class CrearPromocionSerializer(serializers.Serializer):
     herramienta_id = serializers.IntegerField(min_value=1)
     sucursal_id = serializers.IntegerField(min_value=1)
-    # Opcional: la etiqueta de promoción puede ir sin descuento.
-    descuento_porcentaje = serializers.IntegerField(required=False, allow_null=True, default=None)
+    # Opcional: la etiqueta de promoción puede ir sin descuento. El rango
+    # 1-90 lo revisa el caso de uso; acá, que sea un entero sin decimales.
+    descuento_porcentaje = EnteroEstricto(required=False, allow_null=True, default=None)
     fecha_fin = serializers.DateField()
     motivo = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
 

@@ -5,8 +5,10 @@ obtener, registrar, actualizar (incluye desactivar) y eliminar.
 Puros: reciben el repositorio como interfaz y trabajan con la entidad.
 Reglas que viven acá:
   - solo el Administrador registra, edita o elimina (todos consultan);
-  - nombre y teléfono obligatorios; el correo es opcional pero, si viene,
-    debe tener formato de correo;
+  - nombre (2 a 150 caracteres) y teléfono obligatorios; el teléfono, de
+    7 a 15 dígitos con espacios, guiones y + al inicio (apps/comun/reglas.py);
+    el correo es opcional pero, si viene, debe tener formato de correo. Al
+    editar, el formato del teléfono solo se revisa si cambia;
   - el nombre es único sin distinguir mayúsculas;
   - un proveedor con herramientas asociadas no se elimina: se desactiva
     (el repositorio lo detecta y lanza ProveedorEnUsoError).
@@ -14,8 +16,9 @@ Reglas que viven acá:
 
 import re
 from dataclasses import fields, replace
-from typing import Any
+from typing import Any, Optional
 
+from apps.comun.reglas import error_telefono, normalizar_espacios
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.domain.value_objects import Rol
 
@@ -33,11 +36,8 @@ CAMPOS_EDITABLES = {
     if f.name not in {"id", "creado_en", "actualizado_en", "cantidad_herramientas"}
 }
 
-# Dígitos con separadores habituales (espacios, guiones, paréntesis) y un
-# "+" inicial opcional para el código de país: "+591 2 2123456", "77712345".
-_TELEFONO_VALIDO = re.compile(r"^\+?[\d\s()-]+$")
-TELEFONO_MIN_DIGITOS = 7
-TELEFONO_MAX_DIGITOS = 15
+NOMBRE_LARGO_MINIMO = 2
+NOMBRE_LARGO_MAXIMO = 150
 _EMAIL_VALIDO = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
@@ -46,26 +46,25 @@ def _exigir_administrador(actor: Actor) -> None:
         raise PermisoDenegadoError()
 
 
-def _validar(proveedor: Proveedor) -> Proveedor:
+def _validar(proveedor: Proveedor, anterior: Optional[Proveedor] = None) -> Proveedor:
+    """`anterior`: el proveedor antes de editarlo (None en el alta)."""
     proveedor = replace(
         proveedor,
-        nombre=" ".join(proveedor.nombre.split()),
+        nombre=normalizar_espacios(proveedor.nombre),
         telefono=proveedor.telefono.strip(),
         email=proveedor.email.strip().lower(),
     )
     errores: dict[str, str] = {}
+    # Es el nombre de una empresa, no de una persona: admite números y
+    # símbolos ("Ferretería 3H S.R.L.").
     if not proveedor.nombre:
         errores["nombre"] = "El nombre es obligatorio."
-    digitos = sum(c.isdigit() for c in proveedor.telefono)
-    if not proveedor.telefono:
-        errores["telefono"] = "El teléfono es obligatorio."
-    elif not _TELEFONO_VALIDO.match(proveedor.telefono) or not (
-        TELEFONO_MIN_DIGITOS <= digitos <= TELEFONO_MAX_DIGITOS
-    ):
-        errores["telefono"] = (
-            f"Teléfono no válido: de {TELEFONO_MIN_DIGITOS} a {TELEFONO_MAX_DIGITOS} dígitos "
-            "(se permiten espacios, guiones, paréntesis y + al inicio)."
-        )
+    elif not NOMBRE_LARGO_MINIMO <= len(proveedor.nombre) <= NOMBRE_LARGO_MAXIMO:
+        errores["nombre"] = f"Debe tener de {NOMBRE_LARGO_MINIMO} a {NOMBRE_LARGO_MAXIMO} caracteres."
+    telefono_cambia = anterior is None or anterior.telefono != proveedor.telefono
+    mensaje = error_telefono(proveedor.telefono) if telefono_cambia else None
+    if mensaje:
+        errores["telefono"] = mensaje
     if proveedor.email and not _EMAIL_VALIDO.match(proveedor.email):
         errores["email"] = "Correo no válido."
     if errores:
@@ -108,7 +107,7 @@ def actualizar_proveedor(
     _exigir_administrador(actor)
     actual = obtener_proveedor(repo, proveedor_id)
     actualizado = replace(actual, **{c: v for c, v in cambios.items() if c in CAMPOS_EDITABLES})
-    actualizado = _validar(actualizado)
+    actualizado = _validar(actualizado, anterior=actual)
     _verificar_nombre_unico(repo, actualizado)
     return repo.guardar(actualizado)
 

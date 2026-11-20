@@ -11,13 +11,16 @@ interface Props {
   children: ReactNode
   ayuda?: ReactNode
   error?: string | null
-  // Para la etiqueta: "(opcional)" en gris, sin asteriscos.
+  // Para la etiqueta: "(opcional)" en gris.
   opcional?: boolean
+  // Campo obligatorio: asterisco junto a la etiqueta y aria-required en
+  // el control.
+  obligatorio?: boolean
   id?: string
   className?: string
 }
 
-export function Field({ etiqueta, children, ayuda, error, opcional = false, id, className }: Props) {
+export function Field({ etiqueta, children, ayuda, error, opcional = false, obligatorio = false, id, className }: Props) {
   const generado = useId()
   const idControl = id ?? generado
   const idAyuda = `${idControl}-ayuda`
@@ -25,10 +28,11 @@ export function Field({ etiqueta, children, ayuda, error, opcional = false, id, 
   const describedBy = error ? idError : ayuda ? idAyuda : undefined
 
   return (
-    <ContextoDeCampo.Provider value={{ id: idControl, describedBy, invalido: Boolean(error) }}>
+    <ContextoDeCampo.Provider value={{ id: idControl, describedBy, invalido: Boolean(error), requerido: obligatorio }}>
       <div className={cx('min-w-0', className)}>
         <label htmlFor={idControl} className="mb-1.5 block text-xs font-semibold text-muted">
           {etiqueta}
+          {obligatorio && <span aria-hidden className="text-danger"> *</span>}
           {opcional && <span className="font-medium"> (opcional)</span>}
         </label>
         {children}

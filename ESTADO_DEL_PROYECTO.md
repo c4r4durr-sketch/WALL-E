@@ -93,7 +93,14 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
 | **Reportes estadísticos** | `GET /api/indicadores/estadisticas/{resumen,movimientos-por-mes,top-herramientas,stock-por-sucursal,abc,antiguedad,transferencias,excel}/?desde=&hasta=&sucursal=`: agregaciones del ORM (`indicadores/infrastructure/estadisticas.py`) y casos de uso en `use_cases/estadisticas.py`; sin fechas, últimos 12 meses; Admin todas o una sucursal, Supervisor la suya, Empleado 403 | `/reportes` (Análisis, Admin y Supervisor): filtros con atajos, 5 KPI y 6 gráficos Recharts (carga diferida), Exportar a Excel e Imprimir / PDF |
 
-Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **282 pruebas OK**.
+Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **336 pruebas OK**.
+
+**Validación de formularios** (rama `validaciones`, 19/11/2026): reglas en
+`frontend/src/shared/validacion/` y `backend/apps/comun/` (las mismas en los
+dos lados; detalle en `docs/CAMBIOS_PARA_EL_INFORME.md`, punto 23).
+Formularios con `useFormulario`, `Field obligatorio` y, para contraseñas,
+`PasswordInput` + `PasswordStrength`. Al agregar un formulario, usar esas
+reglas en vez de escribir otras.
 
 **Fase 1 de diseño** (cerrada y fusionada en `sprint3-cierre` el 27/10): todas las pantallas sobre el sistema
 de `docs/DISENO.md` (componentes en `frontend/src/components/ui/`, barra

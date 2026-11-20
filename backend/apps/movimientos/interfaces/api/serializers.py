@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.comun.campos import EnteroEstricto
+
 from ...domain.value_objects import TipoMovimiento, TipoUnidad
 
 # Serializers "planos": validan la forma del request y serializan las
@@ -17,7 +19,8 @@ class RegistrarMovimientoSerializer(serializers.Serializer):
         choices=[TipoMovimiento.ENTRADA.value, TipoMovimiento.SALIDA.value]
     )
     tipo_unidad = serializers.ChoiceField(choices=[t.value for t in TipoUnidad])
-    cantidad = serializers.IntegerField(min_value=1)
+    # Entero mayor que 0: sin decimales ("2.5", "2.0") ni notación "1e3".
+    cantidad = EnteroEstricto(min_value=1)
 
 
 class RegistrarAjusteSerializer(serializers.Serializer):
@@ -28,7 +31,7 @@ class RegistrarAjusteSerializer(serializers.Serializer):
     sucursal = serializers.IntegerField(min_value=1)
     sentido = serializers.ChoiceField(choices=["POSITIVO", "NEGATIVO"])
     tipo_unidad = serializers.ChoiceField(choices=[t.value for t in TipoUnidad])
-    cantidad = serializers.IntegerField(min_value=1)
+    cantidad = EnteroEstricto(min_value=1)
     # allow_blank: el "obligatorio" lo decide el use_case (también rechaza
     # un motivo de puros espacios), con un único mensaje de negocio.
     motivo = serializers.CharField(max_length=255, allow_blank=True, required=False, default="")
