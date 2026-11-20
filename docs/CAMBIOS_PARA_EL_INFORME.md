@@ -238,3 +238,39 @@
     comandos (consola, `createsuperuser`, `cargar_fotos_demo`) y no se
     pueden separar de ellos sin modificar el historial, que no se toca.
 
+24. **Reportes estadísticos con gráficos (página `/reportes`).** **Base de
+    datos:** sin cambios (no hay modelos nuevos ni migraciones; todo se
+    calcula con consultas agregadas del ORM sobre movimientos, catálogo,
+    transferencias y sucursales). Es un módulo dentro de la app
+    `indicadores`, no una app nueva: puerto `EstadisticasRepository`
+    (`domain/repositories.py`), implementación ORM
+    (`infrastructure/estadisticas.py`, la primera carpeta
+    `infrastructure` de indicadores), casos de uso
+    (`use_cases/estadisticas.py`) y vistas
+    (`interfaces/api/views_estadisticas.py`). Endpoints de solo lectura en
+    `/api/indicadores/estadisticas/`: `resumen`, `movimientos-por-mes`,
+    `top-herramientas`, `stock-por-sucursal`, `abc`, `antiguedad`,
+    `transferencias` y `excel` (un libro con una hoja por gráfico; 409 si
+    el periodo no tiene datos). Filtro común `desde`, `hasta`, `sucursal`:
+    sin fechas son los últimos 12 meses calendario; fechas futuras o
+    "hasta" anterior a "desde" → 400. Permisos como el cierre diario:
+    Administrador todas o una sucursal, Supervisor solo la suya (otra →
+    403), Empleado 403. Decisiones que conviene citar:
+    - **monto vendido = unidades × costo unitario actual**: el sistema no
+      guarda precio de venta ni el costo histórico de cada venta;
+    - **stock, valor del inventario y antigüedad** son la foto al cierre
+      del día "hasta" ("desde" no los cambia);
+    - **la clasificación ABC de esta página es por valor vendido en el
+      periodo** (unidades × costo), con los mismos cortes 80 % / 95 %; la
+      pantalla "Clasificación ABC" sigue siendo por unidades de los
+      últimos 12 meses, así que las dos pueden diferir;
+    - **alertas de reorden** del resumen = las del panel (hoy, stock de
+      todas las sucursales); **estancadas** = más de 40 días sin venta
+      en la sucursal del filtro, al cierre de "hasta";
+    - las transferencias se cuentan por fecha de solicitud y estado
+      actual; con sucursal, las que salen de ella o llegan a ella.
+    Frontend: Recharts (nueva dependencia `recharts`, más `react-is` 18
+    que pide como dependencia par), solo en el archivo de la página
+    (carga diferida). Colores de los tokens de `DISENO.md` mediante
+    `--graf-1/2/3` en `index.css` (naranja y grises), hoja de impresión
+    (`@media print`) en blanco y negro sin menú.
