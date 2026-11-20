@@ -18,7 +18,9 @@
     "motion": "^14.6.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.18.3"
+    "react-is": "^18.3.1",
+    "react-router-dom": "^7.18.3",
+    "recharts": "^3.11.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

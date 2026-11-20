@@ -67,6 +67,18 @@
   color-scheme: dark;
 }
 
+/*
+ * Series de los gráficos (página /reportes): naranja para la principal y
+ * grises para el resto, sacados de los tokens de arriba. Se definen en el
+ * mismo <html> que lleva `dark`, así siguen al tema solos. Recharts los usa
+ * tal cual en fill/stroke: "var(--graf-1)".
+ */
+:root {
+  --graf-1: var(--acc);
+  --graf-2: var(--muted);
+  --graf-3: color-mix(in srgb, var(--muted) 40%, var(--surf));
+}
+
 @theme inline {
   --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
 
@@ -184,5 +196,69 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+ * Impresión / PDF (botón "Imprimir / PDF" de /reportes, y cualquier
+ * pantalla): hoja blanca con los valores claros aunque se esté en modo
+ * oscuro, sin barra lateral ni botones, sin sombras ni manchas, y los
+ * gráficos en negro y grises (las series se distinguen también por trazo).
+ * Lo que solo va en pantalla lleva `print:hidden`.
+ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  :root,
+  .dark {
+    --ink: #1d1d1f;
+    --muted: #6e6e73;
+    --bg: #ffffff;
+    --surf: #ffffff;
+    --surf2: #f2f2f5;
+    --line: rgba(0, 0, 0, 0.08);
+    --graf-1: var(--ink);
+    --graf-2: var(--muted);
+    --graf-3: color-mix(in srgb, var(--muted) 35%, var(--surf));
+    color-scheme: light;
+  }
+
+  body {
+    background: var(--surf);
+  }
+
+  body::before,
+  aside {
+    display: none !important;
+  }
+
+  main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+
+  main > div {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .shadow-sh,
+  .shadow-shh {
+    box-shadow: none !important;
+  }
+
+  .imprimir-bloque {
+    break-inside: avoid;
+    border: 1px solid var(--line);
+  }
+
+  /* Los gráficos tienen el ancho de la pantalla: se achican a la hoja. */
+  .recharts-wrapper,
+  .recharts-surface {
+    max-width: 100% !important;
+    height: auto !important;
   }
 }
