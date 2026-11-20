@@ -26,6 +26,7 @@ import { GraficoStockSucursal } from '../components/graficos/GraficoStockSucursa
 import { GraficoTopHerramientas } from '../components/graficos/GraficoTopHerramientas'
 import { GraficoTransferencias } from '../components/graficos/GraficoTransferencias'
 import { mensajeDeError } from '../../../shared/api/errores'
+import { reglas } from '../../../shared/validacion'
 import { useEstadistica } from '../hooks/useEstadistica'
 import type { FiltroEstadisticas } from '../api/estadisticasApi'
 
@@ -57,16 +58,13 @@ function rangoDe(atajo: Exclude<Atajo, 'otro'>, hoy: string): { desde: string; h
   return { desde: inicioDe12Meses(hoy), hasta: hoy }
 }
 
+// Las mismas reglas de fechas que el resto del sistema (shared/validacion)
+// y que el backend: obligatorias, sin fechas futuras y "hasta" no
+// anterior a "desde". Con un error no se consulta.
 function erroresDeRango(desde: string, hasta: string, hoy: string) {
   return {
-    desde: !desde ? 'Elige una fecha.' : desde > hoy ? 'No puede ser posterior a hoy.' : null,
-    hasta: !hasta
-      ? 'Elige una fecha.'
-      : hasta > hoy
-        ? 'No puede ser posterior a hoy.'
-        : desde && hasta < desde
-          ? 'No puede ser anterior a “Desde”.'
-          : null,
+    desde: reglas.obligatorio(desde, 'Elige una fecha.') ?? reglas.fechaNoFutura(desde, hoy),
+    hasta: reglas.obligatorio(hasta, 'Elige una fecha.') ?? reglas.fechaNoFutura(hasta, hoy) ?? reglas.rangoFechas(desde, hasta),
   }
 }
 
@@ -134,10 +132,10 @@ export function ReportesPage() {
           <p className="mb-1.5 text-xs font-semibold text-muted">Periodo</p>
           <SegmentedControl etiqueta="Atajos de periodo" opciones={ATAJOS} valor={atajo} onCambiar={elegirAtajo} />
         </div>
-        <Field etiqueta="Desde" error={errores.desde} className="w-44">
+        <Field etiqueta="Desde" obligatorio error={errores.desde} className="w-44">
           <Input type="date" max={hoy} value={rango.desde} onChange={(e) => cambiarFecha('desde', e.target.value)} />
         </Field>
-        <Field etiqueta="Hasta" error={errores.hasta} className="w-44">
+        <Field etiqueta="Hasta" obligatorio error={errores.hasta} className="w-44">
           <Input type="date" max={hoy} value={rango.hasta} onChange={(e) => cambiarFecha('hasta', e.target.value)} />
         </Field>
         {esAdmin ? (
