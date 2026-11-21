@@ -78,6 +78,16 @@ class MovimientoRepositoryDjango(MovimientoRepository):
         )
         return {f["herramienta_id"]: f["total"] for f in filas}
 
+    def unidades_por_herramienta_y_sucursal(self, tipos, desde) -> dict[tuple[int, int], int]:
+        filas = (
+            MovimientoModel.objects.filter(
+                tipo_movimiento__in=[TipoMovimiento(t).value for t in tipos], creado_en__gte=desde
+            )
+            .values("herramienta_id", "sucursal_id")
+            .annotate(total=Sum("cantidad_unidades"))
+        )
+        return {(f["herramienta_id"], f["sucursal_id"]): f["total"] for f in filas}
+
     def resumen_inventario(self) -> list[ResumenInventario]:
         # Dos consultas agregadas en total, sin importar cuántos movimientos
         # haya: totales por tipo, y fechas (primer movimiento y última venta).

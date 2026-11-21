@@ -6,7 +6,9 @@ from .views import (
     ClasificacionABCExcelView,
     ClasificacionABCView,
     EOQPorHerramientaView,
+    EOQPorSucursalView,
     PanelAuditoriaView,
+    ProductosParaPedirView,
     PromocionesView,
     PuntoReordenPorHerramientaView,
     ReporteAntiguedadExcelView,
@@ -26,10 +28,12 @@ from .views_estadisticas import (
 
 urlpatterns = [
     path("eoq/<int:herramienta_id>/", EOQPorHerramientaView.as_view(), name="indicador-eoq"),
+    path("eoq/<int:herramienta_id>/sucursales/", EOQPorSucursalView.as_view(), name="indicador-eoq-sucursales"),
     path("rop/<int:herramienta_id>/", PuntoReordenPorHerramientaView.as_view(), name="indicador-rop"),
     path("abc/", ClasificacionABCView.as_view(), name="indicador-abc"),
     path("abc/excel/", ClasificacionABCExcelView.as_view(), name="indicador-abc-excel"),
     path("panel/", PanelAuditoriaView.as_view(), name="panel-auditoria"),
+    path("productos-para-pedir/", ProductosParaPedirView.as_view(), name="productos-para-pedir"),
     path("antiguedad/", ReporteAntiguedadView.as_view(), name="reporte-antiguedad"),
     path("antiguedad/excel/", ReporteAntiguedadExcelView.as_view(), name="reporte-antiguedad-excel"),
     path("promociones/", PromocionesView.as_view(), name="promociones"),

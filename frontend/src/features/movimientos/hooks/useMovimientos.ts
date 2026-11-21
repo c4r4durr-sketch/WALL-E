@@ -21,12 +21,16 @@ export function useStock(herramientaId: number | null) {
 }
 
 // Al registrar un movimiento se refrescan historial y stock, para que la
-// pantalla muestre el nuevo saldo sin recargar.
+// pantalla muestre el nuevo saldo sin recargar, y también los indicadores
+// (EOQ, ROP, ABC, productos para pedir) y el panel, que dependen del stock
+// y de las ventas: así nunca muestran por un momento el valor anterior.
 function useRefrescarInventario() {
   const queryClient = useQueryClient()
   return () => {
     queryClient.invalidateQueries({ queryKey: ['movimientos'] })
     queryClient.invalidateQueries({ queryKey: ['stock'] })
+    queryClient.invalidateQueries({ queryKey: ['indicadores'] })
+    queryClient.invalidateQueries({ queryKey: ['panel'] })
   }
 }
 

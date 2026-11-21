@@ -12,11 +12,12 @@ export function useTransferencias(estado?: EstadoTransferencia) {
 }
 
 // Resolver una transferencia mueve stock: además del listado se refrescan
-// stock, historial de movimientos y el panel de inicio.
+// stock, historial de movimientos, el panel de inicio y los indicadores
+// (el stock de cada sucursal decide qué hay que pedir).
 function useRefrescar() {
   const queryClient = useQueryClient()
   return () => {
-    for (const clave of ['transferencias', 'stock', 'movimientos', 'panel']) {
+    for (const clave of ['transferencias', 'stock', 'movimientos', 'panel', 'indicadores']) {
       queryClient.invalidateQueries({ queryKey: [clave] })
     }
   }

@@ -71,6 +71,28 @@ def demanda_para_formulas(estimada: Optional[int], observada: int) -> tuple[Opti
     return estimada, DEMANDA_ESTIMADA
 
 
+def demanda_de_sucursal(
+    estimada: Optional[int], observada_sucursal: int, observada_total: int, sucursales_activas: int
+) -> tuple[Optional[int], str]:
+    """D para el EOQ y el ROP de UNA sucursal (misma idea que HU21):
+
+      - Si la sucursal vendió en los últimos 12 meses, sus ventas.
+      - Si la herramienta no se vendió en ninguna sucursal (nueva o sin
+        historia), la estimada del catálogo repartida en partes iguales
+        entre las sucursales activas, redondeada hacia arriba.
+      - Si se vende en otras sucursales pero no en esta, 0: aquí no hay
+        demanda que reponer.
+
+    Devuelve (D, fuente)."""
+    if observada_sucursal > 0:
+        return observada_sucursal, DEMANDA_OBSERVADA
+    if observada_total > 0:
+        return 0, DEMANDA_OBSERVADA
+    if estimada is None or sucursales_activas <= 0:
+        return estimada, DEMANDA_ESTIMADA
+    return math.ceil(estimada / sucursales_activas), DEMANDA_ESTIMADA
+
+
 def ajustar_a_cajas(cantidad_unidades: float, unidades_por_caja: Optional[int]) -> float:
     """HU20: redondea una cantidad en unidades hacia ARRIBA al múltiplo de
     caja cerrada más cercano (no se le puede pedir media caja al proveedor).

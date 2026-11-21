@@ -20,6 +20,10 @@ const TransferenciasPage = perezosa(() => import('../features/transferencias/pag
 const DashboardPage = perezosa(() => import('../features/dashboard/pages/DashboardPage'), 'DashboardPage')
 const IndicadoresPage = perezosa(() => import('../features/dashboard/pages/IndicadoresPage'), 'IndicadoresPage')
 const ReposicionPage = perezosa(() => import('../features/dashboard/pages/ReposicionPage'), 'ReposicionPage')
+const ProductosParaPedirPage = perezosa(
+  () => import('../features/dashboard/pages/ProductosParaPedirPage'),
+  'ProductosParaPedirPage',
+)
 const ClasificacionABCPage = perezosa(() => import('../features/dashboard/pages/ClasificacionABCPage'), 'ClasificacionABCPage')
 const CrearUsuarioPage = perezosa(() => import('../features/usuarios/pages/CrearUsuarioPage'), 'CrearUsuarioPage')
 const UsuariosPage = perezosa(() => import('../features/usuarios/pages/UsuariosPage'), 'UsuariosPage')
@@ -57,6 +61,7 @@ export const router = createBrowserRouter([
           { path: '/promociones', element: <PromocionesPage /> },
           { path: '/indicadores', element: <IndicadoresPage /> },
           { path: '/reposicion', element: <ReposicionPage /> },
+          { path: '/productos-para-pedir', element: <ProductosParaPedirPage /> },
           { path: '/abc', element: <ClasificacionABCPage /> },
           {
             element: <RequireRol roles={[Rol.ADMINISTRADOR, Rol.SUPERVISOR]} />,
