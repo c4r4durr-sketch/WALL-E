@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react'
+import type { FormEvent } from 'react'
 import { Save } from 'lucide-react'
 import { Aviso, Button, Field, Input, Select } from '../../../components/ui'
 import { Rol } from '../../../shared/types/roles'
 import { erroresPorCampo, mensajeDeError } from '../../../shared/api/errores'
+import { reglas, useFormulario, type Errores } from '../../../shared/validacion'
 import { useSucursales } from '../hooks/useSucursales'
 import { useEditarUsuario } from '../hooks/useUsuarios'
 import { ROL_LABEL } from '../roles'
@@ -10,9 +11,10 @@ import type { Usuario } from '../api/usuariosApi'
 
 // Edición de una cuenta (HU4/HU5), dentro del panel lateral: nombres,
 // correo, rol y sucursal. El nombre de usuario y la contraseña no se
-// editan acá (la contraseña tiene su propio formulario, HU3). La
-// validación real (sucursal activa obligatoria, no quitarse el rol a uno
-// mismo) la hace el backend.
+// editan acá (la contraseña tiene su propio formulario, HU3). Los formatos
+// (shared/validacion) se revisan al instante; el backend los vuelve a
+// revisar junto con las reglas que solo él conoce (sucursal activa, no
+// quitarse el rol a uno mismo).
 
 interface FormState {
   first_name: string
@@ -22,17 +24,13 @@ interface FormState {
   sucursal: string
 }
 
-type Errores = Partial<Record<keyof FormState, string>>
-
-function validar(form: FormState): Errores {
-  const errores: Errores = {}
-  if (!form.first_name.trim()) errores.first_name = 'El nombre es obligatorio.'
-  if (!form.last_name.trim()) errores.last_name = 'El apellido es obligatorio.'
-  if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-    errores.email = 'Correo no válido.'
+function validar(form: FormState): Errores<FormState> {
+  return {
+    first_name: reglas.nombrePersona(form.first_name),
+    last_name: reglas.nombrePersona(form.last_name, 'El apellido'),
+    email: reglas.email(form.email),
+    sucursal: form.rol !== Rol.ADMINISTRADOR && !form.sucursal ? 'Selecciona una sucursal.' : null,
   }
-  if (form.rol !== Rol.ADMINISTRADOR && !form.sucursal) errores.sucursal = 'Selecciona una sucursal.'
-  return errores
 }
 
 interface Props {
@@ -43,36 +41,32 @@ interface Props {
 export function EditarUsuarioForm({ usuario, onTerminar }: Props) {
   const { data: sucursales } = useSucursales()
   const editar = useEditarUsuario()
-  const [form, setForm] = useState<FormState>({
-    first_name: usuario.first_name,
-    last_name: usuario.last_name,
-    email: usuario.email,
-    rol: usuario.rol,
-    sucursal: usuario.sucursal === null ? '' : String(usuario.sucursal),
-  })
-  const [errores, setErrores] = useState<Errores>({})
+  const formulario = useFormulario<FormState>(
+    {
+      first_name: usuario.first_name,
+      last_name: usuario.last_name,
+      email: usuario.email,
+      rol: usuario.rol,
+      sucursal: usuario.sucursal === null ? '' : String(usuario.sucursal),
+    },
+    validar,
+  )
+  const form = formulario.valores
   const erroresServidor = erroresPorCampo(editar.error)
-  const errorDe = (campo: keyof FormState) => errores[campo] ?? erroresServidor[campo]
+  const errorDe = (campo: keyof FormState) => formulario.error(campo, erroresServidor)
   const errorGeneral =
     editar.isError && Object.keys(erroresServidor).length === 0
       ? mensajeDeError(editar.error, 'No se pudo guardar la cuenta. Intenta de nuevo.')
       : null
 
-  function setCampo<K extends keyof FormState>(campo: K, valor: FormState[K]) {
-    setForm((prev) => ({ ...prev, [campo]: valor }))
-    if (errores[campo]) setErrores((prev) => ({ ...prev, [campo]: undefined }))
-  }
-
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    const nuevos = validar(form)
-    setErrores(nuevos)
-    if (Object.keys(nuevos).length > 0) return
+    if (!formulario.enviar()) return
     editar.mutate(
       {
         id: usuario.id,
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
+        first_name: reglas.limpiar(form.first_name),
+        last_name: reglas.limpiar(form.last_name),
         email: form.email.trim(),
         rol: form.rol,
         sucursal: form.rol === Rol.ADMINISTRADOR ? null : Number(form.sucursal),
@@ -85,23 +79,38 @@ export function EditarUsuarioForm({ usuario, onTerminar }: Props) {
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div className="space-y-4 rounded-card bg-surf p-5 shadow-sh">
         <div className="grid grid-cols-2 gap-4">
-          <Field etiqueta="Nombre" error={errorDe('first_name')}>
-            <Input value={form.first_name} onChange={(e) => setCampo('first_name', e.target.value)} />
+          <Field etiqueta="Nombre" obligatorio error={errorDe('first_name')}>
+            <Input
+              maxLength={50}
+              value={form.first_name}
+              onChange={(e) => formulario.cambiar('first_name', e.target.value)}
+              onBlur={() => formulario.tocar('first_name')}
+            />
           </Field>
-          <Field etiqueta="Apellido" error={errorDe('last_name')}>
-            <Input value={form.last_name} onChange={(e) => setCampo('last_name', e.target.value)} />
+          <Field etiqueta="Apellido" obligatorio error={errorDe('last_name')}>
+            <Input
+              maxLength={50}
+              value={form.last_name}
+              onChange={(e) => formulario.cambiar('last_name', e.target.value)}
+              onBlur={() => formulario.tocar('last_name')}
+            />
           </Field>
         </div>
         <Field etiqueta="Correo" opcional error={errorDe('email')}>
-          <Input type="email" value={form.email} onChange={(e) => setCampo('email', e.target.value)} />
+          <Input
+            type="email"
+            maxLength={254}
+            value={form.email}
+            onChange={(e) => formulario.cambiar('email', e.target.value)}
+            onBlur={() => formulario.tocar('email')}
+          />
         </Field>
-        <Field etiqueta="Rol">
+        <Field etiqueta="Rol" obligatorio>
           <Select
             value={form.rol}
             onChange={(e) => {
               const rol = e.target.value as Rol
-              setForm((prev) => ({ ...prev, rol, sucursal: rol === Rol.ADMINISTRADOR ? '' : prev.sucursal }))
-              setErrores((prev) => ({ ...prev, sucursal: undefined }))
+              formulario.setValores((prev) => ({ ...prev, rol, sucursal: rol === Rol.ADMINISTRADOR ? '' : prev.sucursal }))
             }}
           >
             {Object.values(Rol).map((rol) => (
@@ -110,8 +119,12 @@ export function EditarUsuarioForm({ usuario, onTerminar }: Props) {
           </Select>
         </Field>
         {form.rol !== Rol.ADMINISTRADOR && (
-          <Field etiqueta="Sucursal" error={errorDe('sucursal')}>
-            <Select value={form.sucursal} onChange={(e) => setCampo('sucursal', e.target.value)}>
+          <Field etiqueta="Sucursal" obligatorio error={errorDe('sucursal')}>
+            <Select
+              value={form.sucursal}
+              onChange={(e) => formulario.cambiar('sucursal', e.target.value)}
+              onBlur={() => formulario.tocar('sucursal')}
+            >
               <option value="" disabled>Selecciona una sucursal</option>
               {sucursales?.map((s) => (
                 <option key={s.id} value={s.id}>{s.nombre}</option>
@@ -125,7 +138,13 @@ export function EditarUsuarioForm({ usuario, onTerminar }: Props) {
 
       <div className="flex justify-end gap-2 pt-2">
         <Button variante="ghost" onClick={onTerminar}>Cancelar</Button>
-        <Button type="submit" variante="primary" cargando={editar.isPending} icono={<Save size={16} aria-hidden />}>
+        <Button
+          type="submit"
+          variante="primary"
+          cargando={editar.isPending}
+          disabled={!formulario.valido}
+          icono={<Save size={16} aria-hidden />}
+        >
           Guardar cambios
         </Button>
       </div>

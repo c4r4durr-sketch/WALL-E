@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { Save } from 'lucide-react'
 import { Aviso, Button, Field, Input, Select } from '../../../components/ui'
 import { erroresPorCampo, mensajeDeError } from '../../../shared/api/errores'
+import { propsEntero, propsMonto, reglas, useFormulario, type Errores } from '../../../shared/validacion'
 import { useCrearHerramienta } from '../hooks/useCrearHerramienta'
 import { useActualizarHerramienta } from '../hooks/useActualizarHerramienta'
 import { useProveedores } from '../../proveedores/hooks/useProveedores'
@@ -17,6 +18,11 @@ import type { Herramienta, HerramientaPayload } from '../api/catalogoApi'
 // Con `herramienta` funciona en modo edición (precargado, PUT al guardar);
 // sin ella, en modo alta. El padre lo monta con una `key` distinta cada
 // vez que se abre, así el estado arranca limpio.
+//
+// Validación al instante con las reglas de shared/validacion (las mismas
+// del backend): código en mayúsculas, enteros sin decimales, montos
+// mayores que 0 con hasta 2 decimales. Que el código no esté repetido lo
+// avisa el backend.
 //
 // Foto: obligatoria en el alta (el backend responde 400 sin ella); en la
 // edición se puede reemplazar.
@@ -61,6 +67,22 @@ function numeroONull(valor: string): number | null {
   return valor.trim() === '' ? null : Number(valor)
 }
 
+// `codigoOriginal`: en la edición, un código cargado antes de la regla de
+// formato se puede conservar (el backend tampoco lo revisa si no cambia).
+function validador(codigoOriginal: string | null, puedeCambiarCosto: boolean) {
+  return (form: FormState): Errores<FormState> => ({
+    codigo: form.codigo === codigoOriginal ? null : reglas.codigoHerramienta(form.codigo),
+    nombre: reglas.texto(form.nombre, { etiqueta: 'El nombre', requerido: true, max: 150 }),
+    modelo: reglas.texto(form.modelo, { etiqueta: 'El modelo', max: 100 }),
+    unidades_por_caja: reglas.entero(form.unidades_por_caja, { vacio: 'Las unidades por caja son obligatorias.' }),
+    costo_unitario: puedeCambiarCosto ? reglas.monto(form.costo_unitario) : null,
+    demanda_anual: reglas.entero(form.demanda_anual, { requerido: false }),
+    costo_pedido: reglas.monto(form.costo_pedido),
+    costo_almacenamiento_unitario: reglas.monto(form.costo_almacenamiento_unitario),
+    tiempo_entrega_dias: reglas.entero(form.tiempo_entrega_dias, { min: 0, requerido: false }),
+  })
+}
+
 function Seccion({ titulo, descripcion, children }: { titulo: string; descripcion?: string; children: ReactNode }) {
   return (
     <section className="rounded-card bg-surf p-5 shadow-sh">
@@ -77,11 +99,16 @@ interface Props {
   puedeCambiarCosto: boolean
 }
 
+type TipoCampo = 'texto' | 'entero' | 'entero0' | 'monto'
+
 export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: Props) {
   const editando = Boolean(herramienta)
-  const [form, setForm] = useState<FormState>(herramienta ? aFormulario(herramienta) : FORM_VACIO)
+  const form = useFormulario<FormState>(
+    herramienta ? aFormulario(herramienta) : FORM_VACIO,
+    validador(herramienta?.codigo ?? null, puedeCambiarCosto),
+  )
   const [foto, setFoto] = useState<Blob | null>(null)
-  const [erroresLocales, setErroresLocales] = useState<Partial<Record<CampoForm | 'imagen', string>>>({})
+  const [fotoTocada, setFotoTocada] = useState(false)
   // HU8: solo se ofrecen proveedores activos; si la herramienta ya tiene
   // uno que luego se desactivó, se muestra igual para no perderlo al guardar.
   const { data: proveedoresActivos } = useProveedores({ activos: true })
@@ -89,44 +116,32 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
     herramienta?.proveedor != null && proveedoresActivos && !proveedoresActivos.some((p) => p.id === herramienta.proveedor)
   const crear = useCrearHerramienta()
   const actualizar = useActualizarHerramienta()
-  const { isPending, error, reset } = editando ? actualizar : crear
-  // Los del backend (400 por campo) y los del formulario, que tienen
-  // prioridad mientras se corrigen.
+  const { isPending, error } = editando ? actualizar : crear
   const erroresServidor = erroresPorCampo(error)
-  const errores: Record<string, string | undefined> = { ...erroresServidor, ...erroresLocales }
-
-  function cambiar(campo: CampoForm, valor: string) {
-    setForm({ ...form, [campo]: valor })
-    if (erroresLocales[campo]) setErroresLocales({ ...erroresLocales, [campo]: undefined })
-    if (error) reset()
-  }
+  const faltaFoto = !editando && !foto
+  const errorFoto = (fotoTocada && faltaFoto ? 'La foto del producto es obligatoria.' : undefined) ?? erroresServidor.imagen
 
   function cambiarFoto(nueva: Blob | null) {
     setFoto(nueva)
-    if (erroresLocales.imagen) setErroresLocales({ ...erroresLocales, imagen: undefined })
+    setFotoTocada(true)
   }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    const locales: typeof erroresLocales = {}
-    const costo = numeroONull(form.costo_unitario)
-    if (costo !== null && !(costo > 0)) locales.costo_unitario = 'El costo unitario debe ser un número mayor que cero.'
-    if (!editando && !foto) locales.imagen = 'La foto del producto es obligatoria.'
-    if (Object.keys(locales).length > 0) {
-      setErroresLocales(locales)
-      return
-    }
+    setFotoTocada(true)
+    if (!form.enviar() || faltaFoto) return
+    const v = form.valores
     const payload: HerramientaPayload = {
-      codigo: form.codigo.trim(),
-      nombre: form.nombre.trim(),
-      modelo: form.modelo.trim(),
-      unidades_por_caja: Number(form.unidades_por_caja),
-      demanda_anual: numeroONull(form.demanda_anual),
-      costo_pedido: numeroONull(form.costo_pedido),
-      costo_almacenamiento_unitario: numeroONull(form.costo_almacenamiento_unitario),
-      tiempo_entrega_dias: numeroONull(form.tiempo_entrega_dias),
-      costo_unitario: costo,
-      proveedor: numeroONull(form.proveedor),
+      codigo: v.codigo.trim().toUpperCase(),
+      nombre: reglas.limpiar(v.nombre),
+      modelo: reglas.limpiar(v.modelo),
+      unidades_por_caja: Number(v.unidades_por_caja),
+      demanda_anual: numeroONull(v.demanda_anual),
+      costo_pedido: numeroONull(v.costo_pedido),
+      costo_almacenamiento_unitario: numeroONull(v.costo_almacenamiento_unitario),
+      tiempo_entrega_dias: numeroONull(v.tiempo_entrega_dias),
+      costo_unitario: numeroONull(v.costo_unitario),
+      proveedor: numeroONull(v.proveedor),
     }
     if (herramienta) {
       actualizar.mutate({ id: herramienta.id, ...payload, imagen: foto }, { onSuccess: onTerminar })
@@ -135,20 +150,33 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
     }
   }
 
+  const PROPS_TIPO: Record<TipoCampo, object> = {
+    texto: { type: 'text' },
+    entero: propsEntero(1),
+    entero0: propsEntero(0),
+    monto: propsMonto(),
+  }
+
   function campo(
     nombre: CampoForm,
     etiqueta: string,
-    props: { type?: string; step?: string; ayuda?: string; disabled?: boolean; opcional?: boolean } = {},
+    props: { tipo?: TipoCampo; ayuda?: string; disabled?: boolean; opcional?: boolean; maxLength?: number } = {},
   ) {
     return (
-      <Field etiqueta={etiqueta} ayuda={props.ayuda} error={errores[nombre]} opcional={props.opcional}>
+      <Field
+        etiqueta={etiqueta}
+        ayuda={props.ayuda}
+        error={form.error(nombre, erroresServidor)}
+        opcional={props.opcional}
+        obligatorio={!props.opcional}
+      >
         <Input
-          type={props.type ?? 'text'}
-          step={props.step}
-          min={props.type === 'number' ? 0 : undefined}
-          value={form[nombre]}
+          {...PROPS_TIPO[props.tipo ?? 'texto']}
+          maxLength={props.maxLength}
+          value={form.valores[nombre]}
           disabled={props.disabled}
-          onChange={(event) => cambiar(nombre, event.target.value)}
+          onChange={(event) => form.cambiar(nombre, nombre === 'codigo' ? event.target.value.toUpperCase() : event.target.value)}
+          onBlur={() => form.tocar(nombre)}
         />
       </Field>
     )
@@ -164,30 +192,29 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
       <Seccion titulo="Foto del producto" descripcion={editando ? undefined : 'Obligatoria para dar de alta la herramienta.'}>
         <FotoDropzone
           actual={herramienta?.imagen ?? null}
-          nombre={form.nombre}
+          nombre={form.valores.nombre}
           onCambiar={cambiarFoto}
-          error={errores.imagen}
+          error={errorFoto}
         />
       </Seccion>
 
       <Seccion titulo="Datos de la herramienta">
         <div className="grid grid-cols-2 gap-4">
-          {campo('codigo', 'Código')}
-          {campo('nombre', 'Nombre')}
-          {campo('modelo', 'Modelo', { opcional: true })}
-          {campo('unidades_por_caja', 'Unidades por caja', { type: 'number', step: '1' })}
+          {campo('codigo', 'Código', { maxLength: 30, ayuda: 'Mayúsculas, números y guiones. Ej.: TAL-18V' })}
+          {campo('nombre', 'Nombre', { maxLength: 150 })}
+          {campo('modelo', 'Modelo', { opcional: true, maxLength: 100 })}
+          {campo('unidades_por_caja', 'Unidades por caja', { tipo: 'entero' })}
           {campo('costo_unitario', 'Costo unitario de compra', {
-            type: 'number',
-            step: '0.01',
+            tipo: 'monto',
             // HU7: una vez cargado no se puede quitar, solo cambiar.
             opcional: herramienta?.costo_unitario == null,
             disabled: !puedeCambiarCosto,
             ayuda: puedeCambiarCosto
-              ? 'Cada cambio queda en el historial de costos.'
+              ? 'Mayor que 0, hasta 2 decimales. Cada cambio queda en el historial de costos.'
               : 'Solo el Administrador puede cambiarlo.',
           })}
-          <Field etiqueta="Proveedor" error={errores.proveedor} opcional>
-            <Select value={form.proveedor} onChange={(event) => cambiar('proveedor', event.target.value)}>
+          <Field etiqueta="Proveedor" error={erroresServidor.proveedor} opcional>
+            <Select value={form.valores.proveedor} onChange={(event) => form.cambiar('proveedor', event.target.value)}>
               <option value="">Sin proveedor</option>
               {proveedorActualInactivo && herramienta && (
                 <option value={String(herramienta.proveedor)}>{herramienta.proveedor_nombre} (inactivo)</option>
@@ -202,10 +229,10 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
 
       <Seccion titulo="Datos para EOQ y punto de reorden" descripcion="Opcionales: sin ellos el indicador queda sin calcular.">
         <div className="grid grid-cols-2 gap-4">
-          {campo('demanda_anual', 'Demanda anual (unidades)', { type: 'number', step: '1', ayuda: 'D en la fórmula EOQ.' })}
-          {campo('costo_pedido', 'Costo por pedido', { type: 'number', step: '0.01', ayuda: 'S: costo fijo de cada pedido.' })}
-          {campo('costo_almacenamiento_unitario', 'Costo de almacenar 1 unidad al año', { type: 'number', step: '0.01', ayuda: 'H en la fórmula EOQ.' })}
-          {campo('tiempo_entrega_dias', 'Tiempo de entrega (días)', { type: 'number', step: '1', ayuda: 'Para el punto de reorden.' })}
+          {campo('demanda_anual', 'Demanda anual (unidades)', { tipo: 'entero', opcional: true, ayuda: 'D en la fórmula EOQ. Entero mayor que 0.' })}
+          {campo('costo_pedido', 'Costo por pedido', { tipo: 'monto', opcional: true, ayuda: 'S: costo fijo de cada pedido. Mayor que 0.' })}
+          {campo('costo_almacenamiento_unitario', 'Costo de almacenar 1 unidad al año', { tipo: 'monto', opcional: true, ayuda: 'H en la fórmula EOQ. Mayor que 0.' })}
+          {campo('tiempo_entrega_dias', 'Tiempo de entrega (días)', { tipo: 'entero0', opcional: true, ayuda: 'Para el punto de reorden. Entero, 0 o más.' })}
         </div>
       </Seccion>
 
@@ -213,7 +240,13 @@ export function HerramientaForm({ herramienta, onTerminar, puedeCambiarCosto }: 
 
       <div className="flex justify-end gap-2 pt-2">
         <Button variante="ghost" onClick={onTerminar}>Cancelar</Button>
-        <Button type="submit" variante="primary" cargando={isPending} icono={<Save size={16} aria-hidden />}>
+        <Button
+          type="submit"
+          variante="primary"
+          cargando={isPending}
+          disabled={!form.valido || faltaFoto}
+          icono={<Save size={16} aria-hidden />}
+        >
           {editando ? 'Guardar cambios' : 'Guardar herramienta'}
         </Button>
       </div>

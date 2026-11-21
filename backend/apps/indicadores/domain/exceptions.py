@@ -16,6 +16,15 @@ class FechaFuturaError(Exception):
     """El reporte pide un día que todavía no ocurrió."""
 
 
+class PeriodoInvalidoError(Exception):
+    """Fechas del filtro inválidas (futuras, o "hasta" antes de "desde").
+    `errores` mapea campo -> mensaje."""
+
+    def __init__(self, errores: dict[str, str]):
+        super().__init__(errores)
+        self.errores = errores
+
+
 # --- Promociones (HU23) ---
 
 

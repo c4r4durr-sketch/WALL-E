@@ -13,6 +13,16 @@ from .views import (
     ReporteAntiguedadView,
     TerminarPromocionView,
 )
+from .views_estadisticas import (
+    AntiguedadPorTramoView,
+    EstadisticaABCView,
+    EstadisticasExcelView,
+    MovimientosPorMesView,
+    ResumenEstadisticoView,
+    StockPorSucursalView,
+    TopHerramientasView,
+    TransferenciasView,
+)
 
 urlpatterns = [
     path("eoq/<int:herramienta_id>/", EOQPorHerramientaView.as_view(), name="indicador-eoq"),
@@ -26,4 +36,13 @@ urlpatterns = [
     path("promociones/<int:promocion_id>/terminar/", TerminarPromocionView.as_view(), name="terminar-promocion"),
     path("cierre-diario/", CierreDiarioView.as_view(), name="cierre-diario"),
     path("cierre-diario/excel/", CierreDiarioExcelView.as_view(), name="cierre-diario-excel"),
+    # Reportes estadísticos (página /reportes)
+    path("estadisticas/resumen/", ResumenEstadisticoView.as_view(), name="estadisticas-resumen"),
+    path("estadisticas/movimientos-por-mes/", MovimientosPorMesView.as_view(), name="estadisticas-movimientos"),
+    path("estadisticas/top-herramientas/", TopHerramientasView.as_view(), name="estadisticas-top"),
+    path("estadisticas/stock-por-sucursal/", StockPorSucursalView.as_view(), name="estadisticas-stock"),
+    path("estadisticas/abc/", EstadisticaABCView.as_view(), name="estadisticas-abc"),
+    path("estadisticas/antiguedad/", AntiguedadPorTramoView.as_view(), name="estadisticas-antiguedad"),
+    path("estadisticas/transferencias/", TransferenciasView.as_view(), name="estadisticas-transferencias"),
+    path("estadisticas/excel/", EstadisticasExcelView.as_view(), name="estadisticas-excel"),
 ]

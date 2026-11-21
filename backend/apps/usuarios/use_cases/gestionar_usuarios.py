@@ -6,6 +6,10 @@ Puros: reciben los repositorios y el validador de contraseñas como
 interfaces de domain/repositories.py, nunca el ORM. Reglas que viven acá:
   - solo el Administrador gestiona cuentas;
   - nombre de usuario válido y único (sin distinguir mayúsculas);
+  - nombre y apellido obligatorios, solo letras (apps/comun/reglas.py).
+    Al editar, el formato de usuario, nombre y apellido solo se revisa si
+    cambian: una cuenta creada antes de estas reglas se sigue pudiendo
+    editar sin tocar esos datos;
   - Supervisor y Empleado tienen una sucursal activa (HU5);
   - la contraseña cumple la política (ValidadorPassword) al crear, al
     editar y al restablecer; editar sin contraseña no la borra;
@@ -26,7 +30,9 @@ from ..domain.exceptions import (
     UsernameDuplicadoError,
     UsuarioNoEncontradoError,
 )
-from ..domain.reglas import errores_de_username, requiere_sucursal
+from apps.comun.reglas import error_nombre_persona, error_username, normalizar_espacios
+
+from ..domain.reglas import requiere_sucursal
 from ..domain.repositories import SucursalRepository, UsuarioRepository, ValidadorPassword
 from ..domain.value_objects import Rol
 
@@ -42,21 +48,34 @@ def _normalizar(usuario: Usuario) -> Usuario:
     return replace(
         usuario,
         username=usuario.username.strip(),
-        nombres=usuario.nombres.strip(),
-        apellidos=usuario.apellidos.strip(),
+        nombres=normalizar_espacios(usuario.nombres),
+        apellidos=normalizar_espacios(usuario.apellidos),
         email=usuario.email.strip(),
         rol=Rol(usuario.rol),
     )
 
 
 def _validar(
-    usuarios: UsuarioRepository, sucursales: SucursalRepository, usuario: Usuario
+    usuarios: UsuarioRepository,
+    sucursales: SucursalRepository,
+    usuario: Usuario,
+    anterior: Optional[Usuario] = None,
 ) -> None:
+    """`anterior`: la cuenta antes de editarla (None al crear). Los datos
+    de texto que no cambiaron no se vuelven a revisar."""
     errores: dict[str, list[str]] = {}
 
-    mensajes_username = errores_de_username(usuario.username)
-    if mensajes_username:
-        errores["username"] = mensajes_username
+    def cambio(campo: str) -> bool:
+        return anterior is None or getattr(anterior, campo) != getattr(usuario, campo)
+
+    for campo, clave, etiqueta in (("nombres", "first_name", "El nombre"), ("apellidos", "last_name", "El apellido")):
+        mensaje = error_nombre_persona(getattr(usuario, campo), etiqueta) if cambio(campo) else None
+        if mensaje:
+            errores[clave] = [mensaje]
+
+    mensaje_username = error_username(usuario.username) if cambio("username") else None
+    if mensaje_username:
+        errores["username"] = [mensaje_username]
     else:
         existente = usuarios.obtener_por_username(usuario.username)
         if existente is not None and existente.id != usuario.id:
@@ -70,6 +89,29 @@ def _validar(
             if sucursal is None or not sucursal.activa:
                 errores["sucursal"] = ["La sucursal no existe o no está activa."]
 
+    if errores:
+        raise DatosUsuarioInvalidosError(errores)
+
+
+def _validar_todo(
+    usuarios: UsuarioRepository,
+    sucursales: SucursalRepository,
+    validador: ValidadorPassword,
+    usuario: Usuario,
+    password: Optional[str],
+    anterior: Optional[Usuario] = None,
+) -> None:
+    """Datos y contraseña juntos, para responder todos los errores de una
+    vez (no primero los nombres y, al corregirlos, recién la contraseña)."""
+    errores: dict[str, list[str]] = {}
+    try:
+        _validar(usuarios, sucursales, usuario, anterior)
+    except DatosUsuarioInvalidosError as error:
+        errores.update(error.errores)
+    if password:
+        mensajes = validador.errores(password, usuario)
+        if mensajes:
+            errores["password"] = mensajes
     if errores:
         raise DatosUsuarioInvalidosError(errores)
 
@@ -114,8 +156,7 @@ def crear_usuario(
     ))
     if not password:
         raise DatosUsuarioInvalidosError({"password": ["La contraseña es obligatoria."]})
-    _validar(usuarios, sucursales, nuevo)
-    _validar_password(validador, password, nuevo)
+    _validar_todo(usuarios, sucursales, validador, nuevo, password)
     return usuarios.crear(nuevo, password)
 
 
@@ -142,9 +183,7 @@ def actualizar_usuario(
         actualizado = replace(actualizado, sucursal_id=None)
 
     _proteger_administradores(actor, usuarios, actual, actualizado)
-    _validar(usuarios, sucursales, actualizado)
-    if password:
-        _validar_password(validador, password, actualizado)
+    _validar_todo(usuarios, sucursales, validador, actualizado, password, anterior=actual)
 
     guardado = usuarios.actualizar(actualizado)
     if password:

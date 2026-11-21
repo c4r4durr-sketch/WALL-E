@@ -212,3 +212,27 @@ class HistorialApiTests(MediaTemporal, APITestCase):
         valores = [t["valor"] for t in self.client.get(f"{URL}opciones/").json()["tablas"]]
         self.assertEqual(len(valores), len(set(valores)))
         self.assertEqual(valores.count("usuarios.Sucursal"), 1)
+
+
+class ValidacionFiltroHistorialApiTests(APITestCase):
+    """Filtro de fechas de Auditoría: sin fechas futuras y "hasta" no
+    anterior a "desde"."""
+
+    def setUp(self):
+        admin = Usuario.objects.create_user("admin_v", password="x", rol="ADMINISTRADOR")
+        self.client.force_authenticate(admin)
+        from django.utils import timezone
+        self.hoy = timezone.localdate()
+
+    def test_fecha_futura_es_400(self):
+        manana = (self.hoy + timedelta(days=1)).isoformat()
+        for campo in ("desde", "hasta"):
+            with self.subTest(campo=campo):
+                respuesta = self.client.get(URL, {campo: manana})
+                self.assertEqual(respuesta.status_code, 400)
+                self.assertIn(campo, respuesta.json())
+
+    def test_hasta_anterior_a_desde_es_400(self):
+        respuesta = self.client.get(URL, {"desde": self.hoy.isoformat(),
+                                          "hasta": (self.hoy - timedelta(days=3)).isoformat()})
+        self.assertEqual(respuesta.status_code, 400)

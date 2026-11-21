@@ -238,8 +238,87 @@
     comandos (consola, `createsuperuser`, `cargar_fotos_demo`) y no se
     pueden separar de ellos sin modificar el historial, que no se toca.
 
+23. **Validación de todos los formularios.** **Base de datos:** sin
+    cambios (no hay migraciones; los CHECK de la base no cambian, las
+    reglas nuevas viven en los casos de uso y los serializers). Reglas,
+    iguales en el frontend (`shared/validacion/`) y en el backend
+    (`apps/comun/reglas.py` y `apps/comun/campos.py`, código compartido
+    que no es una app de Django ni un módulo nuevo del informe):
+    - **nombre y apellido** de las cuentas: obligatorios, 2 a 50
+      caracteres, solo letras (con tildes y ñ), espacios, apóstrofo y
+      guion. Antes podían quedar vacíos;
+    - **usuario**: 3 a 30 caracteres, letras sin tildes, números, punto,
+      guion y guion bajo. Antes: hasta 150 y se aceptaban `@` y `+`;
+    - **contraseña**: a los validadores de Django se suma
+      `ComplejidadPasswordValidator` (mayúscula, minúscula, número y
+      símbolo). Nueva cuenta y Restablecer muestran una barra de
+      seguridad y piden repetir la contraseña;
+    - **teléfono** del proveedor: 7 a 15 dígitos con `+`, espacios o
+      guiones; ya **no se aceptan paréntesis**;
+    - **código de herramienta**: se guarda en mayúsculas; solo letras,
+      números y guiones entre ellos;
+    - **datos EOQ**: demanda anual, costo de pedido y de almacenamiento
+      deben ser **mayores que 0** (antes se aceptaba 0); días de entrega,
+      entero ≥ 0;
+    - **cantidades y enteros** (unidades, cajas, unidades por caja,
+      descuento): se rechazan `2.5`, `2.0` y `1e3` (DRF aceptaba los dos
+      últimos); **montos**: mayores que 0 con hasta 2 decimales, sin
+      notación `e`;
+    - **fechas**: el filtro de Auditoría no acepta fechas futuras y
+      "Hasta" no puede ser anterior a "Desde";
+    - **motivos** (ajuste, rechazo, promoción): hasta 255 caracteres;
+      obligatorios en ajuste y rechazo (como antes).
+    Datos anteriores a las reglas: al editar, el usuario, los nombres,
+    el código de herramienta y el teléfono solo se revisan **si cambian**,
+    así una cuenta, herramienta o proveedor antiguo se sigue pudiendo
+    editar. El login no valida formatos (solo que no estén vacíos).
+    En el frontend: asterisco en los obligatorios, mensaje debajo de cada
+    campo y botón de guardar deshabilitado mientras haya errores.
+    Los proveedores no tienen "nombre de contacto": el nombre es el de la
+    empresa y admite números y símbolos.
 
-23. **Cuentas de demo (`cargar_demo --usuarios`).** **Base de datos:** sin
+24. **Reportes estadísticos con gráficos (página `/reportes`).** **Base de
+    datos:** sin cambios (no hay modelos nuevos ni migraciones; todo se
+    calcula con consultas agregadas del ORM sobre movimientos, catálogo,
+    transferencias y sucursales). Es un módulo dentro de la app
+    `indicadores`, no una app nueva: puerto `EstadisticasRepository`
+    (`domain/repositories.py`), implementación ORM
+    (`infrastructure/estadisticas.py`, la primera carpeta
+    `infrastructure` de indicadores), casos de uso
+    (`use_cases/estadisticas.py`) y vistas
+    (`interfaces/api/views_estadisticas.py`). Endpoints de solo lectura en
+    `/api/indicadores/estadisticas/`: `resumen`, `movimientos-por-mes`,
+    `top-herramientas`, `stock-por-sucursal`, `abc`, `antiguedad`,
+    `transferencias` y `excel` (un libro con una hoja por gráfico; 409 si
+    el periodo no tiene datos). Filtro común `desde`, `hasta`, `sucursal`:
+    sin fechas son los últimos 12 meses calendario; fechas futuras o
+    "hasta" anterior a "desde" → 400. Permisos como el cierre diario:
+    Administrador todas o una sucursal, Supervisor solo la suya (otra →
+    403), Empleado 403. Decisiones que conviene citar:
+    - **monto vendido = unidades × costo unitario actual**: el sistema no
+      guarda precio de venta ni el costo histórico de cada venta;
+    - **stock, valor del inventario y antigüedad** son la foto al cierre
+      del día "hasta" ("desde" no los cambia);
+    - **la clasificación ABC de esta página es por valor vendido en el
+      periodo** (unidades × costo), con los mismos cortes 80 % / 95 %; la
+      pantalla "Clasificación ABC" sigue siendo por unidades de los
+      últimos 12 meses, así que las dos pueden diferir;
+    - **alertas de reorden** del resumen = las del panel (hoy, stock de
+      todas las sucursales); **estancadas** = más de 40 días sin venta
+      en la sucursal del filtro, al cierre de "hasta";
+    - las transferencias se cuentan por fecha de solicitud y estado
+      actual; con sucursal, las que salen de ella o llegan a ella.
+    Frontend: Recharts (nueva dependencia `recharts`, más `react-is` 18
+    que pide como dependencia par), solo en el archivo de la página
+    (carga diferida). Colores de los tokens de `DISENO.md` mediante
+    `--graf-1/2/3` en `index.css` (naranja y grises), hoja de impresión
+    (`@media print`) en blanco y negro sin menú. Los filtros de fecha usan
+    las reglas del punto 23 (`shared/validacion`: obligatorias, sin fechas
+    futuras, "hasta" no anterior a "desde"). Pruebas: 25 nuevas
+    (`indicadores/tests_estadisticas.py`); con las del punto 23, **336
+    pruebas OK** en total.
+
+25. **Cuentas de demo (`cargar_demo --usuarios`).** **Base de datos:** sin
     cambios de estructura; agrega filas a `usuarios`. Crea, si no existen,
     un Supervisor y un Empleado por sucursal activa
     (`supervisor_<sucursal>`, `empleado_<sucursal>`; con las sucursales
@@ -250,12 +329,12 @@
     Nunca modifica cuentas existentes. Las altas quedan en el historial
     firmadas como `cargar_demo`, sin la contraseña.
 
-24. **Ver contraseña (frontend).** Todos los campos de contraseña (login,
+26. **Ver contraseña (frontend).** Todos los campos de contraseña (login,
     nueva cuenta, restablecer contraseña) tienen un botón de ojo para
     mostrarla; vuelve a ocultarse al enviar o al cerrar el panel. Si el
     informe tiene capturas de esas pantallas, ahora se ve el ícono.
 
-25. **Revisión de seguridad básica.** Capítulo de seguridad o requisitos no
+27. **Revisión de seguridad básica.** Capítulo de seguridad o requisitos no
     funcionales: `DEBUG`, `DJANGO_SECRET_KEY` y `DJANGO_ALLOWED_HOSTS`
     salen de `.env` (desde ahora sin `DJANGO_SECRET_KEY` Django no
     arranca); CORS solo para el origen del frontend

@@ -7,12 +7,14 @@ import type { TipoUnidad } from '../api/movimientosApi'
 import { useRegistrarAjuste, useStock } from '../hooks/useMovimientos'
 import { desgloseCajas } from '../formato'
 import { erroresDelBackend } from '../errores'
+import { LARGO_TEXTO, propsEntero, reglas, useFormulario } from '../../../shared/validacion'
 
 // Ajuste de inventario: CORRECCIÓN de stock, no una operación normal del
 // mostrador. Por eso vive en una sección aparte (ámbar, cerrada por
 // defecto) y solo la ve Administrador/Supervisor. Los movimientos no se
 // editan ni se borran: un error se corrige con un ajuste que queda en el
-// historial con su motivo. No cuenta como demanda para EOQ/ABC.
+// historial con su motivo (obligatorio, hasta 255 caracteres). No cuenta
+// como demanda para EOQ/ABC.
 
 interface Props {
   herramienta: Herramienta
@@ -25,19 +27,22 @@ export function AjusteForm({ herramienta, sucursales }: Props) {
   const [abierto, setAbierto] = useState(false)
   const [sentido, setSentido] = useState<Sentido>('NEGATIVO')
   const [unidad, setUnidad] = useState<TipoUnidad>('UNIDAD')
-  const [cantidad, setCantidad] = useState('')
-  const [sucursal, setSucursal] = useState('')
-  const [motivo, setMotivo] = useState('')
   const { data: stock } = useStock(herramienta.id)
   const { mutate, isPending, error, isSuccess, reset } = useRegistrarAjuste()
   const errores = erroresDelBackend(error)
+  const form = useFormulario({ sucursal: '', cantidad: '', motivo: '' }, (v) => ({
+    sucursal: v.sucursal ? null : 'Selecciona una sucursal.',
+    cantidad: reglas.entero(v.cantidad),
+    motivo: reglas.texto(v.motivo, { etiqueta: 'El motivo', requerido: true }),
+  }))
+  const { sucursal, cantidad, motivo } = form.valores
 
   const cantidadNumero = Number(cantidad)
   const unidades = unidad === 'CAJA' ? cantidadNumero * herramienta.unidades_por_caja : cantidadNumero
   const stockSucursal = stock?.find((s) => String(s.sucursal_id) === sucursal)
   const stockResultante = (stockSucursal?.unidades ?? 0) + (sentido === 'POSITIVO' ? unidades : -unidades)
   const noAlcanza = Boolean(stockSucursal) && cantidadNumero >= 1 && stockResultante < 0
-  const listo = sucursal !== '' && cantidadNumero >= 1 && motivo.trim() !== ''
+  const listo = form.valido && !noAlcanza
 
   function limpiarAvisos() {
     if (error || isSuccess) reset()
@@ -45,6 +50,7 @@ export function AjusteForm({ herramienta, sucursales }: Props) {
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (!form.enviar() || noAlcanza) return
     mutate(
       {
         herramienta: herramienta.id,
@@ -52,9 +58,9 @@ export function AjusteForm({ herramienta, sucursales }: Props) {
         sentido,
         tipo_unidad: unidad,
         cantidad: cantidadNumero,
-        motivo: motivo.trim(),
+        motivo: reglas.limpiar(motivo),
       },
-      { onSuccess: () => { setCantidad(''); setMotivo('') } },
+      { onSuccess: () => form.reiniciar({ sucursal, cantidad: '', motivo: '' }) },
     )
   }
 
@@ -91,7 +97,7 @@ export function AjusteForm({ herramienta, sucursales }: Props) {
     if (cantidadNumero >= 1 && stockResultante >= 0) ayudaSucursal += ` → quedaría en ${stockResultante}`
   }
   const errorSucursal =
-    errores.sucursal ?? (noAlcanza ? `No alcanza: no se pueden restar ${unidades} unidades si hay ${stockSucursal?.unidades}.` : undefined)
+    form.error('sucursal', errores) ?? (noAlcanza ? `No alcanza: no se pueden restar ${unidades} unidades si hay ${stockSucursal?.unidades}.` : undefined)
 
   return (
     <Card className="ring-2 ring-warn">
@@ -112,8 +118,12 @@ export function AjusteForm({ herramienta, sucursales }: Props) {
           ]}
         />
 
-        <Field etiqueta="Sucursal" ayuda={ayudaSucursal} error={errorSucursal}>
-          <Select value={sucursal} onChange={(event) => { setSucursal(event.target.value); limpiarAvisos() }}>
+        <Field etiqueta="Sucursal" obligatorio ayuda={ayudaSucursal} error={errorSucursal}>
+          <Select
+            value={sucursal}
+            onChange={(event) => { form.cambiar('sucursal', event.target.value); limpiarAvisos() }}
+            onBlur={() => form.tocar('sucursal')}
+          >
             <option value="" disabled>Selecciona una sucursal</option>
             {sucursales.map((s) => (
               <option key={s.id} value={s.id}>{s.nombre}</option>
@@ -122,13 +132,12 @@ export function AjusteForm({ herramienta, sucursales }: Props) {
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
-          <Field etiqueta="Cantidad" error={errores.cantidad}>
+          <Field etiqueta="Cantidad" obligatorio error={form.error('cantidad', errores)}>
             <Input
-              type="number"
-              min={1}
-              step={1}
+              {...propsEntero()}
               value={cantidad}
-              onChange={(event) => { setCantidad(event.target.value); limpiarAvisos() }}
+              onChange={(event) => { form.cambiar('cantidad', event.target.value); limpiarAvisos() }}
+              onBlur={() => form.tocar('cantidad')}
             />
           </Field>
           <div>
@@ -146,13 +155,19 @@ export function AjusteForm({ herramienta, sucursales }: Props) {
           </div>
         </div>
 
-        <Field etiqueta="Motivo" error={errores.motivo}>
+        <Field
+          etiqueta="Motivo"
+          obligatorio
+          ayuda={`${motivo.length}/${LARGO_TEXTO} caracteres`}
+          error={form.error('motivo', errores)}
+        >
           <Textarea
             rows={2}
-            maxLength={255}
+            maxLength={LARGO_TEXTO}
             value={motivo}
             placeholder="Ej.: conteo físico del 20/09 encontró 3 unidades menos"
-            onChange={(event) => { setMotivo(event.target.value); limpiarAvisos() }}
+            onChange={(event) => { form.cambiar('motivo', event.target.value); limpiarAvisos() }}
+            onBlur={() => form.tocar('motivo')}
           />
         </Field>
 

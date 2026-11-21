@@ -15,6 +15,7 @@ export function Input({ invalido, className, id, ...props }: InputHTMLAttributes
       id={id ?? campo?.id}
       aria-describedby={campo?.describedBy}
       aria-invalid={conError || undefined}
+      aria-required={campo?.requerido || undefined}
       className={cx(clasesControl(conError), 'h-10', props.type === 'number' && 'tabular-nums', className)}
       {...props}
     />
@@ -30,6 +31,7 @@ export function Select({ invalido, className, id, children, ...props }: SelectHT
         id={id ?? campo?.id}
         aria-describedby={campo?.describedBy}
         aria-invalid={conError || undefined}
+        aria-required={campo?.requerido || undefined}
         className={cx(clasesControl(conError), 'h-10 appearance-none pr-9', className)}
         {...props}
       >
@@ -48,6 +50,7 @@ export function Textarea({ invalido, className, id, ...props }: TextareaHTMLAttr
       id={id ?? campo?.id}
       aria-describedby={campo?.describedBy}
       aria-invalid={conError || undefined}
+      aria-required={campo?.requerido || undefined}
       className={cx(clasesControl(conError), 'min-h-20 resize-y py-2.5', className)}
       {...props}
     />

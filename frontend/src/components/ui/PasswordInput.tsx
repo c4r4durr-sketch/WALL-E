@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
+import { IconButton } from './IconButton'
 import { Input } from './Input'
-import { cx } from './cx'
 
-// Campo de contraseña con botón de ojo para verla. Cada campo recuerda lo
-// suyo; vuelve a ocultarse al enviar su formulario y al desmontarse (los
-// modales y paneles desmontan su contenido al cerrarse). autoComplete es
+// Campo de contraseña con un botón para mostrarla u ocultarla. Dentro de
+// un Field toma su id, su error y su aria-required como cualquier Input.
+// Vuelve a ocultarse al enviar su formulario y al desmontarse (los modales
+// y paneles desmontan su contenido al cerrarse). autoComplete es
 // obligatorio: current-password en el login, new-password al crear o
 // restablecer.
 
-interface Props extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'autoComplete'> {
+type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'autoComplete'> & {
   autoComplete: 'current-password' | 'new-password'
   invalido?: boolean
 }
@@ -26,26 +27,19 @@ export function PasswordInput({ className, ...props }: Props) {
     return () => form.removeEventListener('submit', ocultar)
   }, [])
 
-  const etiqueta = visible ? 'Ocultar contraseña' : 'Mostrar contraseña'
-
   return (
     <div ref={contenedor} className="relative">
-      <Input type={visible ? 'text' : 'password'} className={cx('pr-11', className)} {...props} />
-      <button
-        type="button"
-        aria-label={etiqueta}
+      <Input type={visible ? 'text' : 'password'} className={`pr-11 ${className ?? ''}`} {...props} />
+      <IconButton
+        etiqueta={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+        tamano="sm"
         aria-pressed={visible}
-        title={etiqueta}
         onClick={() => setVisible((v) => !v)}
         disabled={props.disabled}
-        className={cx(
-          'transicion absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full',
-          'text-muted hover:bg-surf hover:text-ink outline-none focus-visible:ring-2 focus-visible:ring-acc',
-          'disabled:pointer-events-none disabled:opacity-40',
-        )}
+        className="absolute right-1 top-1/2 -translate-y-1/2"
       >
-        {visible ? <EyeOff size={17} aria-hidden /> : <Eye size={17} aria-hidden />}
-      </button>
+        {visible ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
+      </IconButton>
     </div>
   )
 }

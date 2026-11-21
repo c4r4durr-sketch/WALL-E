@@ -6,10 +6,15 @@ Puros: reciben el repositorio como parámetro (la interfaz de
 domain/repositories.py, nunca el ORM) y trabajan con la entidad de
 dominio. Acá viven las reglas de negocio del catálogo, no en la vista ni
 en el modelo:
-  - código y nombre obligatorios (sin espacios sobrantes);
+  - código y nombre obligatorios (sin espacios sobrantes); el código va
+    en mayúsculas, solo letras, números y guiones (apps/comun/reglas.py).
+    Al editar, el formato del código solo se revisa si cambia: una
+    herramienta cargada antes de esta regla se sigue pudiendo editar;
   - el código de caja es único;
   - una caja trae al menos 1 unidad;
-  - los datos de EOQ/ROP son opcionales pero nunca negativos;
+  - los datos de EOQ/ROP son opcionales; si vienen, la demanda anual y
+    los costos de pedido y de almacenamiento son mayores que 0, y los
+    días de entrega, enteros mayores o iguales a 0;
   - no se elimina una herramienta con movimientos (el repositorio lo
     detecta y lanza HerramientaEnUsoError);
   - HU7: el costo unitario es mayor que cero; solo el Administrador lo
@@ -27,6 +32,7 @@ en el modelo:
 from dataclasses import fields, replace
 from typing import Any, Optional
 
+from apps.comun.reglas import error_codigo, error_texto, normalizar_codigo, normalizar_espacios
 from apps.proveedores.domain.repositories import ProveedorRepository
 from apps.usuarios.domain.entities import Actor
 from apps.usuarios.domain.value_objects import Rol
@@ -51,29 +57,43 @@ CAMPOS_EDITABLES = {
     f.name for f in fields(Herramienta)
     if f.name not in {"id", "creado_en", "actualizado_en", "proveedor_nombre", "imagen"}
 }
-CAMPOS_NO_NEGATIVOS = ["demanda_anual", "costo_pedido", "costo_almacenamiento_unitario", "tiempo_entrega_dias"]
+CAMPOS_POSITIVOS = ["demanda_anual", "costo_pedido", "costo_almacenamiento_unitario"]
+NOMBRE_LARGO_MAXIMO = 150
+MODELO_LARGO_MAXIMO = 100
 
 
-def _validar(herramienta: Herramienta) -> Herramienta:
+def _validar(herramienta: Herramienta, anterior: Optional[Herramienta] = None) -> Herramienta:
     """Normaliza textos y verifica las reglas que no dependen de otras
-    herramientas. Devuelve la herramienta normalizada."""
+    herramientas. Devuelve la herramienta normalizada. `anterior`: la
+    herramienta antes de editarla (None en el alta)."""
     herramienta = replace(
         herramienta,
-        codigo=herramienta.codigo.strip(),
-        nombre=herramienta.nombre.strip(),
-        modelo=(herramienta.modelo or "").strip(),
+        codigo=normalizar_codigo(herramienta.codigo),
+        nombre=normalizar_espacios(herramienta.nombre),
+        modelo=normalizar_espacios(herramienta.modelo),
     )
     errores: dict[str, str] = {}
-    if not herramienta.codigo:
-        errores["codigo"] = "El código es obligatorio."
-    if not herramienta.nombre:
-        errores["nombre"] = "El nombre es obligatorio."
+    codigo_cambia = anterior is None or normalizar_codigo(anterior.codigo) != herramienta.codigo
+    if not codigo_cambia:
+        # Se reenvió el mismo código: se conserva tal como estaba guardado.
+        herramienta = replace(herramienta, codigo=anterior.codigo)
+    mensaje = error_codigo(herramienta.codigo) if codigo_cambia else None
+    if mensaje:
+        errores["codigo"] = mensaje
+    mensaje = error_texto(herramienta.nombre, "El nombre", obligatorio=True, maximo=NOMBRE_LARGO_MAXIMO)
+    if mensaje:
+        errores["nombre"] = mensaje
+    mensaje = error_texto(herramienta.modelo, "El modelo", obligatorio=False, maximo=MODELO_LARGO_MAXIMO)
+    if mensaje:
+        errores["modelo"] = mensaje
     if herramienta.unidades_por_caja < 1:
         errores["unidades_por_caja"] = "Una caja debe traer al menos 1 unidad."
-    for campo in CAMPOS_NO_NEGATIVOS:
+    for campo in CAMPOS_POSITIVOS:
         valor = getattr(herramienta, campo)
-        if valor is not None and valor < 0:
-            errores[campo] = "No puede ser negativo."
+        if valor is not None and valor <= 0:
+            errores[campo] = "Debe ser mayor que 0."
+    if herramienta.tiempo_entrega_dias is not None and herramienta.tiempo_entrega_dias < 0:
+        errores["tiempo_entrega_dias"] = "No puede ser negativo."
     if herramienta.costo_unitario is not None and herramienta.costo_unitario <= 0:
         errores["costo_unitario"] = "El costo unitario debe ser mayor que cero."
     if errores:
@@ -187,7 +207,7 @@ def actualizar_herramienta(
     actualizada = replace(
         actual, **{campo: valor for campo, valor in cambios.items() if campo in CAMPOS_EDITABLES}
     )
-    actualizada = _validar(actualizada)
+    actualizada = _validar(actualizada, anterior=actual)
     _validar_imagen(imagen)
     _verificar_codigo_unico(repo, actualizada)
     _verificar_proveedor(proveedores, actual, actualizada)

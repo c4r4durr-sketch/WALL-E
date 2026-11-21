@@ -65,3 +65,35 @@ export function monto(valor: number): string {
 export function decimal(valor: number, decimales = 2): string {
   return valor.toLocaleString('es', { maximumFractionDigits: decimales })
 }
+
+// Cifras de los reportes: miles con punto SIEMPRE ("1.234"; el formato
+// 'es' por defecto deja "1234" sin punto) y decimales con coma.
+const milesFmt = new Intl.NumberFormat('es', { maximumFractionDigits: 0, useGrouping: 'always' })
+const bsFmt = new Intl.NumberFormat('es', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' })
+const bsCortoFmt = new Intl.NumberFormat('es', { notation: 'compact', maximumFractionDigits: 1 })
+
+export function miles(valor: number): string {
+  return milesFmt.format(valor)
+}
+
+// 1234.5 -> "Bs 1.234,50"
+export function bs(valor: number): string {
+  return `Bs ${bsFmt.format(valor)}`
+}
+
+// Para ejes de gráficos: 12500 -> "Bs 12,5 mil".
+export function bsCorto(valor: number): string {
+  return `Bs ${bsCortoFmt.format(valor)}`
+}
+
+const mesFmt = new Intl.DateTimeFormat('es', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+const mesLargoFmt = new Intl.DateTimeFormat('es', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+
+// "2026-03" -> "mar 26" (ejes) y "marzo de 2026" (tooltips).
+export function mesCorto(mes: string): string {
+  return mesFmt.format(new Date(`${mes}-01T00:00:00Z`)).replace('.', '')
+}
+
+export function mesLargo(mes: string): string {
+  return mesLargoFmt.format(new Date(`${mes}-01T00:00:00Z`))
+}

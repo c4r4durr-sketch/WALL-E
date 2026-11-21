@@ -91,8 +91,16 @@ Beymar = frontend. Repo: `github.com/c4r4durr-sketch/WALL-E`, rama `main`.
 | **Promociones** (HU23) | Tabla `promociones` (catalogo, `0007`); reglas en `indicadores/use_cases/promociones.py`. `GET /api/indicadores/promociones/?vigentes=` (todos), `POST` (Admin en cualquier sucursal, Supervisor en la suya; solo herramientas estancadas en esa sucursal; descuento opcional 1–90 %, `0008`; desde hoy hasta `fecha_fin`; una vigente por herramienta y sucursal → 409), `POST .../<id>/terminar/` (quitarla; mismos permisos). Sin editar ni borrar; auditadas | `/promociones` (todos; quitar: Admin y Supervisor de esa sucursal), botón "Promocionar" en `/antiguedad` y etiqueta en catálogo y panel |
 | **Excel** (HU25) | `GET .../cierre-diario/excel/`, `.../antiguedad/excel/` y `.../abc/excel/`: el mismo caso de uso, filtros y permisos que la versión JSON; el .xlsx lo arma `indicadores/interfaces/excel.py` (openpyxl); reporte vacío → 409 con aviso, sin archivo | Botón "Exportar a Excel" en Cierre diario, Antigüedad del stock y Clasificación ABC |
 | **Dashboard** (HU24) | `GET /api/indicadores/panel/` (todos los roles): alertas de reorden (stock total ≤ ROP, con pedido sugerido = EOQ en cajas), herramientas sin ventas hace > 40 días, totales. Equivale a las vistas SQL `vw_panel_auditoria` / `vw_alertas_reorden` / `vw_herramientas_estancadas` | `/` (inicio): indicadores + tablas de alertas y estancadas |
+| **Reportes estadísticos** | `GET /api/indicadores/estadisticas/{resumen,movimientos-por-mes,top-herramientas,stock-por-sucursal,abc,antiguedad,transferencias,excel}/?desde=&hasta=&sucursal=`: agregaciones del ORM (`indicadores/infrastructure/estadisticas.py`) y casos de uso en `use_cases/estadisticas.py`; sin fechas, últimos 12 meses; Admin todas o una sucursal, Supervisor la suya, Empleado 403 | `/reportes` (Análisis, Admin y Supervisor): filtros con atajos, 5 KPI y 6 gráficos Recharts (carga diferida), Exportar a Excel e Imprimir / PDF |
 
-Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **264 pruebas OK** (02/11/2026).
+Pruebas: `backend/venv/Scripts/python.exe manage.py test apps` → **336 pruebas OK**.
+
+**Validación de formularios** (rama `validaciones`, 19/11/2026): reglas en
+`frontend/src/shared/validacion/` y `backend/apps/comun/` (las mismas en los
+dos lados; detalle en `docs/CAMBIOS_PARA_EL_INFORME.md`, punto 23).
+Formularios con `useFormulario`, `Field obligatorio` y, para contraseñas,
+`PasswordInput` + `PasswordStrength`. Al agregar un formulario, usar esas
+reglas en vez de escribir otras.
 
 **Fase 1 de diseño** (cerrada y fusionada en `sprint3-cierre` el 27/10): todas las pantallas sobre el sistema
 de `docs/DISENO.md` (componentes en `frontend/src/components/ui/`, barra

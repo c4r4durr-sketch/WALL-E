@@ -7,11 +7,13 @@ import type { TipoOperacion, TipoUnidad } from '../api/movimientosApi'
 import { useRegistrarMovimiento, useStock } from '../hooks/useMovimientos'
 import { desgloseCajas } from '../formato'
 import { erroresDelBackend } from '../errores'
+import { propsEntero, reglas, useFormulario } from '../../../shared/validacion'
 
 // Formulario de entrada/salida (HU9) para la herramienta elegida en la
 // página. Muestra el stock actual de la sucursal y, si se registra en
 // cajas, su equivalente en unidades. La validación real (stock suficiente,
-// sucursal del empleado) la hace el backend; acá solo se informa.
+// sucursal del empleado) la hace el backend; acá se avisa al instante
+// (cantidad entera mayor que 0, sucursal elegida, salida mayor que el stock).
 
 interface Props {
   herramienta: Herramienta
@@ -23,15 +25,23 @@ interface Props {
 export function MovimientoForm({ herramienta, sucursales, sucursalFija }: Props) {
   const [tipo, setTipo] = useState<TipoOperacion>('ENTRADA')
   const [unidad, setUnidad] = useState<TipoUnidad>('UNIDAD')
-  const [cantidad, setCantidad] = useState('')
-  const [sucursal, setSucursal] = useState<string>(sucursalFija ? String(sucursalFija) : '')
   const { data: stock } = useStock(herramienta.id)
   const { mutate, isPending, error, isSuccess, reset } = useRegistrarMovimiento()
   const errores = erroresDelBackend(error)
+  const form = useFormulario({ sucursal: sucursalFija ? String(sucursalFija) : '', cantidad: '' }, (v) => ({
+    sucursal: v.sucursal ? null : 'Selecciona una sucursal.',
+    cantidad: reglas.entero(v.cantidad),
+  }))
+  const { sucursal, cantidad } = form.valores
 
   const cantidadNumero = Number(cantidad)
   const unidadesEquivalentes = unidad === 'CAJA' ? cantidadNumero * herramienta.unidades_por_caja : cantidadNumero
   const stockSucursal = stock?.find((s) => String(s.sucursal_id) === sucursal)
+  const noAlcanza =
+    tipo === 'SALIDA' && Boolean(stockSucursal) && !form.errores.cantidad && unidadesEquivalentes > (stockSucursal?.unidades ?? 0)
+  const errorCantidad =
+    form.error('cantidad', errores) ??
+    (noAlcanza ? `No alcanza: hay ${stockSucursal?.unidades} unidades en esta sucursal.` : undefined)
 
   function limpiarAvisos() {
     if (error || isSuccess) reset()
@@ -39,6 +49,7 @@ export function MovimientoForm({ herramienta, sucursales, sucursalFija }: Props)
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (!form.enviar() || noAlcanza) return
     mutate(
       {
         herramienta: herramienta.id,
@@ -47,7 +58,7 @@ export function MovimientoForm({ herramienta, sucursales, sucursalFija }: Props)
         tipo_unidad: unidad,
         cantidad: cantidadNumero,
       },
-      { onSuccess: () => setCantidad('') },
+      { onSuccess: () => form.reiniciar({ sucursal, cantidad: '' }) },
     )
   }
 
@@ -72,11 +83,12 @@ export function MovimientoForm({ herramienta, sucursales, sucursalFija }: Props)
           ]}
         />
 
-        <Field etiqueta="Sucursal" ayuda={ayudaSucursal} error={errores.sucursal}>
+        <Field etiqueta="Sucursal" obligatorio ayuda={ayudaSucursal} error={form.error('sucursal', errores)}>
           <Select
             value={sucursal}
             disabled={sucursalFija !== null}
-            onChange={(event) => { setSucursal(event.target.value); limpiarAvisos() }}
+            onChange={(event) => { form.cambiar('sucursal', event.target.value); limpiarAvisos() }}
+            onBlur={() => form.tocar('sucursal')}
           >
             <option value="" disabled>Selecciona una sucursal</option>
             {sucursales.map((s) => (
@@ -88,15 +100,15 @@ export function MovimientoForm({ herramienta, sucursales, sucursalFija }: Props)
         <div className="grid grid-cols-2 gap-4">
           <Field
             etiqueta="Cantidad"
-            error={errores.cantidad}
+            obligatorio
+            error={errorCantidad}
             ayuda={unidad === 'CAJA' && cantidadNumero > 0 ? `= ${unidadesEquivalentes} unidades` : undefined}
           >
             <Input
-              type="number"
-              min={1}
-              step={1}
+              {...propsEntero()}
               value={cantidad}
-              onChange={(event) => { setCantidad(event.target.value); limpiarAvisos() }}
+              onChange={(event) => { form.cambiar('cantidad', event.target.value); limpiarAvisos() }}
+              onBlur={() => form.tocar('cantidad')}
             />
           </Field>
           <div>
@@ -125,7 +137,7 @@ export function MovimientoForm({ herramienta, sucursales, sucursalFija }: Props)
           variante="primary"
           className="w-full"
           cargando={isPending}
-          disabled={!sucursal || !(cantidadNumero >= 1)}
+          disabled={!form.valido || noAlcanza}
         >
           {tipo === 'ENTRADA' ? 'Registrar entrada' : 'Registrar salida'}
         </Button>

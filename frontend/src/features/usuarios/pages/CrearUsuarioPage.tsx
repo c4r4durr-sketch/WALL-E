@@ -1,101 +1,95 @@
-import { useState, type FormEvent } from 'react'
+import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, UserPlus } from 'lucide-react'
-import { Aviso, Button, Card, Field, Input, PageHeader, PasswordInput, Select, clasesBoton } from '../../../components/ui'
+import {
+  Aviso,
+  Button,
+  Card,
+  Field,
+  Input,
+  PageHeader,
+  PasswordInput,
+  PasswordStrength,
+  Select,
+  clasesBoton,
+} from '../../../components/ui'
 import { Rol } from '../../../shared/types/roles'
+import { errorPassword, errorRepetir, reglas, useFormulario, type Errores } from '../../../shared/validacion'
 import { useSucursales } from '../hooks/useSucursales'
 import { useCrearUsuario } from '../hooks/useCrearUsuario'
 import { ROL_LABEL } from '../roles'
 import { erroresPorCampo, mensajeDeError } from '../../../shared/api/errores'
 
 // Alta de una cuenta (HU4), solo Administrador. El login es por nombre de
-// usuario; la sucursal es obligatoria salvo para el Administrador.
+// usuario; la sucursal es obligatoria salvo para el Administrador. Las
+// reglas de cada campo (shared/validacion) son las mismas del backend; el
+// backend avisa además si el usuario ya existe o la contraseña es común.
 
 type FormState = {
   username: string
   password: string
+  repetir: string
   first_name: string
   last_name: string
   rol: Rol
   sucursal: string
 }
 
-type Errores = Partial<Record<keyof FormState, string>>
+const FORM_VACIO: FormState = {
+  username: '',
+  password: '',
+  repetir: '',
+  first_name: '',
+  last_name: '',
+  rol: Rol.EMPLEADO,
+  sucursal: '',
+}
 
-function validar(form: FormState): Errores {
-  const errores: Errores = {}
+// Datos con los que la contraseña no se puede parecer (como en Django).
+function datosCuenta(form: FormState) {
+  return { username: form.username, first_name: form.first_name, last_name: form.last_name }
+}
 
-  if (!form.username.trim()) {
-    errores.username = 'El usuario es obligatorio.'
-  } else if (form.username.trim().length < 3) {
-    errores.username = 'Debe tener al menos 3 caracteres.'
-  } else if (/\s/.test(form.username)) {
-    errores.username = 'No puede contener espacios.'
+function validar(form: FormState): Errores<FormState> {
+  return {
+    username: reglas.usuario(form.username),
+    first_name: reglas.nombrePersona(form.first_name),
+    last_name: reglas.nombrePersona(form.last_name, 'El apellido'),
+    password: errorPassword(form.password, datosCuenta(form)),
+    repetir: errorRepetir(form.password, form.repetir),
+    sucursal: form.rol !== Rol.ADMINISTRADOR && !form.sucursal ? 'Selecciona una sucursal.' : null,
   }
-
-  if (!form.password) {
-    errores.password = 'La contraseña es obligatoria.'
-  } else if (form.password.length < 8) {
-    errores.password = 'Debe tener al menos 8 caracteres.'
-  }
-
-  if (!form.first_name.trim()) errores.first_name = 'El nombre es obligatorio.'
-  if (!form.last_name.trim()) errores.last_name = 'El apellido es obligatorio.'
-
-  if (form.rol !== Rol.ADMINISTRADOR && !form.sucursal) {
-    errores.sucursal = 'Selecciona una sucursal.'
-  }
-
-  return errores
 }
 
 export function CrearUsuarioPage() {
   const { data: sucursales } = useSucursales()
   const { mutate, isPending, error, isSuccess, reset } = useCrearUsuario()
-
-  const [form, setForm] = useState<FormState>({
-    username: '',
-    password: '',
-    first_name: '',
-    last_name: '',
-    rol: Rol.EMPLEADO,
-    sucursal: '',
-  })
-  const [errores, setErrores] = useState<Errores>({})
-  // Errores del backend (usuario repetido, contraseña débil...) junto a su
-  // campo; los del formulario tienen prioridad mientras se corrigen.
-  const erroresServidor = erroresPorCampo(error) as Errores
-  const visibles: Errores = { ...erroresServidor, ...errores }
+  const form = useFormulario<FormState>(FORM_VACIO, validar)
+  const { valores } = form
+  const erroresServidor = erroresPorCampo(error)
   const errorGeneral =
     error && Object.keys(erroresServidor).length === 0
       ? mensajeDeError(error, 'No se pudo crear la cuenta. Intenta de nuevo.')
       : null
 
-  // Actualiza un campo y limpia su error mientras el usuario escribe
   function setCampo<K extends keyof FormState>(campo: K, valor: FormState[K]) {
-    setForm((prev) => ({ ...prev, [campo]: valor }))
+    form.cambiar(campo, valor)
     if (isSuccess) reset()
-    if (errores[campo]) {
-      setErrores((prev) => ({ ...prev, [campo]: undefined }))
-    }
   }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-
-    const erroresNuevos = validar(form)
-    setErrores(erroresNuevos)
-    if (Object.keys(erroresNuevos).length > 0) return // no envía
+    if (!form.enviar()) return
 
     mutate({
-      username: form.username.trim(),
-      password: form.password,
-      first_name: form.first_name.trim(),
-      last_name: form.last_name.trim(),
-      rol: form.rol,
-      sucursal: form.rol === Rol.ADMINISTRADOR ? null : Number(form.sucursal),
+      username: valores.username.trim(),
+      password: valores.password,
+      first_name: reglas.limpiar(valores.first_name),
+      last_name: reglas.limpiar(valores.last_name),
+      rol: valores.rol,
+      sucursal: valores.rol === Rol.ADMINISTRADOR ? null : Number(valores.sucursal),
     }, {
-      onSuccess: () => setForm((prev) => ({ ...prev, username: '', password: '', first_name: '', last_name: '' })),
+      onSuccess: () => form.reiniciar({ ...FORM_VACIO, rol: valores.rol, sucursal: valores.sucursal }),
     })
   }
 
@@ -116,30 +110,66 @@ export function CrearUsuarioPage() {
       <Card className="max-w-2xl">
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div className="grid grid-cols-2 gap-4">
-            <Field etiqueta="Usuario" error={visibles.username}>
-              <Input autoComplete="off" value={form.username} onChange={(e) => setCampo('username', e.target.value)} />
+            <Field etiqueta="Nombre" obligatorio error={form.error('first_name', erroresServidor)}>
+              <Input
+                autoComplete="off"
+                maxLength={50}
+                value={valores.first_name}
+                onChange={(e) => setCampo('first_name', e.target.value)}
+                onBlur={() => form.tocar('first_name')}
+              />
             </Field>
-            <Field etiqueta="Contraseña" error={visibles.password}>
-              <PasswordInput autoComplete="new-password" value={form.password} onChange={(e) => setCampo('password', e.target.value)} />
+            <Field etiqueta="Apellido" obligatorio error={form.error('last_name', erroresServidor)}>
+              <Input
+                autoComplete="off"
+                maxLength={50}
+                value={valores.last_name}
+                onChange={(e) => setCampo('last_name', e.target.value)}
+                onBlur={() => form.tocar('last_name')}
+              />
             </Field>
-            <Field etiqueta="Nombre" error={visibles.first_name}>
-              <Input value={form.first_name} onChange={(e) => setCampo('first_name', e.target.value)} />
+            <Field
+              etiqueta="Usuario"
+              obligatorio
+              ayuda="De 3 a 30: letras sin tildes, números, punto, guion o guion bajo."
+              error={form.error('username', erroresServidor)}
+              className="col-span-2"
+            >
+              <Input
+                autoComplete="off"
+                maxLength={30}
+                value={valores.username}
+                onChange={(e) => setCampo('username', e.target.value)}
+                onBlur={() => form.tocar('username')}
+              />
             </Field>
-            <Field etiqueta="Apellido" error={visibles.last_name}>
-              <Input value={form.last_name} onChange={(e) => setCampo('last_name', e.target.value)} />
+            <Field etiqueta="Contraseña" obligatorio error={form.error('password', erroresServidor)}>
+              <PasswordInput
+                autoComplete="new-password"
+                value={valores.password}
+                onChange={(e) => setCampo('password', e.target.value)}
+                onBlur={() => form.tocar('password')}
+              />
             </Field>
-            <Field etiqueta="Rol">
+            <Field etiqueta="Repetir contraseña" obligatorio error={form.error('repetir')}>
+              <PasswordInput
+                autoComplete="new-password"
+                value={valores.repetir}
+                onChange={(e) => setCampo('repetir', e.target.value)}
+                onBlur={() => form.tocar('repetir')}
+              />
+            </Field>
+            <div className="col-span-2 -mt-1">
+              <PasswordStrength password={valores.password} cuenta={datosCuenta(valores)} />
+            </div>
+            <Field etiqueta="Rol" obligatorio>
               <Select
-                value={form.rol}
+                value={valores.rol}
                 onChange={(e) => {
                   const rol = e.target.value as Rol
-                  setForm((prev) => ({
-                    ...prev,
-                    rol,
-                    // al pasar a Administrador, la sucursal ya no aplica
-                    sucursal: rol === Rol.ADMINISTRADOR ? '' : prev.sucursal,
-                  }))
-                  setErrores((prev) => ({ ...prev, sucursal: undefined }))
+                  // al pasar a Administrador, la sucursal ya no aplica
+                  form.setValores((prev) => ({ ...prev, rol, sucursal: rol === Rol.ADMINISTRADOR ? '' : prev.sucursal }))
+                  if (isSuccess) reset()
                 }}
               >
                 {Object.values(Rol).map((rol) => (
@@ -147,9 +177,13 @@ export function CrearUsuarioPage() {
                 ))}
               </Select>
             </Field>
-            {form.rol !== Rol.ADMINISTRADOR && (
-              <Field etiqueta="Sucursal" error={visibles.sucursal}>
-                <Select value={form.sucursal} onChange={(e) => setCampo('sucursal', e.target.value)}>
+            {valores.rol !== Rol.ADMINISTRADOR && (
+              <Field etiqueta="Sucursal" obligatorio error={form.error('sucursal', erroresServidor)}>
+                <Select
+                  value={valores.sucursal}
+                  onChange={(e) => setCampo('sucursal', e.target.value)}
+                  onBlur={() => form.tocar('sucursal')}
+                >
                   <option value="" disabled>Selecciona una sucursal</option>
                   {sucursales?.map((sucursal) => (
                     <option key={sucursal.id} value={sucursal.id}>{sucursal.nombre}</option>
@@ -163,7 +197,13 @@ export function CrearUsuarioPage() {
           {isSuccess && <Aviso tono="exito">Cuenta creada correctamente.</Aviso>}
 
           <div className="flex justify-end pt-2">
-            <Button type="submit" variante="primary" cargando={isPending} icono={<UserPlus size={16} aria-hidden />}>
+            <Button
+              type="submit"
+              variante="primary"
+              cargando={isPending}
+              disabled={!form.valido}
+              icono={<UserPlus size={16} aria-hidden />}
+            >
               Crear cuenta
             </Button>
           </div>

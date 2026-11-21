@@ -7,6 +7,7 @@ import {
   Gauge,
   Hourglass,
   LayoutDashboard,
+  LineChart,
   PackagePlus,
   ShieldCheck,
   Tag,
@@ -58,6 +59,7 @@ export const GRUPOS: GrupoNav[] = [
       { ruta: '/reposicion', texto: 'Reposición EOQ', icono: PackagePlus },
       { ruta: '/abc', texto: 'Clasificación ABC', icono: BarChart3 },
       { ruta: '/antiguedad', texto: 'Antigüedad del stock', icono: Hourglass, roles: ADMIN_Y_SUPERVISOR },
+      { ruta: '/reportes', texto: 'Reportes', icono: LineChart, roles: ADMIN_Y_SUPERVISOR },
     ],
   },
   {

@@ -27,6 +27,8 @@ const ProveedoresPage = perezosa(() => import('../features/proveedores/pages/Pro
 const CierreDiarioPage = perezosa(() => import('../features/reportes/pages/CierreDiarioPage'), 'CierreDiarioPage')
 const AntiguedadPage = perezosa(() => import('../features/reportes/pages/AntiguedadPage'), 'AntiguedadPage')
 const PromocionesPage = perezosa(() => import('../features/promociones/pages/PromocionesPage'), 'PromocionesPage')
+// Recharts viaja solo en el archivo de esta página.
+const ReportesPage = perezosa(() => import('../features/reportes/pages/ReportesPage'), 'ReportesPage')
 const HistorialPage = perezosa(() => import('../features/auditoria/pages/HistorialPage'), 'HistorialPage')
 
 // Enrutamiento centralizado: cada feature expone su(s) página(s) en
@@ -36,7 +38,7 @@ const HistorialPage = perezosa(() => import('../features/auditoria/pages/Histori
 // Todas las rutas salvo /login viven bajo ProtectedRoute (exige sesión
 // JWT válida) y dentro de AppLayout (barra lateral); /usuarios y
 // /usuarios/nuevo además exigen rol ADMINISTRADOR, y /cierre-diario,
-// /antiguedad e /historial ADMINISTRADOR o SUPERVISOR, vía RequireRol (el backend aplica
+// /antiguedad, /reportes e /historial ADMINISTRADOR o SUPERVISOR, vía RequireRol (el backend aplica
 // la misma regla). La barra lateral (layout/navegacion.ts) oculta lo que
 // cada rol no puede abrir.
 export const router = createBrowserRouter([
@@ -61,6 +63,7 @@ export const router = createBrowserRouter([
             children: [
               { path: '/cierre-diario', element: <CierreDiarioPage /> },
               { path: '/antiguedad', element: <AntiguedadPage /> },
+              { path: '/reportes', element: <ReportesPage /> },
               { path: '/historial', element: <HistorialPage /> },
             ],
           },

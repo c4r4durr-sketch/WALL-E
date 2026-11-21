@@ -369,7 +369,9 @@ class Command(BaseCommand):
                         if repo.obtener_por_username(username) is not None:
                             existentes.append(username)
                             continue
-                        datos = {"username": username, "nombres": titulo, "apellidos": sucursal.nombre,
+                        # Apellido fijo: el nombre de la sucursal puede traer dígitos
+                        # ("Sucursal 2") y la regla de nombres de personas no los acepta.
+                        datos = {"username": username, "nombres": titulo, "apellidos": "Demo",
                                  "rol": rol, "sucursal_id": sucursal.id}
                         crear_usuario(admin, repo, sucursales, ValidadorPasswordDjango(), datos, password)
                         creadas.append(f"{username} ({titulo}, {sucursal.nombre})")

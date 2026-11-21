@@ -8,6 +8,7 @@ export interface ContextoCampo {
   id: string
   describedBy?: string
   invalido: boolean
+  requerido?: boolean
 }
 
 export const ContextoDeCampo = createContext<ContextoCampo | null>(null)

@@ -34,7 +34,8 @@ class SucursalObligatoriaApiTests(APITestCase):
         self.client.force_authenticate(admin)
 
     def _crear(self, **datos):
-        payload = {"username": "nuevo", "password": "Clave-Segura-123", **datos}
+        payload = {"username": "nuevo", "password": "Clave-Segura-123", "first_name": "Nuevo",
+                   "last_name": "Usuario", **datos}
         return self.client.post(URL_USUARIOS, payload, format="json")
 
     def test_crear_empleado_sin_sucursal_es_400(self):
@@ -89,7 +90,8 @@ class ValidacionPasswordApiTests(APITestCase):
         self.client.force_authenticate(admin)
 
     def _crear(self, password, **datos):
-        payload = {"username": "nuevo", "password": password, "rol": "ADMINISTRADOR", **datos}
+        payload = {"username": "nuevo", "password": password, "rol": "ADMINISTRADOR",
+                   "first_name": "Nuevo", "last_name": "Usuario", **datos}
         return self.client.post(URL_USUARIOS, payload, format="json")
 
     def test_crear_con_password_corta_es_400_en_espanol(self):
@@ -221,6 +223,7 @@ class GestionarUsuariosTests(SimpleTestCase):
         self.validador = _ValidadorFalso()
 
     def _crear(self, password="Clave-Segura", **datos):
+        datos = {"nombres": "Luis", "apellidos": "Rojas", **datos}
         return casos.crear_usuario(ADMIN, self.usuarios, self.sucursales, self.validador, datos, password)
 
     def _editar(self, usuario_id, actor=ADMIN, password=None, **cambios):
@@ -417,3 +420,88 @@ class TodasLasVistasExigenSesionTests(APITestCase):
                 self.assertEqual(respuesta.status_code, 401, f"{metodo.upper()} {url}")
             revisadas += 1
         self.assertGreater(revisadas, 20)
+
+
+# --- Validación de formularios: Nueva cuenta, Editar cuenta, Restablecer ---
+
+
+class ValidacionCuentasApiTests(APITestCase):
+    """Cada regla de formato da 400 con el mensaje junto a su campo, aunque
+    alguien se salte el frontend y llame a la API directo."""
+
+    def setUp(self):
+        self.central = Sucursal.objects.create(nombre="Central")
+        self.admin = Usuario.objects.create_user("admin_test", password="x", rol="ADMINISTRADOR")
+        self.client.force_authenticate(self.admin)
+
+    def _crear(self, **datos):
+        payload = {"username": "luis.rojas", "password": "Clave-Segura-123", "first_name": "Luis",
+                   "last_name": "Rojas", "rol": "ADMINISTRADOR", **datos}
+        return self.client.post(URL_USUARIOS, payload, format="json")
+
+    def _error(self, respuesta, campo):
+        self.assertEqual(respuesta.status_code, 400, respuesta.content)
+        self.assertIn(campo, respuesta.json())
+        return " ".join(respuesta.json()[campo])
+
+    def test_cuenta_valida_ok_y_normaliza_espacios(self):
+        respuesta = self._crear(first_name="  María   José ", last_name="O'Brien-Núñez")
+        self.assertEqual(respuesta.status_code, 201, respuesta.content)
+        self.assertEqual((respuesta.json()["first_name"], respuesta.json()["last_name"]),
+                         ("María José", "O'Brien-Núñez"))
+
+    def test_nombre_con_numeros_o_simbolos_es_400(self):
+        for nombre in ("Luis2", "Luis!", "L"):
+            with self.subTest(nombre=nombre):
+                self._error(self._crear(first_name=nombre), "first_name")
+
+    def test_nombre_o_apellido_vacios_o_solo_espacios_son_400(self):
+        self.assertIn("obligatorio", self._error(self._crear(first_name="   "), "first_name"))
+        self._error(self._crear(last_name=""), "last_name")
+
+    def test_nombre_de_mas_de_50_caracteres_es_400(self):
+        self._error(self._crear(last_name="a" * 51), "last_name")
+
+    def test_usuario_invalido_es_400(self):
+        for username in ("ab", "luis rojas", "josé", "luis@rojas", "x" * 31):
+            with self.subTest(username=username):
+                self._error(self._crear(username=username), "username")
+
+    def test_usuario_repetido_es_400(self):
+        self._crear()
+        self.assertIn("Ya existe", self._error(self._crear(username="LUIS.ROJAS"), "username"))
+
+    def test_correo_invalido_es_400(self):
+        self._error(self._crear(email="no-es-correo"), "email")
+
+    def test_password_debil_es_400(self):
+        for password in ("clave-segura-123", "ClaveSegura123", "Clave-Segura", "Ab1-"):
+            with self.subTest(password=password):
+                self._error(self._crear(password=password), "password")
+
+    def test_password_parecida_al_usuario_es_400(self):
+        self._error(self._crear(username="rodrigo.perez", password="Rodrigo.Perez1"), "password")
+
+    def test_responde_todos_los_errores_juntos(self):
+        respuesta = self._crear(first_name="Luis2", password="debil")
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual({"first_name", "password"} - set(respuesta.json()), set())
+
+    def test_editar_nombre_con_numeros_es_400(self):
+        cuenta = Usuario.objects.create_user("ana.p", password="x", rol="EMPLEADO", sucursal=self.central,
+                                             first_name="Ana", last_name="Paz")
+        respuesta = self.client.patch(f"{URL_USUARIOS}{cuenta.id}/", {"first_name": "Ana3"}, format="json")
+        self._error(respuesta, "first_name")
+
+    def test_editar_cuenta_antigua_sin_tocar_usuario_ni_nombres_ok(self):
+        # Creada antes de las reglas: usuario con "@" y sin nombre. Se puede
+        # seguir editando lo demás (el usuario no se edita desde la pantalla).
+        antigua = Usuario.objects.create_user("vieja@cuenta", password="x", rol="EMPLEADO", sucursal=self.central)
+        respuesta = self.client.patch(f"{URL_USUARIOS}{antigua.id}/", {"email": "v@walle.bo"}, format="json")
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+
+    def test_restablecer_con_password_sin_simbolo_es_400(self):
+        cuenta = Usuario.objects.create_user("ana.p", password="x", rol="ADMINISTRADOR")
+        respuesta = self.client.post(f"{URL_USUARIOS}{cuenta.id}/restablecer-password/",
+                                     {"password": "ClaveNueva789"}, format="json")
+        self.assertIn("símbolo", self._error(respuesta, "password"))

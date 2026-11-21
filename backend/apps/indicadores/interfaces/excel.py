@@ -19,6 +19,15 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from ..domain.entities import ClasificacionABC, CierreDiario, ReporteAntiguedad
+from ..domain.estadisticas import (
+    AntiguedadPorTramo,
+    EstadisticaABC,
+    EstadisticaTransferencias,
+    MovimientosPorMes,
+    ResumenEstadistico,
+    StockPorSucursal,
+    TopHerramientas,
+)
 
 TIPO_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -54,15 +63,14 @@ def _a_celda(valor: Any) -> Any:
     return valor
 
 
-def _libro(
+def _escribir_hoja(
+    hoja,
     titulo: str,
     detalle: str,
     columnas: Sequence[Columna],
     filas: Iterable[Sequence[Any]],
     total: Optional[Sequence[Any]] = None,
-) -> bytes:
-    libro = Workbook()
-    hoja = libro.active
+) -> None:
     hoja.title = titulo[:31]  # límite de Excel para el nombre de la hoja
     hoja.append([titulo])
     hoja["A1"].font = Font(size=14, bold=True)
@@ -91,9 +99,23 @@ def _libro(
             for (celda,) in hoja.iter_rows(min_row=fila_cabecera + 1, min_col=indice, max_col=indice):
                 celda.number_format = columna.formato
 
+
+def _guardar(libro: Workbook) -> bytes:
     salida = BytesIO()
     libro.save(salida)
     return salida.getvalue()
+
+
+def _libro(
+    titulo: str,
+    detalle: str,
+    columnas: Sequence[Columna],
+    filas: Iterable[Sequence[Any]],
+    total: Optional[Sequence[Any]] = None,
+) -> bytes:
+    libro = Workbook()
+    _escribir_hoja(libro.active, titulo, detalle, columnas, filas, total)
+    return _guardar(libro)
 
 
 def respuesta_excel(contenido: bytes, nombre: str) -> HttpResponse:
@@ -158,3 +180,78 @@ def excel_abc(clasificacion: Sequence[ClasificacionABC], hoy: date) -> tuple[byt
     total = ("Total", "", "", sum(c.unidades_vendidas for c in clasificacion), "", "")
     detalle = f"Por unidades vendidas en los últimos 12 meses · A < 80 %, B < 95 % · {_generado()}"
     return _libro("Clasificación ABC", detalle, columnas, filas, total), f"clasificacion-abc-{hoy.isoformat()}"
+
+
+# --- Reportes estadísticos (/reportes): un libro, una hoja por gráfico ---
+
+NOMBRE_ESTADO = {"PENDIENTE": "Pendiente", "COMPLETADA": "Completada", "RECHAZADA": "Rechazada"}
+
+
+def _mes(mes: date) -> str:
+    return f"{mes:%m/%Y}"
+
+
+def excel_estadisticas(datos: dict, sucursal_nombre: Optional[str]) -> tuple[bytes, str]:
+    """`datos`: los DTOs de use_cases/estadisticas.py del mismo periodo,
+    con las claves resumen, movimientos, top, stock, abc, antiguedad y
+    transferencias. Cada hoja es la tabla de un gráfico de la pantalla."""
+    resumen: ResumenEstadistico = datos["resumen"]
+    movimientos: MovimientosPorMes = datos["movimientos"]
+    top: TopHerramientas = datos["top"]
+    stock: StockPorSucursal = datos["stock"]
+    abc: EstadisticaABC = datos["abc"]
+    antiguedad: AntiguedadPorTramo = datos["antiguedad"]
+    transferencias: EstadisticaTransferencias = datos["transferencias"]
+
+    periodo = resumen.periodo
+    alcance = sucursal_nombre or "Todas las sucursales"
+    rango = f"{periodo.desde:%d/%m/%Y} al {periodo.hasta:%d/%m/%Y}"
+    detalle = f"{alcance} · {rango} · {_generado()}"
+    al_cierre = f"{alcance} · al cierre del {periodo.hasta:%d/%m/%Y} · {_generado()}"
+
+    libro = Workbook()
+    hojas = [
+        ("Resumen", detalle, [Columna("Indicador", 34), Columna("Valor", 18)], [
+            ("Movimientos del periodo", resumen.total_movimientos),
+            ("Unidades vendidas", resumen.unidades_vendidas),
+            ("Valor del inventario (Bs)", resumen.valor_inventario),
+            ("Herramientas en alerta de reorden (hoy)", resumen.alertas_reorden),
+            ("Herramientas estancadas", resumen.herramientas_estancadas),
+        ], None),
+        ("Movimientos por mes", detalle, [
+            Columna("Mes", 10), Columna("Entradas", 12), Columna("Salidas", 12),
+            Columna("Ajustes +", 12), Columna("Ajustes −", 12),
+        ], [
+            (_mes(m.mes), m.entradas, m.salidas, m.ajustes_positivos, m.ajustes_negativos)
+            for m in movimientos.meses
+        ], None),
+        ("Top 10 vendidas", detalle, [
+            Columna("Código", 14), Columna("Herramienta", 36), Columna("Unidades", 12),
+            Columna("Monto (Bs)", 16, FORMATO_MONTO),
+        ], [(h.codigo, h.nombre, h.unidades, h.monto) for h in top.herramientas], None),
+        ("Stock por sucursal", al_cierre, [
+            Columna("Sucursal", 20), Columna("Unidades", 12), Columna("Valor (Bs)", 16, FORMATO_MONTO),
+            Columna("Unidades sin costo", 18),
+        ], [(s.nombre, s.unidades, s.valor, s.unidades_sin_costo) for s in stock.sucursales],
+            ("Total", stock.total_unidades, stock.total_valor, "") if stock.sucursales else None),
+        ("Clasificación ABC", f"Por valor vendido · A < 80 %, B < 95 % · {detalle}", [
+            Columna("Clase", 8), Columna("Código", 14), Columna("Herramienta", 36),
+            Columna("Valor vendido (Bs)", 18, FORMATO_MONTO), Columna("% del valor", 12, FORMATO_PORCENTAJE),
+            Columna("% acumulado", 12, FORMATO_PORCENTAJE),
+        ], [
+            (p.clase, p.codigo, p.nombre, p.valor, p.porcentaje, p.porcentaje_acumulado) for p in abc.pareto
+        ], ("Total", "", "", abc.valor_total, "", "") if abc.pareto else None),
+        ("Antigüedad del stock", al_cierre, [
+            Columna("Tramo", 16), Columna("Herramientas", 14), Columna("Unidades", 12),
+            Columna("Valor inmovilizado (Bs)", 22, FORMATO_MONTO),
+        ], [(t.tramo, t.herramientas, t.unidades, t.valor) for t in antiguedad.tramos],
+            ("Total", "", "", antiguedad.valor_total) if antiguedad.tramos else None),
+        ("Transferencias", detalle, [
+            Columna("Mes", 10), Columna("Pendientes", 12), Columna("Completadas", 12), Columna("Rechazadas", 12),
+        ], [(_mes(m.mes), m.pendientes, m.completadas, m.rechazadas) for m in transferencias.por_mes],
+            ("Total", *(e.cantidad for e in transferencias.por_estado)) if transferencias.por_estado else None),
+    ]
+    for indice, (titulo, texto, columnas, filas, total) in enumerate(hojas):
+        hoja = libro.active if indice == 0 else libro.create_sheet()
+        _escribir_hoja(hoja, titulo, texto, columnas, filas, total)
+    return _guardar(libro), f"reportes-{alcance}-{periodo.desde.isoformat()}-{periodo.hasta.isoformat()}"
