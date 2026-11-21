@@ -29,15 +29,19 @@ from ...use_cases.clasificar_abc import clasificar_abc
 from ...use_cases.panel_auditoria import construir_panel
 from ...use_cases.promociones import crear_promocion, estado_promocion, listar_promociones, terminar_promocion
 from ...use_cases.reporte_antiguedad import construir_reporte_antiguedad
+from ...use_cases.reposicion_por_sucursal import eoq_por_sucursal, productos_para_pedir
 from ..excel import TIPO_XLSX, excel_abc, excel_antiguedad, excel_cierre_diario, respuesta_excel
 from .serializers import (
     CierreDiarioSerializer,
     ClasificacionABCSerializer,
     CrearPromocionSerializer,
+    EOQPorSucursalSerializer,
     FiltroAntiguedadSerializer,
     FiltroCierreDiarioSerializer,
+    FiltroProductosParaPedirSerializer,
     FiltroPromocionesSerializer,
     PanelAuditoriaSerializer,
+    ProductosParaPedirSerializer,
     PromocionSerializer,
     ReporteAntiguedadSerializer,
     ResultadoEOQSerializer,
@@ -95,6 +99,49 @@ class PuntoReordenPorHerramientaView(APIView):
         except HerramientaNoEncontradaError:
             raise NotFound("No existe esa herramienta.")
         return Response(ResultadoROPSerializer(resultado).data)
+
+
+class EOQPorSucursalView(APIView):
+    """GET /api/indicadores/eoq/<herramienta_id>/sucursales/
+    EOQ y ROP generales de la herramienta y los de cada sucursal activa (con
+    lo vendido y el stock de esa sucursal; S, H y tiempo de entrega del
+    catÃ¡logo). Todos los roles."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses=EOQPorSucursalSerializer)
+    def get(self, request, herramienta_id: int):
+        try:
+            resultado = eoq_por_sucursal(
+                HerramientaRepositoryDjango(), MovimientoRepositoryDjango(), SucursalRepositoryDjango(),
+                herramienta_id, ahora=timezone.now(),
+            )
+        except HerramientaNoEncontradaError:
+            raise NotFound("No existe esa herramienta.")
+        return Response(EOQPorSucursalSerializer(resultado).data)
+
+
+class ProductosParaPedirView(APIView):
+    """GET /api/indicadores/productos-para-pedir/?sucursal=<id>
+    Dashboard "Productos para pedir": herramientas cuyo stock en una
+    sucursal estÃ¡ en o bajo el ROP de esa sucursal, con el pedido sugerido
+    (EOQ de la sucursal en cajas). Sin sucursal, todas las activas. Todos
+    los roles, como el panel."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(parameters=[FiltroProductosParaPedirSerializer], responses=ProductosParaPedirSerializer)
+    def get(self, request):
+        filtro = FiltroProductosParaPedirSerializer(data=request.query_params)
+        filtro.is_valid(raise_exception=True)
+        try:
+            resultado = productos_para_pedir(
+                HerramientaRepositoryDjango(), MovimientoRepositoryDjango(), SucursalRepositoryDjango(),
+                ahora=timezone.now(), sucursal_id=filtro.validated_data.get("sucursal"),
+            )
+        except SucursalInexistenteError:
+            raise ValidationError({"sucursal": ["No existe esa sucursal o no estÃ¡ activa."]})
+        return Response(ProductosParaPedirSerializer(resultado).data)
 
 
 def _clasificacion_abc():

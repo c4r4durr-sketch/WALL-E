@@ -344,3 +344,21 @@
     `DEBUG=True`. Pendientes conocidos, sin cambiar: los tokens se guardan
     en `localStorage` (expuestos si hubiera XSS) y no hay lista negra de
     refresh al cerrar sesión.
+
+28. **EOQ por sucursal y dashboard «Productos para pedir».** **Base de
+    datos:** sin cambios (sin migraciones). **Indicadores (HU17–HU21):** el
+    EOQ y el ROP se calculan también por sucursal, con la misma fórmula: D
+    es lo vendido en esa sucursal en los últimos 12 meses y el stock es el
+    de esa sucursal; S, H y el tiempo de entrega siguen siendo los del
+    catálogo (iguales para todas). Si la herramienta no se vendió en
+    ninguna sucursal, se usa la demanda estimada repartida entre las
+    sucursales activas; si se vende en otras pero no en esa, su D es 0 y
+    no se pide. **Dashboard:** nueva pantalla `/productos-para-pedir`
+    (todos los roles) con cada herramienta y sucursal cuyo stock está en o
+    bajo su punto de reorden, y el pedido sugerido (EOQ de la sucursal en
+    cajas cerradas). El panel de inicio y `/reposicion` no cambian (siguen
+    con el stock total). **API:** `GET /api/indicadores/eoq/<id>/sucursales/`
+    y `GET /api/indicadores/productos-para-pedir/?sucursal=`. **Aclaración
+    para el informe:** registrar una ENTRADA no cambia el EOQ (depende de
+    las ventas y de S y H); solo sube el stock, y con eso puede quitar la
+    herramienta de la lista para pedir.

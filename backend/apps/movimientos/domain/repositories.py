@@ -51,6 +51,15 @@ class MovimientoRepository(ABC):
         ...
 
     @abstractmethod
+    def unidades_por_herramienta_y_sucursal(
+        self, tipos: Iterable[TipoMovimiento], desde: datetime
+    ) -> dict[tuple[int, int], int]:
+        """Lo mismo que unidades_por_herramienta, pero separado por
+        sucursal: {(herramienta_id, sucursal_id): unidades}. Insumo del EOQ
+        y el ROP por sucursal."""
+        ...
+
+    @abstractmethod
     def resumen_inventario(self) -> list[ResumenInventario]:
         """Un resumen por cada par herramienta/sucursal que tenga al menos
         un movimiento (insumo del panel y de los reportes)."""

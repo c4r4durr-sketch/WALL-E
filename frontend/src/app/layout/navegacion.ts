@@ -10,6 +10,7 @@ import {
   LineChart,
   PackagePlus,
   ShieldCheck,
+  ShoppingCart,
   Tag,
   Truck,
   Users,
@@ -57,6 +58,7 @@ export const GRUPOS: GrupoNav[] = [
     items: [
       { ruta: '/indicadores', texto: 'Indicadores', icono: Gauge },
       { ruta: '/reposicion', texto: 'Reposición EOQ', icono: PackagePlus },
+      { ruta: '/productos-para-pedir', texto: 'Productos para pedir', icono: ShoppingCart },
       { ruta: '/abc', texto: 'Clasificación ABC', icono: BarChart3 },
       { ruta: '/antiguedad', texto: 'Antigüedad del stock', icono: Hourglass, roles: ADMIN_Y_SUPERVISOR },
       { ruta: '/reportes', texto: 'Reportes', icono: LineChart, roles: ADMIN_Y_SUPERVISOR },

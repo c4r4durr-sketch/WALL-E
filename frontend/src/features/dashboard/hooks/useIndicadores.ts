@@ -1,5 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { obtenerClasificacionABC, obtenerEOQ, obtenerROP } from '../api/indicadoresApi'
+import {
+  obtenerClasificacionABC,
+  obtenerEOQ,
+  obtenerEOQPorSucursal,
+  obtenerProductosParaPedir,
+  obtenerROP,
+} from '../api/indicadoresApi'
 
 export function useClasificacionABC() {
   return useQuery({ queryKey: ['indicadores', 'abc'], queryFn: obtenerClasificacionABC })
@@ -19,5 +25,21 @@ export function useROP(herramientaId: number | null) {
     queryKey: ['indicadores', 'rop', herramientaId],
     queryFn: () => obtenerROP(herramientaId!),
     enabled: herramientaId !== null,
+  })
+}
+
+export function useEOQPorSucursal(herramientaId: number | null) {
+  return useQuery({
+    queryKey: ['indicadores', 'eoq-sucursales', herramientaId],
+    queryFn: () => obtenerEOQPorSucursal(herramientaId!),
+    enabled: herramientaId !== null,
+  })
+}
+
+// null = todas las sucursales activas.
+export function useProductosParaPedir(sucursal: number | null) {
+  return useQuery({
+    queryKey: ['indicadores', 'productos-para-pedir', sucursal],
+    queryFn: () => obtenerProductosParaPedir(sucursal),
   })
 }

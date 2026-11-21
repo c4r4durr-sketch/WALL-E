@@ -133,6 +133,55 @@ class PanelAuditoria:
     estancadas: list[HerramientaEstancada]
 
 
+# --- ReposiciÃ³n por sucursal ---
+# S, H y el tiempo de entrega son los del catÃ¡logo (iguales para todas las
+# sucursales); cambian la demanda (lo vendido en esa sucursal) y el stock.
+
+
+@dataclass(frozen=True)
+class ReposicionSucursal:
+    """EOQ y ROP de una herramienta en una sucursal. requiere_reorden: el
+    stock de la sucursal estÃ¡ en o bajo su ROP y hay demanda que reponer."""
+
+    herramienta_id: int
+    codigo: str
+    nombre: str
+    sucursal_id: int
+    sucursal_nombre: str
+    stock: int
+    demanda_observada: int  # ventas de esta sucursal en los Ãºltimos 12 meses
+    demanda_usada: Optional[int]  # formulas.demanda_de_sucursal
+    fuente_demanda: str
+    punto_reorden: Optional[float]
+    eoq: Optional[float]
+    eoq_ajustado_cajas: Optional[float]  # pedido sugerido, en cajas cerradas
+    unidades_por_caja: int
+    requiere_reorden: bool
+    datos_faltantes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EOQPorSucursal:
+    """EOQ y ROP generales de una herramienta (los de siempre) y el detalle
+    de cada sucursal activa."""
+
+    general_eoq: ResultadoEOQ
+    general_rop: ResultadoROP
+    sucursales: list[ReposicionSucursal]
+
+
+@dataclass(frozen=True)
+class ProductosParaPedir:
+    """Dashboard "Productos para pedir": cada par herramienta/sucursal con
+    stock en o bajo su ROP. herramientas_sin_datos: no se pudo calcular su
+    ROP (falta la demanda o el tiempo de entrega en el catÃ¡logo)."""
+
+    total_lineas: int
+    total_herramientas: int  # herramientas distintas que hay que pedir
+    herramientas_sin_datos: int
+    lineas: list[ReposicionSucursal]
+
+
 @dataclass(frozen=True)
 class LineaCierre:
     """HU14: un movimiento del día, con los datos para mostrarlo."""

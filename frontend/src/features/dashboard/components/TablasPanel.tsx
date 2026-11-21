@@ -8,6 +8,7 @@ import { EtiquetaPromocion } from '../../promociones/components/EtiquetaPromocio
 import { usePromocionesVigentes } from '../../promociones/hooks/usePromociones'
 import { decimal } from '../../../shared/formato'
 import type { AlertaReorden, HerramientaEstancada } from '../api/indicadoresApi'
+import { pedidoEnCajas } from '../formato'
 
 // Detalle de las alertas del panel y de la pantalla de reposición. Tablas
 // (no gráficos): lo que importa es qué herramienta, cuánto hay y qué
@@ -29,14 +30,6 @@ function Seccion({ titulo, descripcion, acciones, children }: {
 
 function Vacio({ icono, titulo, ayuda }: { icono: LucideIcon; titulo: string; ayuda: string }) {
   return <EmptyState compacto icono={icono} titulo={titulo} ayuda={ayuda} className="border-t border-line" />
-}
-
-function pedidoEnCajas(a: AlertaReorden): string {
-  if (a.pedido_sugerido === null) return '—'
-  const unidades = Math.round(a.pedido_sugerido)
-  if (a.unidades_por_caja <= 1) return `${unidades} u.`
-  const cajas = Math.round(unidades / a.unidades_por_caja)
-  return `${cajas} ${cajas === 1 ? 'caja' : 'cajas'} (${unidades} u.)`
 }
 
 interface PropsAlertas {
@@ -83,7 +76,7 @@ export function TablaAlertasReorden({ alertas, sinDatos, limite }: PropsAlertas)
                   {a.pedido_sugerido === null ? (
                     <span className="text-xs text-muted">Faltan costos en el catálogo</span>
                   ) : (
-                    <span className="font-semibold">{pedidoEnCajas(a)}</span>
+                    <span className="font-semibold">{pedidoEnCajas(a.pedido_sugerido, a.unidades_por_caja)}</span>
                   )}
                 </Td>
               </Tr>

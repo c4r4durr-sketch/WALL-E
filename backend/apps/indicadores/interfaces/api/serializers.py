@@ -81,6 +81,45 @@ class PanelAuditoriaSerializer(serializers.Serializer):
     estancadas = HerramientaEstancadaSerializer(many=True)
 
 
+# --- ReposiciÃ³n por sucursal ---
+
+
+class ReposicionSucursalSerializer(serializers.Serializer):
+    herramienta_id = serializers.IntegerField()
+    codigo = serializers.CharField()
+    nombre = serializers.CharField()
+    sucursal_id = serializers.IntegerField()
+    sucursal_nombre = serializers.CharField()
+    stock = serializers.IntegerField()
+    demanda_observada = serializers.IntegerField()
+    demanda_usada = serializers.IntegerField(allow_null=True)
+    fuente_demanda = serializers.CharField()
+    punto_reorden = serializers.FloatField(allow_null=True)
+    eoq = serializers.FloatField(allow_null=True)
+    eoq_ajustado_cajas = serializers.FloatField(allow_null=True)
+    unidades_por_caja = serializers.IntegerField()
+    requiere_reorden = serializers.BooleanField()
+    datos_faltantes = serializers.ListField(child=serializers.CharField())
+
+
+class EOQPorSucursalSerializer(serializers.Serializer):
+    general_eoq = ResultadoEOQSerializer()
+    general_rop = ResultadoROPSerializer()
+    sucursales = ReposicionSucursalSerializer(many=True)
+
+
+class FiltroProductosParaPedirSerializer(serializers.Serializer):
+    # Sin sucursal: todas las activas.
+    sucursal = serializers.IntegerField(min_value=1, required=False)
+
+
+class ProductosParaPedirSerializer(serializers.Serializer):
+    total_lineas = serializers.IntegerField()
+    total_herramientas = serializers.IntegerField()
+    herramientas_sin_datos = serializers.IntegerField()
+    lineas = ReposicionSucursalSerializer(many=True)
+
+
 # --- Cierre diario (HU14) ---
 
 

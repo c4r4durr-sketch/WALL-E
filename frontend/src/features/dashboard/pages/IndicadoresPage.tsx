@@ -3,6 +3,7 @@ import { Gauge } from 'lucide-react'
 import { Card, EmptyState, Field, PageHeader, ProductImage, Select, Skeleton } from '../../../components/ui'
 import { useHerramientas } from '../../catalogo/hooks/useHerramientas'
 import { DetalleEOQROP } from '../components/DetalleEOQROP'
+import { TablaEOQPorSucursal } from '../components/TablaEOQPorSucursal'
 
 // Indicadores de compra (HU17/HU18) de una herramienta: cuánto pedir (EOQ)
 // y cuándo (ROP). La herramienta elegida va en la URL (?herramienta=id),
@@ -56,7 +57,10 @@ export function IndicadoresPage() {
           />
         </Card>
       ) : (
-        <DetalleEOQROP herramientaId={id} />
+        <>
+          <DetalleEOQROP herramientaId={id} />
+          <TablaEOQPorSucursal herramientaId={id} />
+        </>
       )}
     </>
   )

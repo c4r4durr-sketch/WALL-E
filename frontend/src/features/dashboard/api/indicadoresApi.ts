@@ -106,3 +106,53 @@ export async function obtenerPanel(): Promise<PanelAuditoria> {
   const { data } = await httpClient.get<PanelAuditoria>('/indicadores/panel/')
   return data
 }
+
+// --- ReposiciÃ³n por sucursal ---
+//   GET /api/indicadores/eoq/<herramienta_id>/sucursales/
+//   GET /api/indicadores/productos-para-pedir/?sucursal=<id>
+// S, H y tiempo de entrega son los del catÃ¡logo; cambian la demanda (lo
+// vendido en esa sucursal) y el stock.
+
+export interface ReposicionSucursal {
+  herramienta_id: number
+  codigo: string
+  nombre: string
+  sucursal_id: number
+  sucursal_nombre: string
+  stock: number
+  demanda_observada: number
+  demanda_usada: number | null
+  fuente_demanda: 'OBSERVADA' | 'ESTIMADA'
+  punto_reorden: number | null
+  eoq: number | null
+  // Pedido sugerido: EOQ de la sucursal en cajas cerradas.
+  eoq_ajustado_cajas: number | null
+  unidades_por_caja: number
+  requiere_reorden: boolean
+  datos_faltantes: string[]
+}
+
+export interface EOQPorSucursal {
+  general_eoq: ResultadoEOQ
+  general_rop: ResultadoROP
+  sucursales: ReposicionSucursal[]
+}
+
+export interface ProductosParaPedir {
+  total_lineas: number
+  total_herramientas: number
+  herramientas_sin_datos: number
+  lineas: ReposicionSucursal[]
+}
+
+export async function obtenerEOQPorSucursal(herramientaId: number): Promise<EOQPorSucursal> {
+  const { data } = await httpClient.get<EOQPorSucursal>(`/indicadores/eoq/${herramientaId}/sucursales/`)
+  return data
+}
+
+export async function obtenerProductosParaPedir(sucursal: number | null): Promise<ProductosParaPedir> {
+  const { data } = await httpClient.get<ProductosParaPedir>('/indicadores/productos-para-pedir/', {
+    params: sucursal === null ? {} : { sucursal },
+  })
+  return data
+}
