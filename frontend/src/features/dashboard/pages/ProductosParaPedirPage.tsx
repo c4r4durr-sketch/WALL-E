@@ -20,6 +20,7 @@ import { decimal } from '../../../shared/formato'
 import { CeldaHerramienta } from '../../catalogo/components/CeldaHerramienta'
 import { useFotos } from '../../catalogo/hooks/useFotos'
 import { useSucursales } from '../../usuarios/hooks/useSucursales'
+import { GraficoPedirPorSucursal, GraficoStockVsRop } from '../components/GraficosParaPedir'
 import { StatTile } from '../components/StatTile'
 import { pedidoEnCajas } from '../formato'
 import { useProductosParaPedir } from '../hooks/useIndicadores'
@@ -77,6 +78,16 @@ export function ProductosParaPedirPage() {
             <StatTile etiqueta="Sin datos para calcular" valor={data.herramientas_sin_datos}
               nota="Falta demanda o tiempo de entrega" />
           </div>
+
+          {data.lineas.length > 0 && (
+            <div className="mb-5 grid grid-cols-2 items-start gap-5">
+              <GraficoPedirPorSucursal
+                lineas={data.lineas}
+                sucursales={(sucursales ?? []).filter((s) => s.activa && (sucursal === null || s.id === sucursal))}
+              />
+              <GraficoStockVsRop lineas={data.lineas} unaSucursal={sucursal !== null} />
+            </div>
+          )}
 
           <Card sinPadding className="overflow-hidden">
             <CardHeader
